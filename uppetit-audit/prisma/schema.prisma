@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 1. ПОЛЬЗОВАТЕЛИ (Сотрудники)
+model User {
+  id           String      @id @default(cuid())
+  login        String      @unique
+  phone        String?     @unique
+  passwordHash String?  
+  inviteToken  String?     @unique 
+  role         String      @default("AUDITOR")
+  audits       Audit[]
+  visitPlans   VisitPlan[] // <-- ДОБАВЬ ЭТУ СТРОЧКУ
+}
+
+// 2. ТОЧКИ (Магазины)
+model Location {
+  id         String      @id @default(cuid())
+  name       String
+  address    String?
+  audits     Audit[]
+  visitPlans VisitPlan[] // <-- ДОБАВЬ ЭТУ СТРОЧКУ
+}
+
+// 3. ЧЕК-ЛИСТЫ (Шаблоны)
+model Checklist {
+  id              String   @id @default(cuid())
+  title           String
+  description     String?
+  items           String?  @db.Text 
+  redThreshold    Int      @default(70) // Порог красной зоны (в процентах)
+  yellowThreshold Int      @default(90) // Порог желтой зоны (в процентах)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  audits          Audit[]  
+}
+
+// 4. АУДИТЫ (Результаты проверок)
+// ... твои верхние модели (User, Location, Checklist)
+
+model Audit {
+  id          String   @id @default(cuid())
+  date        DateTime @default(now())
+  score       Int
+  
+  user        User     @relation(fields: [userId], references: [id])
+  userId      String
+  
+  location    Location @relation(fields: [locationId], references: [id])
+  locationId  String
+  
+  checklist   Checklist @relation(fields: [checklistId], references: [id])
+  checklistId String
+
+  // ДОБАВЛЯЕМ СВЯЗЬ С ОТВЕТАМИ
+  answers     Answer[]
+}
+
+// ДОБАВЛЯЕМ НОВУЮ ТАБЛИЦУ ДЛЯ ОТВЕТОВ С ФОТО
+model Answer {
+  id          String  @id @default(cuid())
+  auditId     String
+  audit       Audit   @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  
+  zone        String? @default("Основной раздел") // <-- НОВОЕ ПОЛЕ ДЛЯ ЗОНЫ
+  question    String  
+  isOk        Boolean 
+  penalty     Int     @default(0) 
+  photoBase64 String? 
+  comment     String? 
+}
+
+// Добавь это в самый низ файла:
+model VisitPlan {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  date       DateTime // Запланированная дата
+  status     String   @default("PLANNED") // PLANNED (запланировано) или DONE (выполнено)
+  createdAt  DateTime @default(now())
+}
+
+// ВАЖНО: Найди модель User и добавь туда строчку:
+// visitPlans   VisitPlan[]
+
+// ВАЖНО: Найди модель Location и добавь туда строчку:
+// visitPlans   VisitPlan[]

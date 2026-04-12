@@ -1,0 +1,56 @@
+'use client';
+
+import Link from 'next/link';
+import { signOut } from 'next-auth/react';
+import Image from 'next/image';
+
+export default function AuditDashboard() {
+  return (
+    <div className="flex-1 flex flex-col p-6">
+      
+      <header className="flex justify-between items-center mb-10 mt-4">
+        <div>
+          {/* ИСПРАВЛЕНИЕ: logo.jpg вместо logo.png */}
+          <Image src="/logo.jpg" alt="UPPETIT" width={120} height={30} className="object-contain" priority />
+          <div className="text-[9px] uppercase tracking-[0.2em] text-gray-400 font-bold mt-1">
+            Аудит качества
+          </div>
+        </div>
+        
+        <button 
+          onClick={() => signOut({ callbackUrl: '/' })}
+          className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.825" />
+          </svg>
+        </button>
+      </header>
+
+      <div className="mb-8">
+        <h1 className="text-3xl font-black text-gray-900 tracking-tight">Привет! 👋</h1>
+        <p className="text-gray-500 font-medium mt-2 text-sm">Выбери, что хочешь сделать</p>
+      </div>
+
+      <div className="space-y-4">
+        <Link href="/audit/new" className="block w-full bg-[#F25C05] text-white p-6 rounded-3xl shadow-lg shadow-orange-500/20 active:scale-[0.98] transition-all relative overflow-hidden">
+          <div className="relative z-10">
+            <h2 className="text-xl font-bold mb-1">Начать проверку</h2>
+            <p className="text-orange-100 text-sm font-medium">Новый аудит точки</p>
+          </div>
+          <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
+        </Link>
+
+        <Link href="/audit/history" className="block w-full bg-gray-50 border border-gray-100 text-gray-900 p-6 rounded-3xl active:scale-[0.98] transition-all">
+          <h2 className="text-xl font-bold mb-1">История проверок</h2>
+          <p className="text-gray-500 text-sm font-medium">Посмотреть прошлые аудиты</p>
+        </Link>
+        <Link href="/audit/schedule" className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 block mb-4 active:scale-95 transition-transform">
+  <h2 className="text-xl font-black text-gray-900 mb-1">Мой план</h2>
+  <p className="text-sm text-gray-500 font-medium">Календарь будущих проверок</p>
+</Link>
+      </div>
+
+    </div>
+  );
+}
