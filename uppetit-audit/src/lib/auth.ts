@@ -23,9 +23,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         // Проверяем, подходит ли пароль к зашифрованному хешу в базе
         const isPasswordCorrect = await bcrypt.compare(
-          credentials.password as string,
-          user.passwordHash
-        );
+  credentials.password as string,
+  user.passwordHash || ""
+);
 
         if (!isPasswordCorrect) return null;
 
