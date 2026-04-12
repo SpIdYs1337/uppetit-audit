@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 
-export default function SetupPasswordPage() {
+function SetupPasswordContent() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -76,5 +76,14 @@ export default function SetupPasswordPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ВОТ ТА САМАЯ ОБЕРТКА ДЛЯ NEXT.JS
+export default function SetupPasswordPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-black flex items-center justify-center text-zinc-500 text-sm">Загрузка...</div>}>
+      <SetupPasswordContent />
+    </Suspense>
   );
 }
