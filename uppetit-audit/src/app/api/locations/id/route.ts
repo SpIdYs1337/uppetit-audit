@@ -1,37 +1,30 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
+// Описываем тип параметров именно так, как хочет сервер
+type RouteContext = {
+  params: Promise<{ id: string }>
+}
+
 export async function PATCH(
   request: Request,
-  props: { params: Promise<{ id: string }> }
+  context: RouteContext
 ) {
   try {
-    // 1. Ждем получения ID из параметров (важно для Next.js 15)
-    const { id } = await props.params;
+    // 1. Разворачиваем параметры
+    const { id } = await context.params;
     
-    // 2. Читаем тело запроса только ОДИН раз
+    // 2. Читаем тело запроса
     const body = await request.json();
     
-    // 3. Собираем данные для обновления
+    // 3. Собираем данные
     const updateData: any = {};
-    
-    if (body.tuId !== undefined) {
-      updateData.tuId = body.tuId; // Позволяет передать null для отвязки
-    }
-    
-    if (body.isActive !== undefined) {
-      updateData.isActive = body.isActive;
-    }
-    
-    if (body.activeFrom !== undefined) {
-      updateData.activeFrom = body.activeFrom ? new Date(body.activeFrom) : null;
-    }
-    
-    if (body.activeTo !== undefined) {
-      updateData.activeTo = body.activeTo ? new Date(body.activeTo) : null;
-    }
+    if (body.tuId !== undefined) updateData.tuId = body.tuId;
+    if (body.isActive !== undefined) updateData.isActive = body.isActive;
+    if (body.activeFrom !== undefined) updateData.activeFrom = body.activeFrom ? new Date(body.activeFrom) : null;
+    if (body.activeTo !== undefined) updateData.activeTo = body.activeTo ? new Date(body.activeTo) : null;
 
-    // 4. Обновляем запись в базе
+    // 4. Обновляем базу
     const updatedLocation = await prisma.location.update({
       where: { id: id },
       data: updateData,
@@ -46,14 +39,3 @@ export async function PATCH(
     );
   }
 }
-
-// Если потребуется метод DELETE, добавь его по аналогии:
-/*
-export async function DELETE(
-  request: Request,
-  props: { params: Promise<{ id: string }> }
-) {
-  const { id } = await props.params;
-  // логика удаления...
-}
-*/
