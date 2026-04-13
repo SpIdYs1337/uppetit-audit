@@ -3,34 +3,57 @@ import prisma from "@/lib/prisma";
 
 export async function PATCH(
   request: Request,
-  props: { params: Promise<{ id: string }> } // Указываем, что params — это Promise
+  props: { params: Promise<{ id: string }> }
 ) {
-  const params = await props.params; // Ждем получения параметров
-  const id = params.id; 
-  
-  // Дальше оставляешь свой код без изменений...
-  const body = await request.json();
-  // ... и так далее
   try {
+    // 1. Ждем получения ID из параметров (важно для Next.js 15)
+    const { id } = await props.params;
+    
+    // 2. Читаем тело запроса только ОДИН раз
     const body = await request.json();
     
-    // Вытаскиваем только те данные, которые пришли в запросе
+    // 3. Собираем данные для обновления
     const updateData: any = {};
-    if (body.tuId !== undefined) updateData.tuId = body.tuId; // Может быть null (отвязка)
-    if (body.isActive !== undefined) updateData.isActive = body.isActive;
-    if (body.activeFrom !== undefined) updateData.activeFrom = body.activeFrom ? new Date(body.activeFrom) : null;
-    if (body.activeTo !== undefined) updateData.activeTo = body.activeTo ? new Date(body.activeTo) : null;
+    
+    if (body.tuId !== undefined) {
+      updateData.tuId = body.tuId; // Позволяет передать null для отвязки
+    }
+    
+    if (body.isActive !== undefined) {
+      updateData.isActive = body.isActive;
+    }
+    
+    if (body.activeFrom !== undefined) {
+      updateData.activeFrom = body.activeFrom ? new Date(body.activeFrom) : null;
+    }
+    
+    if (body.activeTo !== undefined) {
+      updateData.activeTo = body.activeTo ? new Date(body.activeTo) : null;
+    }
 
+    // 4. Обновляем запись в базе
     const updatedLocation = await prisma.location.update({
-      where: { id: params.id },
+      where: { id: id },
       data: updateData,
     });
 
     return NextResponse.json(updatedLocation);
   } catch (error) {
     console.error("Ошибка обновления точки:", error);
-    return NextResponse.json({ error: "Не удалось обновить точку" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Не удалось обновить точку" }, 
+      { status: 500 }
+    );
   }
 }
 
-// Если у тебя тут был метод DELETE для точки, оставь его ниже
+// Если потребуется метод DELETE, добавь его по аналогии:
+/*
+export async function DELETE(
+  request: Request,
+  props: { params: Promise<{ id: string }> }
+) {
+  const { id } = await props.params;
+  // логика удаления...
+}
+*/
