@@ -12,7 +12,6 @@ import {
 } from '@dnd-kit/core';
 
 // --- ТИПЫ ДАННЫХ ---
-// ДОБАВЛЕНО: maxScore в тип Audit
 type Audit = { id: string; date: string; score: number; maxScore?: number | null; checklist: { title: string } };
 interface Location {
   id: string;
@@ -70,13 +69,17 @@ function LocationCard({
       <div className="flex gap-1 text-[10px] items-center bg-gray-50 p-2 rounded-lg" onPointerDown={(e) => e.stopPropagation()}>
         <span className="text-gray-400 font-medium whitespace-nowrap">Период:</span>
         <input 
-          type="date" className="border border-gray-200 rounded px-1 py-1 bg-white outline-none focus:border-[#F25C05] w-full min-w-[90px]" 
+          type="date" 
+          // ДОБАВЛЕН КЛАСС text-gray-900 для видимости текста
+          className="border border-gray-200 rounded px-1 py-1 bg-white text-gray-900 outline-none focus:border-[#F25C05] w-full min-w-[90px]" 
           value={loc.activeFrom ? loc.activeFrom.split('T')[0] : ''}
           onChange={(e) => updateLocation(loc.id, { activeFrom: e.target.value || null })}
         />
         <span className="text-gray-400">—</span>
         <input 
-          type="date" className="border border-gray-200 rounded px-1 py-1 bg-white outline-none focus:border-[#F25C05] w-full min-w-[90px]" 
+          type="date" 
+          // ДОБАВЛЕН КЛАСС text-gray-900 для видимости текста
+          className="border border-gray-200 rounded px-1 py-1 bg-white text-gray-900 outline-none focus:border-[#F25C05] w-full min-w-[90px]" 
           value={loc.activeTo ? loc.activeTo.split('T')[0] : ''}
           onChange={(e) => updateLocation(loc.id, { activeTo: e.target.value || null })}
         />
@@ -87,7 +90,6 @@ function LocationCard({
         <div className="text-[11px]">
           {lastAudit ? (
             <p className="text-gray-600">
-              {/* ИЗМЕНЕНО: Форматирование вывода баллов */}
               <span className="text-gray-400">Последний:</span> <span className="font-bold">{lastAudit.score} {lastAudit.maxScore ? `из ${lastAudit.maxScore}` : 'баллов'}</span> ({new Date(lastAudit.date).toLocaleDateString()})
             </p>
           ) : (

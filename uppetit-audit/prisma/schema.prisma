@@ -62,6 +62,10 @@ model Audit {
   date        DateTime @default(now())
   score       Int
   maxScore    Int?
+  
+  shiftEmployees String[]  // Массив имен сотрудников на смене
+  generalComment String?   // Необязательный общий комментарий
+
   // ДОБАВЛЕНО: onDelete: Cascade
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId      String

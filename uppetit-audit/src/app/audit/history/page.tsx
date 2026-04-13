@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { getSession } from 'next-auth/react';
 import Link from 'next/link';
+import React from 'react';
 
 export default function AuditHistoryPage() {
   const [audits, setAudits] = useState<any[]>([]);
@@ -31,7 +32,7 @@ export default function AuditHistoryPage() {
 
   const formatDate = (dateString: string) => {
     const d = new Date(dateString);
-    return d.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
   const getMaxScore = (checklist: any) => {
@@ -42,123 +43,140 @@ export default function AuditHistoryPage() {
     } catch (e) { return 0; }
   };
 
-  // КРАСИВАЯ ВЫГРУЗКА В PDF
-  const exportToPDF = (e: React.MouseEvent, audit: any) => {
+  const exportToPDF = async (e: React.MouseEvent, audit: any) => {
     e.stopPropagation();
+    
+    const html2pdf = (await import('html2pdf.js')).default;
+
     const maxScore = getMaxScore(audit.checklist);
-    const scorePercent = maxScore > 0 ? ((audit.score / maxScore) * 100).toFixed(2) : '0.00';
     const date = formatDate(audit.date);
-
     const violations = audit.answers?.filter((a: any) => !a.isOk) || [];
+    
+    const employees = audit.shiftEmployees && audit.shiftEmployees.length > 0 
+      ? audit.shiftEmployees.join(', ') 
+      : 'Не указаны';
 
-    // Блок выявленных нарушений
     const violationsHtml = violations.length === 0
       ? '<p style="color: #777; font-size: 14px;">Нарушений нет</p>'
       : violations.map((v: any) => `
         <div class="item">
           <div class="zone-badge">${v.zone || 'Основной раздел'}</div>
           <div class="question-text">${v.question}</div>
-          ${v.comment ? `<div class="comment">Комментарий аудитора: ${v.comment}</div>` : ''}
+          ${v.comment ? `<div class="comment">Комментарий: ${v.comment}</div>` : ''}
         </div>
       `).join('');
 
-    // Блок полного отчета
     const fullReportHtml = (!audit.answers || audit.answers.length === 0)
       ? '<p>Детализация отсутствует.</p>'
       : audit.answers.map((v: any) => `
         <div class="item">
           <div class="zone-badge">${v.zone || 'Основной раздел'}</div>
-          <div class="item-header">
-            <div class="${v.isOk ? 'icon-green' : 'icon-red'}">◯</div>
-            <div>
-              <div class="question-text">${v.question}</div>
-              <div class="${v.isOk ? 'status-green' : 'status-red'}">
-                ${v.isOk ? 'соответствие' : 'несоответствие'}
-              </div>
-              ${v.comment ? `<div class="comment">Комментарий аудитора: ${v.comment}</div>` : ''}
-              ${v.photoBase64 && !v.isOk ? `<img class="photo" src="${v.photoBase64}" />` : ''}
-            </div>
-          </div>
+          <table class="item-table">
+            <tr>
+              <td class="icon-cell ${v.isOk ? 'icon-green' : 'icon-red'}">◯</td>
+              <td>
+                <div class="question-text">${v.question}</div>
+                <div class="${v.isOk ? 'status-green' : 'status-red'}">
+                  ${v.isOk ? 'соответствие' : 'несоответствие'}
+                </div>
+                ${v.comment ? `<div class="comment">Комментарий: ${v.comment}</div>` : ''}
+                ${v.photoBase64 && !v.isOk ? `<img class="photo" src="${v.photoBase64}" />` : ''}
+              </td>
+            </tr>
+          </table>
         </div>
       `).join('');
 
-    // Открываем новое скрытое окно для генерации PDF
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert('Пожалуйста, разрешите всплывающие окна для этого сайта');
-      return;
-    }
+    const element = document.createElement('div');
+    element.innerHTML = `
+      <style>
+        .pdf-container { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #111; padding: 10px; }
+        table { width: 100%; border-collapse: collapse; }
+        td { vertical-align: top; }
+        
+        .info-label { font-size: 13px; color: #777; font-weight: bold; padding-bottom: 8px; padding-right: 15px; width: 160px; }
+        .info-value { font-size: 13px; font-weight: 900; color: #000; padding-bottom: 8px; }
+        
+        .logo-img { max-width: 140px; filter: invert(1); } /* Делаем белый логотип черным */
 
-    // Записываем HTML с красивым CSS
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Отчет_${audit.location?.name}_${date}</title>
-        <style>
-          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-          body { font-family: 'Inter', sans-serif; color: #333; padding: 40px; max-width: 900px; margin: 0 auto; }
-          .header { display: flex; justify-content: space-between; margin-bottom: 50px; }
-          .logo-placeholder { width: 60px; height: 60px; background-color: #4A148C; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 20px; background-image: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%); }
-          .info-block { font-size: 13px; color: #9e9e9e; line-height: 1.8; }
-          .score-block { text-align: right; }
-          .score-title { font-size: 16px; font-weight: 900; color: #b5b5c3; letter-spacing: 1px; text-transform: uppercase; }
-          .score-value { font-size: 38px; font-weight: 900; color: #181c32; margin-top: 5px; }
-          .section-title { font-size: 22px; font-weight: 900; margin: 50px 0 20px; color: #181c32; }
-          .red-banner { background-color: #f1416c; color: white; padding: 12px; font-weight: bold; font-size: 12px; text-transform: uppercase; margin-bottom: 10px; border-radius: 4px; }
-          .gray-banner { background-color: #f5f8fa; color: #5e6278; padding: 12px; font-weight: bold; font-size: 12px; text-transform: uppercase; margin-bottom: 10px; border-radius: 4px; }
-          .zone-badge { display: inline-block; background-color: #e8f0fe; color: #1967d2; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
-          .item { padding: 20px 0; border-bottom: 1px solid #eff2f5; page-break-inside: avoid; }
-          .item-header { display: flex; align-items: flex-start; gap: 15px; }
-          .icon-green { color: #50cd89; font-weight: 900; font-size: 22px; line-height: 0.8; }
-          .icon-red { color: #f1416c; font-weight: 900; font-size: 22px; line-height: 0.8; }
-          .question-text { font-size: 14px; font-weight: 700; color: #3f4254; line-height: 1.5; }
-          .status-green { color: #50cd89; font-size: 12px; font-weight: 700; margin-top: 6px; text-transform: lowercase; }
-          .status-red { color: #f1416c; font-size: 12px; font-weight: 700; margin-top: 6px; text-transform: lowercase; }
-          .comment { color: #009ef7; font-size: 13px; font-weight: 700; margin-top: 8px; }
-          .photo { max-width: 350px; max-height: 350px; border-radius: 8px; margin-top: 15px; display: block; }
-          @media print {
-            body { padding: 0; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div>
-            <div class="logo-placeholder">UP</div>
-            <div class="info-block">
-              <div>Чек-лист: <b>${audit.checklist?.title || 'Без названия'}</b></div>
-              <div>Подразделение: <b>${audit.location?.name || 'Неизвестно'}</b></div>
-              <div>Аудитор: <b>${audit.user?.login || 'Неизвестно'}</b></div>
-              <div>Дата и время: <b>${date}</b></div>
-            </div>
-          </div>
-          <div class="score-block">
-            <div class="score-title">ОЦЕНКА</div>
-            <div class="score-value">${audit.score} / ${maxScore}</div>
-          </div>
+        .score-block { margin-top: 20px; padding-top: 20px; border-top: 2px solid #eee; }
+        .score-label { font-size: 14px; font-weight: bold; color: #999; text-transform: uppercase; letter-spacing: 1px; }
+        .score-value { font-size: 36px; font-weight: 900; color: #000; display: inline-block; margin-left: 15px; }
+        .score-max { font-size: 18px; color: #999; font-weight: normal; }
+
+        .general-comment { background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #eee; margin-top: 25px; font-size: 13px; color: #444; }
+        
+        .section-wrapper { padding-top: 35px; }
+        .section-title { font-size: 18px; font-weight: 900; color: #111; margin-bottom: 15px; }
+        .red-banner { background-color: #f1416c; color: white; padding: 10px 12px; font-weight: bold; font-size: 11px; text-transform: uppercase; border-radius: 4px; margin-bottom: 15px; }
+        .gray-banner { background-color: #f5f8fa; color: #5e6278; padding: 10px 12px; font-weight: bold; font-size: 11px; text-transform: uppercase; border-radius: 4px; margin-bottom: 15px; }
+        
+        .item { border-bottom: 1px solid #eee; padding: 15px 0; page-break-inside: avoid; }
+        .zone-badge { display: inline-block; background-color: #e8f0fe; color: #1967d2; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; }
+        
+        .item-table { width: 100%; }
+        .icon-cell { width: 30px; font-size: 20px; font-weight: 900; line-height: 1; }
+        .icon-green { color: #50cd89; }
+        .icon-red { color: #f1416c; }
+        .question-text { font-size: 13px; font-weight: bold; color: #222; line-height: 1.4; margin-bottom: 4px; }
+        .status-green { color: #50cd89; font-size: 11px; font-weight: bold; }
+        .status-red { color: #f1416c; font-size: 11px; font-weight: bold; }
+        .comment { color: #009ef7; font-size: 12px; font-weight: bold; margin-top: 6px; }
+        .photo { max-width: 250px; max-height: 250px; border-radius: 6px; margin-top: 10px; display: block; }
+      </style>
+      <div class="pdf-container">
+        <table>
+          <tr>
+            <td>
+              <table>
+                <tr><td class="info-label">Чек-лист:</td><td class="info-value">${audit.checklist?.title || 'Без названия'}</td></tr>
+                <tr><td class="info-label">Подразделение:</td><td class="info-value">${audit.location?.name || 'Неизвестно'}</td></tr>
+                <tr><td class="info-label">Аудитор:</td><td class="info-value">${audit.user?.login || 'Неизвестно'}</td></tr>
+                <tr><td class="info-label">Дата и время:</td><td class="info-value">${date}</td></tr>
+                <tr><td class="info-label">Сотрудники:</td><td class="info-value">${employees}</td></tr>
+              </table>
+            </td>
+            <td style="width: 30%; text-align: right;">
+              <img src="/logo3.png" class="logo-img" alt="UPPETIT" />
+            </td>
+          </tr>
+        </table>
+
+        <div class="score-block">
+          <span class="score-label">Оценка</span>
+          <span class="score-value">${audit.score} <span class="score-max">/ ${maxScore} б.</span></span>
         </div>
 
-        <div class="section-title">Выявленные нарушения</div>
-        <div class="red-banner">ОШИБКИ И НЕДОЧЕТЫ</div>
-        ${violationsHtml}
+        ${audit.generalComment ? `
+          <div class="general-comment">
+            <b>Общий комментарий к проверке:</b><br/><br/>
+            ${audit.generalComment}
+          </div>
+        ` : ''}
 
-        <div class="section-title">Полный отчет</div>
-        <div class="gray-banner">ВСЕ ОТВЕТЫ</div>
-        ${fullReportHtml}
+        <div class="section-wrapper">
+          <div class="section-title">Выявленные нарушения</div>
+          <div class="red-banner">Ошибки и недочеты</div>
+          ${violationsHtml}
+        </div>
 
-        <script>
-          window.onload = function() {
-            setTimeout(function() {
-              window.print();
-              window.onafterprint = function() { window.close(); };
-            }, 500);
-          };
-        </script>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
+        <div class="section-wrapper">
+          <div class="section-title">Полный отчет</div>
+          <div class="gray-banner">Все ответы</div>
+          ${fullReportHtml}
+        </div>
+      </div>
+    `;
+
+    const opt = {
+      margin:       12,
+      filename:     `Аудит_${audit.location?.name || 'Точка'}_${date.replace(/[, :.]/g, '_')}.pdf`,
+      image:        { type: 'jpeg' as const, quality: 0.98 },
+      html2canvas:  { scale: 2, useCORS: true },
+      jsPDF:        { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
+    };
+
+    html2pdf().from(element).set(opt).save();
   };
 
   if (isLoading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center font-bold text-gray-400">Загрузка...</div>;
@@ -196,20 +214,45 @@ export default function AuditHistoryPage() {
 
                 {expandedId === audit.id && (
                   <div className="bg-gray-50 p-5 border-t border-gray-100">
-                    <div className="flex justify-between items-center mb-4">
+                    <div className="flex justify-between items-center mb-6">
                       <h3 className="text-xs font-bold text-gray-400 uppercase">Детали проверки</h3>
                       <button onClick={(e) => exportToPDF(e, audit)} className="flex items-center gap-1.5 text-xs font-bold text-white bg-[#F25C05] hover:bg-orange-600 px-3 py-1.5 rounded-lg transition-colors shadow-md shadow-orange-500/20">
                         Скачать PDF
                       </button>
                     </div>
+
+                    <div className="mb-6 bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                      <div className="mb-4">
+                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2">Сотрудники на смене</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {audit.shiftEmployees && audit.shiftEmployees.length > 0 ? (
+                            audit.shiftEmployees.map((emp: string, i: number) => (
+                              <span key={i} className="bg-orange-50 text-[#F25C05] px-3 py-1.5 rounded-lg text-xs font-bold border border-orange-100">
+                                {emp}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-xs font-bold text-gray-400 bg-gray-50 px-3 py-1.5 rounded-lg">Не указаны</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {audit.generalComment && (
+                        <div>
+                          <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2">Общий комментарий</h4>
+                          <p className="text-sm text-gray-700 bg-gray-50 p-4 rounded-xl border border-gray-100 italic">
+                            "{audit.generalComment}"
+                          </p>
+                        </div>
+                      )}
+                    </div>
                     
                     {(!audit.answers || audit.answers.length === 0) ? (
-                      <div className="text-sm text-orange-600 font-bold bg-orange-50 p-3 rounded-xl border border-orange-100">Детализация не сохранилась (старый аудит).</div>
+                      <div className="text-sm text-orange-600 font-bold bg-orange-50 p-3 rounded-xl border border-orange-100">Детализация не сохранилась.</div>
                     ) : (
-                      <div className="space-y-4 mt-3">
+                      <div className="space-y-4">
                         {audit.answers.map((ans: any) => (
                           <div key={ans.id} className={`p-4 rounded-2xl border ${ans.isOk ? 'bg-white border-gray-100' : 'bg-red-50/50 border-red-100'}`}>
-                            {/* БЛОК ЗОНЫ */}
                             <div className="mb-2">
                               <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-600 px-2 py-1 rounded-md">
                                 {ans.zone || 'Основной раздел'}
@@ -233,7 +276,7 @@ export default function AuditHistoryPage() {
 
                             {ans.photoBase64 && !ans.isOk && (
                               <div className="mt-3 rounded-xl overflow-hidden border border-gray-200">
-                                <img src={ans.photoBase64} alt="Фото" className="w-full h-auto object-cover" />
+                                <img src={ans.photoBase64} alt="Фото нарушения" className="w-full h-auto object-cover" />
                               </div>
                             )}
                           </div>

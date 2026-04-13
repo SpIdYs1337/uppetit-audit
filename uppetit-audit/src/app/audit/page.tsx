@@ -1,16 +1,26 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { signOut } from 'next-auth/react';
 import Image from 'next/image';
 
 export default function AuditDashboard() {
+  const [hasDraft, setHasDraft] = useState(false);
+
+  useEffect(() => {
+    // Проверяем, есть ли в памяти устройства незаконченный аудит
+    const draft = localStorage.getItem('last_active_audit');
+    if (draft) {
+      setHasDraft(true);
+    }
+  }, []);
+
   return (
     <div className="flex-1 flex flex-col p-6">
       
       <header className="flex justify-between items-center mb-10 mt-4">
         <div>
-          {/* ИСПРАВЛЕНИЕ: logo.jpg вместо logo.png */}
           <Image src="/logo.jpg" alt="UPPETIT" width={120} height={30} className="object-contain" priority />
           <div className="text-[9px] uppercase tracking-[0.2em] text-gray-400 font-bold mt-1">
             Аудит качества
@@ -33,6 +43,18 @@ export default function AuditDashboard() {
       </div>
 
       <div className="space-y-4">
+        
+        {/* НОВАЯ КНОПКА: Появляется только если есть черновик */}
+        {hasDraft && (
+          <Link href="/audit/run" className="block w-full bg-blue-600 text-white p-6 rounded-3xl shadow-lg shadow-blue-500/20 active:scale-[0.98] transition-all relative overflow-hidden">
+            <div className="relative z-10">
+              <h2 className="text-xl font-bold mb-1">Продолжить аудит</h2>
+              <p className="text-blue-100 text-sm font-medium">У вас есть незавершенная проверка</p>
+            </div>
+            <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-white/20 rounded-full blur-xl"></div>
+          </Link>
+        )}
+
         <Link href="/audit/new" className="block w-full bg-[#F25C05] text-white p-6 rounded-3xl shadow-lg shadow-orange-500/20 active:scale-[0.98] transition-all relative overflow-hidden">
           <div className="relative z-10">
             <h2 className="text-xl font-bold mb-1">Начать проверку</h2>
@@ -41,14 +63,15 @@ export default function AuditDashboard() {
           <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
         </Link>
 
+        <Link href="/audit/schedule" className="block w-full bg-white p-6 rounded-3xl shadow-sm border border-gray-100 active:scale-[0.98] transition-transform">
+          <h2 className="text-xl font-black text-gray-900 mb-1">Мой план</h2>
+          <p className="text-sm text-gray-500 font-medium">Календарь будущих проверок</p>
+        </Link>
+
         <Link href="/audit/history" className="block w-full bg-gray-50 border border-gray-100 text-gray-900 p-6 rounded-3xl active:scale-[0.98] transition-all">
           <h2 className="text-xl font-bold mb-1">История проверок</h2>
           <p className="text-gray-500 text-sm font-medium">Посмотреть прошлые аудиты</p>
         </Link>
-        <Link href="/audit/schedule" className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 block mb-4 active:scale-95 transition-transform">
-  <h2 className="text-xl font-black text-gray-900 mb-1">Мой план</h2>
-  <p className="text-sm text-gray-500 font-medium">Календарь будущих проверок</p>
-</Link>
       </div>
 
     </div>

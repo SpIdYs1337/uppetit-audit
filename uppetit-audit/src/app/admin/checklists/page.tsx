@@ -1,7 +1,119 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { 
+  DndContext, 
+  closestCenter, 
+  PointerSensor, 
+  useSensor, 
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import { 
+  arrayMove, 
+  SortableContext, 
+  verticalListSortingStrategy, 
+  useSortable 
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
+// --- КОМПОНЕНТ ПЕРЕТАСКИВАЕМОГО ВОПРОСА ---
+function SortableItem({ 
+  item, 
+  handleUpdateItem, 
+  handleRemoveItem 
+}: { 
+  item: any; 
+  handleUpdateItem: (id: string, field: string, value: any) => void;
+  handleRemoveItem: (id: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : 'auto',
+  };
+
+  return (
+    <div 
+      ref={setNodeRef} 
+      style={style} 
+      className={`flex flex-wrap md:flex-nowrap gap-3 bg-white p-4 rounded-2xl border ${isDragging ? 'border-[#F25C05] shadow-lg scale-[1.02]' : 'border-gray-100 shadow-sm'} relative group items-center`}
+    >
+      {/* РУЧКА ДЛЯ ПЕРЕТАСКИВАНИЯ */}
+      <div 
+        {...attributes} 
+        {...listeners} 
+        className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-[#F25C05] p-2 -ml-2 -mr-1 flex-shrink-0"
+        title="Потяните, чтобы переместить"
+      >
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8h16M4 16h16" />
+        </svg>
+      </div>
+
+      {/* ЗОНА */}
+      <div className="w-full md:w-1/4">
+        <input 
+          type="text" 
+          value={item.zone || ''} 
+          onChange={e => handleUpdateItem(item.id, 'zone', e.target.value)}
+          placeholder="Зона (напр. Бар)"
+          className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold text-gray-900 placeholder-gray-400 bg-gray-50 focus:bg-white focus:border-[#F25C05] outline-none transition-colors"
+        />
+      </div>
+
+      {/* ВОПРОС */}
+      <div className="w-full md:flex-1">
+        <input 
+          type="text" 
+          value={item.text || ''} 
+          onChange={e => handleUpdateItem(item.id, 'text', e.target.value)}
+          placeholder="Текст вопроса..."
+          className="w-full p-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-900 placeholder-gray-400 bg-gray-50 focus:bg-white focus:border-[#F25C05] outline-none transition-colors"
+        />
+      </div>
+
+      {/* БАЛЛЫ */}
+      <div className="w-20">
+        <input 
+          type="number" 
+          value={item.score === 0 ? '' : item.score} 
+          onChange={e => handleUpdateItem(item.id, 'score', e.target.value === '' ? 0 : Number(e.target.value))}
+          placeholder="Штраф"
+          className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold text-red-600 placeholder-red-300 bg-gray-50 focus:bg-white focus:border-[#F25C05] outline-none transition-colors text-center"
+          title="Сколько баллов снимать"
+        />
+      </div>
+
+      {/* КНОПКА: КРИТИЧНОСТЬ */}
+      <button 
+        title={item.isCritical ? "Критическое нарушение (снять отметку)" : "Отметить как критическое"}
+        onClick={() => handleUpdateItem(item.id, 'isCritical', !item.isCritical)} 
+        className={`w-12 h-[46px] flex items-center justify-center rounded-xl border-2 transition-all font-black text-lg ${
+          item.isCritical 
+            ? 'bg-red-500 border-red-500 text-white shadow-md shadow-red-500/30' 
+            : 'bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+        }`}
+      >
+        !
+      </button>
+
+      {/* УДАЛИТЬ */}
+      <button 
+        onClick={() => handleRemoveItem(item.id)} 
+        title="Удалить вопрос"
+        className="w-12 h-[46px] flex items-center justify-center text-red-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 border border-gray-200 hover:border-red-200 rounded-xl transition-colors"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+
+// --- ОСНОВНАЯ СТРАНИЦА ---
 export default function AdminChecklistsPage() {
   const [checklists, setChecklists] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -10,11 +122,19 @@ export default function AdminChecklistsPage() {
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   
-  // СТЕЙТЫ ДЛЯ ПОРОГОВ (теперь это абсолютные баллы)
   const [redThreshold, setRedThreshold] = useState(70);
   const [yellowThreshold, setYellowThreshold] = useState(90);
   
   const [items, setItems] = useState<any[]>([]);
+
+  // Сенсоры для DND
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5, // Чтобы клики по инпутам не запускали перетаскивание
+      },
+    })
+  );
 
   useEffect(() => {
     fetchChecklists();
@@ -37,11 +157,16 @@ export default function AdminChecklistsPage() {
     if (checklist) {
       setCurrentId(checklist.id);
       setTitle(checklist.title);
-      // Загружаем пороги (или ставим дефолт, если их вдруг нет)
       setRedThreshold(checklist.redThreshold ?? 70);
       setYellowThreshold(checklist.yellowThreshold ?? 90);
       try {
-        setItems(typeof checklist.items === 'string' ? JSON.parse(checklist.items) : checklist.items);
+        const parsedItems = typeof checklist.items === 'string' ? JSON.parse(checklist.items) : checklist.items;
+        // Каждому вопросу нужен уникальный ID для работы DND
+        const itemsWithIds = parsedItems.map((item: any) => ({
+          ...item,
+          id: item.id || Math.random().toString(36).substring(2, 9) 
+        }));
+        setItems(itemsWithIds);
       } catch (e) {
         setItems([]);
       }
@@ -50,7 +175,7 @@ export default function AdminChecklistsPage() {
       setTitle('');
       setRedThreshold(70);
       setYellowThreshold(90);
-      setItems([{ zone: 'Основной раздел', text: '', score: 0, isCritical: false }]);
+      setItems([{ id: Math.random().toString(36).substring(2, 9), zone: 'Основной раздел', text: '', score: 0, isCritical: false }]);
     }
     setIsEditing(true);
   };
@@ -62,19 +187,29 @@ export default function AdminChecklistsPage() {
 
   const handleAddItem = () => {
     const lastZone = items.length > 0 ? items[items.length - 1].zone : 'Основной раздел';
-    setItems([...items, { zone: lastZone, text: '', score: 0, isCritical: false }]);
+    setItems([...items, { id: Math.random().toString(36).substring(2, 9), zone: lastZone, text: '', score: 0, isCritical: false }]);
   };
 
-  const handleUpdateItem = (index: number, field: string, value: any) => {
-    const newItems = [...items];
-    newItems[index][field] = value;
-    setItems(newItems);
+  const handleUpdateItem = (id: string, field: string, value: any) => {
+    setItems(items.map(item => item.id === id ? { ...item, [field]: value } : item));
   };
 
-  const handleRemoveItem = (index: number) => {
-    const newItems = [...items];
-    newItems.splice(index, 1);
-    setItems(newItems);
+  const handleRemoveItem = (id: string) => {
+    setItems(items.filter(item => item.id !== id));
+  };
+
+  // Обработка окончания перетаскивания списка
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    if (over && active.id !== over.id) {
+      setItems((items) => {
+        const oldIndex = items.findIndex((item) => item.id === active.id);
+        const newIndex = items.findIndex((item) => item.id === over.id);
+        
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
   };
 
   const handleSave = async () => {
@@ -83,6 +218,7 @@ export default function AdminChecklistsPage() {
 
     try {
       const method = currentId ? 'PUT' : 'POST';
+      // Передаем items, сохраняя их порядок (и их ID)
       const body = {
         id: currentId,
         title,
@@ -121,7 +257,7 @@ export default function AdminChecklistsPage() {
   if (isLoading) return <div className="p-8 text-gray-500 font-bold">Загрузка...</div>;
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
+    <div className="p-8 max-w-6xl mx-auto pb-20">
       <div className="flex justify-between items-end mb-8">
         <div>
           <h1 className="text-3xl font-black text-gray-900 tracking-tight">Чек-листы</h1>
@@ -161,7 +297,7 @@ export default function AdminChecklistsPage() {
                 <label className="block text-xs font-bold text-red-500 mb-2">Красная зона (до)</label>
                 <div className="flex items-center gap-2">
                   <input 
-                    type="number" min="0" // Убрали max="100"
+                    type="number" min="0" 
                     value={redThreshold} 
                     onChange={e => setRedThreshold(Number(e.target.value))}
                     className="w-full p-2 text-xl font-black text-red-600 bg-red-50 rounded-lg outline-none text-center"
@@ -176,7 +312,7 @@ export default function AdminChecklistsPage() {
                 <label className="block text-xs font-bold text-yellow-600 mb-2">Желтая зона (до)</label>
                 <div className="flex items-center gap-2">
                   <input 
-                    type="number" min="0" // Убрали max="100"
+                    type="number" min="0" 
                     value={yellowThreshold} 
                     onChange={e => setYellowThreshold(Number(e.target.value))}
                     className="w-full p-2 text-xl font-black text-yellow-600 bg-yellow-50 rounded-lg outline-none text-center"
@@ -186,7 +322,7 @@ export default function AdminChecklistsPage() {
                 <p className="text-[10px] text-gray-400 mt-2 text-center">от {redThreshold} до {yellowThreshold - 1} б.</p>
               </div>
 
-              {/* Зеленая зона (Вычисляется автоматически) */}
+              {/* Зеленая зона */}
               <div className="bg-white p-4 rounded-xl border border-green-100 shadow-sm flex flex-col justify-center opacity-80">
                 <label className="block text-xs font-bold text-green-600 mb-2">Зеленая зона</label>
                 <div className="w-full p-2 text-xl font-black text-green-600 bg-green-50 rounded-lg text-center">
@@ -200,66 +336,20 @@ export default function AdminChecklistsPage() {
           <div className="space-y-4 mb-6">
             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Вопросы и зоны</label>
             
-            {items.map((item, index) => (
-              <div key={index} className="flex flex-wrap md:flex-nowrap gap-3 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm relative group items-center">
-                
-                {/* ЗОНА */}
-                <div className="w-full md:w-1/4">
-                  <input 
-                    type="text" 
-                    value={item.zone || ''} 
-                    onChange={e => handleUpdateItem(index, 'zone', e.target.value)}
-                    placeholder="Зона (напр. Бар)"
-                    className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold text-gray-900 placeholder-gray-400 bg-gray-50 focus:bg-white focus:border-[#F25C05] outline-none transition-colors"
+            {/* DND КОНТЕКСТ ДЛЯ СПИСКА ВОПРОСОВ */}
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
+                {items.map((item) => (
+                  <SortableItem 
+                    key={item.id} 
+                    item={item} 
+                    handleUpdateItem={handleUpdateItem} 
+                    handleRemoveItem={handleRemoveItem} 
                   />
-                </div>
+                ))}
+              </SortableContext>
+            </DndContext>
 
-                {/* ВОПРОС */}
-                <div className="w-full md:flex-1">
-                  <input 
-                    type="text" 
-                    value={item.text || ''} 
-                    onChange={e => handleUpdateItem(index, 'text', e.target.value)}
-                    placeholder="Текст вопроса..."
-                    className="w-full p-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-900 placeholder-gray-400 bg-gray-50 focus:bg-white focus:border-[#F25C05] outline-none transition-colors"
-                  />
-                </div>
-
-                {/* БАЛЛЫ */}
-                <div className="w-20">
-                  <input 
-                    type="number" 
-                    value={item.score === 0 ? '' : item.score} 
-                    onChange={e => handleUpdateItem(index, 'score', e.target.value === '' ? 0 : Number(e.target.value))}
-                    placeholder="Штраф"
-                    className="w-full p-3 rounded-xl border border-gray-200 text-sm font-bold text-red-600 placeholder-red-300 bg-gray-50 focus:bg-white focus:border-[#F25C05] outline-none transition-colors text-center"
-                    title="Сколько баллов снимать"
-                  />
-                </div>
-
-                {/* КНОПКА: КРИТИЧНОСТЬ */}
-                <button 
-                  title={item.isCritical ? "Критическое нарушение (снять отметку)" : "Отметить как критическое"}
-                  onClick={() => handleUpdateItem(index, 'isCritical', !item.isCritical)} 
-                  className={`w-12 h-[46px] flex items-center justify-center rounded-xl border-2 transition-all font-black text-lg ${
-                    item.isCritical 
-                      ? 'bg-red-500 border-red-500 text-white shadow-md shadow-red-500/30' 
-                      : 'bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-600'
-                  }`}
-                >
-                  !
-                </button>
-
-                {/* УДАЛИТЬ */}
-                <button 
-                  onClick={() => handleRemoveItem(index)} 
-                  title="Удалить вопрос"
-                  className="w-12 h-[46px] flex items-center justify-center text-red-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 border border-gray-200 hover:border-red-200 rounded-xl transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
           </div>
 
           <div className="flex justify-between items-center border-t border-gray-100 pt-6 mt-4">

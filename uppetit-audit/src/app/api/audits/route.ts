@@ -7,12 +7,11 @@ export async function GET() {
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-    // Запускаем удаление в фоновом режиме (без await), 
-    // чтобы не заставлять пользователя ждать, пока база чистится
+    // Запускаем удаление в фоновом режиме (без await)
     prisma.audit.deleteMany({
       where: {
         date: {
-          lt: sixMonthsAgo // lt означает "less than" (меньше чем / старше чем)
+          lt: sixMonthsAgo
         }
       }
     }).catch(err => console.error("Ошибка фоновой автоочистки:", err));
@@ -39,8 +38,17 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    // ДОБАВЛЕНО: Извлекаем maxScore из тела запроса
-    const { userId, locationId, checklistId, score, maxScore, answers } = body;
+    
+    const { 
+      userId, 
+      locationId, 
+      checklistId, 
+      score, 
+      maxScore, 
+      shiftEmployees, 
+      generalComment, 
+      answers 
+    } = body;
 
     // 1. Создаем сам аудит
     const newAudit = await prisma.audit.create({
@@ -49,13 +57,23 @@ export async function POST(request: Request) {
         locationId,
         checklistId,
         score: Number(score),
-        maxScore: maxScore !== undefined && maxScore !== null ? Number(maxScore) : null, // ДОБАВЛЕНО
+        maxScore: maxScore !== undefined && maxScore !== null ? Number(maxScore) : null,
+        
+        // --- НОВЫЕ ПОЛЯ ---
+        shiftEmployees: shiftEmployees || [],
+        generalComment: generalComment || null,
+        // ------------------
+
         answers: {
           create: answers.map((ans: any) => ({
             zone: ans.zone || 'Основной раздел',
-            question: ans.questionText,
-            isOk: ans.isOk,
-            penalty: ans.penalty,
+            question: ans.questionText || 'Без текста',
+            
+            // 🔥 ИСПРАВЛЕНИЕ ОШИБКИ: Жесткая проверка. 
+            // Если isOk равно undefined, ставим false, чтобы база не падала
+            isOk: typeof ans.isOk === 'boolean' ? ans.isOk : false, 
+            
+            penalty: ans.penalty || 0,
             photoBase64: ans.photoBase64 || null,
             comment: ans.comment || null
           }))
@@ -67,17 +85,16 @@ export async function POST(request: Request) {
     try {
       await prisma.visitPlan.updateMany({
         where: {
-          userId: userId,           // ID аудитора, который провел проверку
-          locationId: locationId,   // ID точки
-          status: 'PLANNED'         // Ищем только активные планы
+          userId: userId,           
+          locationId: locationId,   
+          status: 'PLANNED'         
         },
         data: {
-          status: 'DONE'            // Меняем статус на "выполнено"
+          status: 'DONE'            
         }
       });
     } catch (planError) {
       console.error('Ошибка при автоматическом закрытии плана:', planError);
-      // Не прерываем ответ сервера, если план не обновился
     }
 
     return NextResponse.json(newAudit);
