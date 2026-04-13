@@ -3,8 +3,14 @@ import prisma from "@/lib/prisma";
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> } // Указываем, что params — это Promise
 ) {
+  const params = await props.params; // Ждем получения параметров
+  const id = params.id; 
+  
+  // Дальше оставляешь свой код без изменений...
+  const body = await request.json();
+  // ... и так далее
   try {
     const body = await request.json();
     
