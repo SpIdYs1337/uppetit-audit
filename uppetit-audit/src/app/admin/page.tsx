@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import PushSubscribe from '@/components/PushSubscribe';
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<any[]>([]);
@@ -109,18 +110,24 @@ export default function AdminUsersPage() {
   if (isLoading) return <div className="p-8 text-gray-500 font-bold">Загрузка...</div>;
 
   return (
+    
+    
     <div className="p-8 max-w-6xl mx-auto">
       <div className="flex justify-between items-end mb-8">
         <div>
           <h1 className="text-3xl font-black text-gray-900 tracking-tight">Сотрудники</h1>
           <p className="text-gray-500 mt-2">Управление персоналом и доступами</p>
         </div>
+        
         {!isEditing && (
           <button onClick={() => openEditor()} className="bg-black text-white px-6 py-3 rounded-xl font-bold shadow-lg hover:bg-gray-800 transition-all">
             + Добавить сотрудника
           </button>
         )}
       </div>
+      
+
+             
 
       {isEditing ? (
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-8 max-w-2xl">
@@ -193,10 +200,15 @@ export default function AdminUsersPage() {
                   </button>
                 </div>
               </div>
+              
             );
+            
           })}
         </div>
+        
       )}
+      
     </div>
+    
   );
 }

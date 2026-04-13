@@ -80,7 +80,7 @@ export default function AuditHistoryPage() {
                   ${v.isOk ? 'соответствие' : 'несоответствие'}
                 </div>
                 ${v.comment ? `<div class="comment">Комментарий: ${v.comment}</div>` : ''}
-                ${v.photoBase64 && !v.isOk ? `<img class="photo" src="${v.photoBase64}" />` : ''}
+                ${v.photoBase64 ? `<img class="photo" src="${v.photoBase64}" />` : ''}
               </td>
             </tr>
           </table>
@@ -137,7 +137,7 @@ export default function AuditHistoryPage() {
               </table>
             </td>
             <td style="width: 30%; text-align: right;">
-              <img src="/logo3.png" class="logo-img" alt="UPPETIT" />
+              <img src="/logo.png" class="logo-img" alt="UPPETIT" />
             </td>
           </tr>
         </table>
@@ -274,9 +274,9 @@ export default function AuditHistoryPage() {
                               </div>
                             )}
 
-                            {ans.photoBase64 && !ans.isOk && (
-                              <div className="mt-3 rounded-xl overflow-hidden border border-gray-200">
-                                <img src={ans.photoBase64} alt="Фото нарушения" className="w-full h-auto object-cover" />
+                            {ans.photoBase64 && (
+                              <div className="mt-3 overflow-hidden rounded-lg border border-gray-100">
+                                <img src={ans.photoBase64} alt="Фото" className="max-h-48 w-full object-cover" />
                               </div>
                             )}
                           </div>

@@ -18,8 +18,6 @@ export default function AdminUsersPage() {
   const fetchUsers = async () => {
     setIsLoading(true);
     try {
-      // ИСПРАВЛЕНИЕ: Добавляем { cache: 'no-store' } и уникальную метку времени, 
-      // чтобы Next.js всегда запрашивал свежие данные из базы, а не из памяти.
       const res = await fetch(`/api/users?t=${new Date().getTime()}`, {
         cache: 'no-store'
       });
@@ -165,8 +163,8 @@ export default function AdminUsersPage() {
               </div>
               {user.phone && <div className="text-sm text-gray-500 font-bold mb-4">📞 {user.phone}</div>}
               
-              {/* Статус пароля */}
-              {user.inviteToken ? (
+              {/* ИСПРАВЛЕНИЕ: Теперь статус смотрит на надежный флаг hasPassword */}
+              {!user.hasPassword ? (
                 <div className="text-xs font-bold text-orange-500 bg-orange-50 p-2 rounded-lg mb-4 text-center border border-orange-100">
                   ⚠️ Пароль еще не установлен
                 </div>
@@ -182,7 +180,6 @@ export default function AdminUsersPage() {
                   <button onClick={() => handleDelete(user.id)} className="px-4 bg-red-50 text-red-500 rounded-xl font-bold text-xs hover:bg-red-100">Удалить</button>
                 </div>
                 
-                {/* КНОПКА СБРОСА ПАРОЛЯ */}
                 <button onClick={() => handleResetPassword(user)} className="w-full bg-blue-50 text-blue-600 py-2 rounded-xl font-bold text-xs hover:bg-blue-100 transition-colors">
                   Сбросить пароль и дать ссылку
                 </button>

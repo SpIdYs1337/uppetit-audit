@@ -2,14 +2,23 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { signOut } from 'next-auth/react';
+import { signOut, getSession } from 'next-auth/react'; // ИЗМЕНЕНО: используем getSession
 import Image from 'next/image';
+import PushSubscribe from '@/components/PushSubscribe';
 
 export default function AuditDashboard() {
   const [hasDraft, setHasDraft] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null); // Состояние для роли
 
   useEffect(() => {
-    // Проверяем, есть ли в памяти устройства незаконченный аудит
+    // 1. Узнаем, кто зашел (ТУ или обычный аудитор)
+    const checkSession = async () => {
+      const session = await getSession();
+      setUserRole((session?.user as any)?.role || null);
+    };
+    checkSession();
+
+    // 2. Проверяем, есть ли в памяти устройства незаконченный аудит
     const draft = localStorage.getItem('last_active_audit');
     if (draft) {
       setHasDraft(true);
@@ -17,7 +26,7 @@ export default function AuditDashboard() {
   }, []);
 
   return (
-    <div className="flex-1 flex flex-col p-6">
+    <div className="flex-1 flex flex-col p-6 max-w-md mx-auto w-full">
       
       <header className="flex justify-between items-center mb-10 mt-4">
         <div>
@@ -44,7 +53,7 @@ export default function AuditDashboard() {
 
       <div className="space-y-4">
         
-        {/* НОВАЯ КНОПКА: Появляется только если есть черновик */}
+        {/* КНОПКА ЧЕРНОВИКА */}
         {hasDraft && (
           <Link href="/audit/run" className="block w-full bg-blue-600 text-white p-6 rounded-3xl shadow-lg shadow-blue-500/20 active:scale-[0.98] transition-all relative overflow-hidden">
             <div className="relative z-10">
@@ -72,6 +81,30 @@ export default function AuditDashboard() {
           <h2 className="text-xl font-bold mb-1">История проверок</h2>
           <p className="text-gray-500 text-sm font-medium">Посмотреть прошлые аудиты</p>
         </Link>
+
+        {/* НОВАЯ КНОПКА ТОЛЬКО ДЛЯ ТУ */}
+        {userRole === 'TU' && (
+          <Link href="/audit/tu" className="block w-full bg-zinc-900 text-white p-6 rounded-3xl shadow-lg active:scale-[0.98] transition-all relative overflow-hidden mt-2">
+            <div className="relative z-10">
+              <h2 className="text-xl font-bold mb-1 flex items-center gap-2">
+                <span>🏢</span> Мои точки
+              </h2>
+              <p className="text-zinc-400 text-sm font-medium">Отчеты по вашей территории</p>
+            </div>
+            <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-white/5 rounded-full blur-xl"></div>
+          </Link>
+        )}
+        <div className="space-y-4">
+        {/* ... твои старые кнопки (Начать проверку, Мои точки и т.д.) ... */}
+
+        {/* Кнопка включения уведомлений (будет полезна для ТУ) */}
+        {(userRole === 'TU' || userRole === 'ADMIN') && (
+          <div className="pt-4 border-t border-gray-200">
+            <PushSubscribe />
+          </div>
+        )}
+      </div>
+
       </div>
 
     </div>

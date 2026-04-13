@@ -1,5 +1,13 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import webpush from 'web-push';
+
+// Настраиваем библиотеку web-push нашими ключами из .env
+webpush.setVapidDetails(
+  process.env.VAPID_SUBJECT || 'mailto:admin@uppetit.ru',
+  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+  process.env.VAPID_PRIVATE_KEY!
+);
 
 export async function GET() {
   try {
@@ -79,6 +87,14 @@ export async function POST(request: Request) {
           }))
         }
       },
+      // 🔥 ДОБАВЛЕНО: Подтягиваем связи, чтобы знать, КОМУ отправлять Push
+      include: {
+        location: {
+          include: { tu: true }
+        },
+        checklist: true,
+        user: true,
+      }
     });
 
     // 2. АВТОМАТИЧЕСКОЕ ЗАКРЫТИЕ ПЛАНА
@@ -97,9 +113,60 @@ export async function POST(request: Request) {
       console.error('Ошибка при автоматическом закрытии плана:', planError);
     }
 
+    // 3. ОТПРАВКА PUSH УВЕДОМЛЕНИЙ (Запускаем в фоне, чтобы не тормозить ответ пользователю)
+    sendWebPushNotifications(newAudit).catch(err => console.error("Ошибка Push:", err));
+
     return NextResponse.json(newAudit);
   } catch (error) {
     console.error("Ошибка сохранения аудита:", error);
     return NextResponse.json({ error: 'Ошибка при сохранении' }, { status: 500 });
   }
+}
+
+// --- ФУНКЦИЯ ОТПРАВКИ WEB PUSH УВЕДОМЛЕНИЙ ---
+async function sendWebPushNotifications(audit: any) {
+  console.log("Готовим Web Push уведомления...");
+
+  const isPerfect = audit.score === audit.maxScore;
+  const emoji = isPerfect ? '✅' : '⚠️';
+  const locationName = audit.location?.name || 'Неизвестно';
+  const scoreText = audit.maxScore ? `${audit.score}/${audit.maxScore}` : `${audit.score}`;
+
+  // Тело уведомления
+  const payload = JSON.stringify({
+    title: `${emoji} Новый аудит: ${locationName}`,
+    body: `Оценка: ${scoreText} б. Проверил: ${audit.user?.login || 'Аудитор'}. Комментарий: ${audit.generalComment || 'Нет'}`,
+    url: '/audit/history' // При клике по пушу откроется история проверок
+  });
+
+  // 1. Ищем подписки АДМИНОВ
+  const admins = await prisma.user.findMany({ 
+    where: { role: 'ADMIN', pushSubscription: { not: null } } 
+  });
+
+  // 2. Ищем подписку ТУ (Территориального управляющего)
+  const tuSubscription = audit.location?.tu?.pushSubscription;
+
+  // Собираем все уникальные подписки в Set, чтобы избежать дублей
+  const subscriptionsToNotify = new Set<string>();
+  
+  admins.forEach(admin => {
+    if (admin.pushSubscription) subscriptionsToNotify.add(admin.pushSubscription);
+  });
+  
+  if (tuSubscription) {
+    subscriptionsToNotify.add(tuSubscription);
+  }
+
+  // 3. Рассылаем уведомления
+  for (const subString of subscriptionsToNotify) {
+    try {
+      const sub = JSON.parse(subString);
+      await webpush.sendNotification(sub, payload);
+    } catch (e) {
+      console.error('Не удалось отправить пуш (возможно подписка устарела или отозвана браузером):', e);
+    }
+  }
+  
+  console.log(`Push-уведомления успешно отправлены (${subscriptionsToNotify.size} шт.)`);
 }

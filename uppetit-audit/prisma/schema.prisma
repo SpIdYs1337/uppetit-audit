@@ -15,6 +15,8 @@ model User {
   passwordHash String?  
   inviteToken  String?     @unique 
   role         String      @default("AUDITOR")
+  pushSubscription  String?
+
   
   audits       Audit[]
   visitPlans   VisitPlan[]

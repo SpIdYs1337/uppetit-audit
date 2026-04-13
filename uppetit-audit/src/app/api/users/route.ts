@@ -1,11 +1,27 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+
 export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const users = await prisma.user.findMany({ orderBy: { login: 'asc' } });
-    return NextResponse.json(users);
-  } catch (error) { return NextResponse.json({ error: 'Ошибка' }, { status: 500 }); }
+    
+    // ИСПРАВЛЕНИЕ: Формируем безопасный список пользователей.
+    // Хэш пароля не передаем, но добавляем флаг hasPassword.
+    const safeUsers = users.map(u => ({
+      id: u.id,
+      login: u.login,
+      phone: u.phone,
+      role: u.role,
+      inviteToken: u.inviteToken,
+      hasPassword: !!u.passwordHash // Если пароль есть -> true, если null -> false
+    }));
+
+    return NextResponse.json(safeUsers);
+  } catch (error) { 
+    return NextResponse.json({ error: 'Ошибка' }, { status: 500 }); 
+  }
 }
 
 export async function POST(request: Request) {
@@ -23,7 +39,9 @@ export async function POST(request: Request) {
       }
     });
     return NextResponse.json(newUser);
-  } catch (error) { return NextResponse.json({ error: 'Ошибка сохранения' }, { status: 500 }); }
+  } catch (error) { 
+    return NextResponse.json({ error: 'Ошибка сохранения' }, { status: 500 }); 
+  }
 }
 
 export async function PUT(request: Request) {
@@ -46,7 +64,9 @@ export async function PUT(request: Request) {
       data: { login: body.login, phone: body.phone || null, role: body.role }
     });
     return NextResponse.json(updatedUser);
-  } catch (error) { return NextResponse.json({ error: 'Ошибка обновления' }, { status: 500 }); }
+  } catch (error) { 
+    return NextResponse.json({ error: 'Ошибка обновления' }, { status: 500 }); 
+  }
 }
 
 export async function DELETE(request: Request) {
@@ -55,5 +75,7 @@ export async function DELETE(request: Request) {
     const id = searchParams.get('id');
     await prisma.user.delete({ where: { id: id as string } });
     return NextResponse.json({ success: true });
-  } catch (error) { return NextResponse.json({ error: 'Ошибка удаления' }, { status: 500 }); }
+  } catch (error) { 
+    return NextResponse.json({ error: 'Ошибка удаления' }, { status: 500 }); 
+  }
 }

@@ -106,7 +106,7 @@ export default function AdminAuditsPage() {
                   ${v.isOk ? 'соответствие' : 'несоответствие'}
                 </div>
                 ${v.comment ? `<div class="comment">Комментарий: ${v.comment}</div>` : ''}
-                ${v.photoBase64 && !v.isOk ? `<img class="photo" src="${v.photoBase64}" />` : ''}
+                ${v.photoBase64 ? `<img class="photo" src="${v.photoBase64}" />` : ''}
               </td>
             </tr>
           </table>
@@ -337,9 +337,9 @@ export default function AdminAuditsPage() {
                                   )}
                                 </div>
                                 
-                                {!ans.isOk && ans.photoBase64 && (
+                                {ans.photoBase64 && (
                                   <div className="mt-3 overflow-hidden rounded-lg border border-gray-100">
-                                    <img src={ans.photoBase64} alt="Фото нарушения" className="max-h-48 w-full object-cover" />
+                                    <img src={ans.photoBase64} alt="Фото" className="max-h-48 w-full object-cover" />
                                   </div>
                                 )}
                                 
