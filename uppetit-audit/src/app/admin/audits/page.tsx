@@ -36,7 +36,6 @@ export default function AdminAuditsPage() {
     });
   };
 
-  // Высчитываем максимальный балл из чек-листа
   const getMaxScore = (checklist: any) => {
     if (!checklist || !checklist.items) return 0;
     try {
@@ -45,7 +44,6 @@ export default function AdminAuditsPage() {
     } catch (e) { return 0; }
   };
 
-  // Удаление одного аудита
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (!confirm('Точно удалить этот аудит?')) return;
@@ -58,7 +56,6 @@ export default function AdminAuditsPage() {
     }
   };
 
-  // Очистка всей истории
   const handleClearHistory = async () => {
     if (!confirm('ВНИМАНИЕ! Это действие удалит АБСОЛЮТНО ВСЕ аудиты из базы. Продолжить?')) return;
     if (!confirm('Вы абсолютно уверены? Это нельзя отменить.')) return;
@@ -72,58 +69,7 @@ export default function AdminAuditsPage() {
     }
   };
 
-  // Выгрузка полного отчета в Word
-  // Выгрузка полного отчета в Word для Админа
-  // ПОЛНАЯ ВЫГРУЗКА В WORD (ВСЕ ПУНКТЫ + ФОТО + КОММЕНТАРИИ)
-  // Выгрузка полного отчета в Word для Админа (с исправленным размером фото)
-  const exportToDoc = (e: React.MouseEvent, audit: any) => {
-    e.stopPropagation();
-    const maxScore = getMaxScore(audit.checklist);
-    const date = formatDate(audit.date);
-
-    const answersHtml = (!audit.answers || audit.answers.length === 0) 
-      ? '<p>Детализация ответов отсутствует (старый формат аудита).</p>'
-      : audit.answers.map((v: any) => `
-        <div style="margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px;">
-          <p style="font-size: 14pt; margin-bottom: 5px;"><b>Вопрос:</b> ${v.question}</p>
-          ${v.isOk 
-            ? `<p style="color: #0d652d; font-size: 12pt; margin-bottom: 5px;"><b>Статус:</b> ✓ Выполнено без замечаний</p>` 
-            : `<p style="color: #d93025; font-size: 12pt; margin-bottom: 5px;"><b>Нарушение! Штраф:</b> -${v.penalty} б.</p>`
-          }
-          ${v.comment ? `<p style="font-size: 12pt; color: #555; margin-bottom: 10px;"><b>Комментарий:</b> ${v.comment}</p>` : ''}
-          
-          {/* ИСПРАВЛЕНИЕ ЗДЕСЬ: Добавили width="500" прямо в тег и обновили стили */}
-          ${v.photoBase64 ? `<img src="${v.photoBase64}" width="500" style="width: 500px; height: auto; border-radius: 8px; margin-top: 10px; display: block;" />` : ''}
-        </div>
-      `).join('');
-
-    const html = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset="utf-8"><title>Аудит</title></head>
-      <body style="font-family: Arial, sans-serif; padding: 20px;">
-        <h1 style="color: #333; border-bottom: 2px solid #F25C05; padding-bottom: 10px; margin-bottom: 20px;">Полный отчет по аудиту</h1>
-        <table style="width: 100%; font-size: 12pt; margin-bottom: 30px; border-collapse: collapse;">
-          <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; width: 150px;"><b>Точка:</b></td><td style="border-bottom: 1px solid #eee;">${audit.location?.name || 'Удалена'}</td></tr>
-          <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><b>Чек-лист:</b></td><td style="border-bottom: 1px solid #eee;">${audit.checklist?.title || 'Удален'}</td></tr>
-          <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><b>Проверяющий:</b></td><td style="border-bottom: 1px solid #eee;">${audit.user?.login || 'Удален'}</td></tr>
-          <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><b>Дата проверки:</b></td><td style="border-bottom: 1px solid #eee;">${date}</td></tr>
-          <tr><td style="padding: 8px 0;"><b>Результат:</b></td><td style="font-weight: bold; font-size: 14pt;">${audit.score} из ${maxScore} баллов</td></tr>
-        </table>
-        <h2 style="color: #555; margin-top: 30px; margin-bottom: 15px;">Детализация чек-листа:</h2>
-        ${answersHtml}
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Аудит_${audit.location?.name || 'Точка'}_${date.replace(/[ :.,]/g, '-')}.doc`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-  // НОВАЯ ФУНКЦИЯ: КРАСИВАЯ ВЫГРУЗКА В PDF (в стиле скриншота)
+  // КРАСИВАЯ ВЫГРУЗКА В PDF
   const exportToPDF = (e: React.MouseEvent, audit: any) => {
     e.stopPropagation();
     const maxScore = getMaxScore(audit.checklist);
@@ -132,21 +78,21 @@ export default function AdminAuditsPage() {
 
     const violations = audit.answers?.filter((a: any) => !a.isOk) || [];
 
-    // Блок выявленных нарушений
     const violationsHtml = violations.length === 0
       ? '<p style="color: #777; font-size: 14px;">Нарушений нет</p>'
       : violations.map((v: any) => `
         <div class="item">
+          <div class="zone-badge">${v.zone || 'Основной раздел'}</div>
           <div class="question-text">${v.question}</div>
           ${v.comment ? `<div class="comment">Комментарий аудитора: ${v.comment}</div>` : ''}
         </div>
       `).join('');
 
-    // Блок полного отчета
     const fullReportHtml = (!audit.answers || audit.answers.length === 0)
       ? '<p>Детализация отсутствует.</p>'
       : audit.answers.map((v: any) => `
         <div class="item">
+          <div class="zone-badge">${v.zone || 'Основной раздел'}</div>
           <div class="item-header">
             <div class="${v.isOk ? 'icon-green' : 'icon-red'}">◯</div>
             <div>
@@ -161,14 +107,12 @@ export default function AdminAuditsPage() {
         </div>
       `).join('');
 
-    // Открываем новое скрытое окно для генерации PDF
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       alert('Пожалуйста, разрешите всплывающие окна для этого сайта');
       return;
     }
 
-    // Записываем HTML с красивым CSS
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
@@ -186,6 +130,7 @@ export default function AdminAuditsPage() {
           .section-title { font-size: 22px; font-weight: 900; margin: 50px 0 20px; color: #181c32; }
           .red-banner { background-color: #f1416c; color: white; padding: 12px; font-weight: bold; font-size: 12px; text-transform: uppercase; margin-bottom: 10px; border-radius: 4px; }
           .gray-banner { background-color: #f5f8fa; color: #5e6278; padding: 12px; font-weight: bold; font-size: 12px; text-transform: uppercase; margin-bottom: 10px; border-radius: 4px; }
+          .zone-badge { display: inline-block; background-color: #e8f0fe; color: #1967d2; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
           .item { padding: 20px 0; border-bottom: 1px solid #eff2f5; page-break-inside: avoid; }
           .item-header { display: flex; align-items: flex-start; gap: 15px; }
           .icon-green { color: #50cd89; font-weight: 900; font-size: 22px; line-height: 0.8; }
@@ -213,24 +158,22 @@ export default function AdminAuditsPage() {
           </div>
           <div class="score-block">
             <div class="score-title">ОЦЕНКА</div>
-            <div class="score-value">${scorePercent}%</div>
+            <div class="score-value">${audit.score} / ${maxScore}</div>
           </div>
         </div>
 
         <div class="section-title">Выявленные нарушения</div>
-        <div class="red-banner">ОСНОВНОЙ РАЗДЕЛ</div>
+        <div class="red-banner">ОШИБКИ И НЕДОЧЕТЫ</div>
         ${violationsHtml}
 
         <div class="section-title">Полный отчет</div>
-        <div class="gray-banner">ОСНОВНОЙ РАЗДЕЛ</div>
+        <div class="gray-banner">ВСЕ ОТВЕТЫ</div>
         ${fullReportHtml}
 
         <script>
-          // Ждем полсекунды, чтобы картинки и шрифты загрузились, затем вызываем печать
           window.onload = function() {
             setTimeout(function() {
               window.print();
-              // Закрываем окно после того, как пользователь нажал "Сохранить" или "Отмена"
               window.onafterprint = function() { window.close(); };
             }, 500);
           };
@@ -309,23 +252,12 @@ export default function AdminAuditsPage() {
                           <h3 className="font-black text-gray-800 uppercase text-sm tracking-wide">
                             Подробности проверки
                           </h3>
-                          
-                          {/* ГРУППА КНОПОК ДЛЯ ВЫГРУЗКИ */}
-                          <div className="flex gap-2">
-                            <button 
-                              onClick={(e) => exportToDoc(e, audit)}
-                              className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-lg font-bold text-xs transition-colors"
-                            >
-                              Скачать Word
-                            </button>
-                            <button 
-                              onClick={(e) => exportToPDF(e, audit)}
-                              className="bg-[#F25C05] hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-bold text-xs transition-colors shadow-md shadow-orange-500/20"
-                            >
-                              Скачать PDF
-                            </button>
-                          </div>
-
+                          <button 
+                            onClick={(e) => exportToPDF(e, audit)}
+                            className="bg-[#F25C05] hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-bold text-xs transition-colors shadow-md shadow-orange-500/20"
+                          >
+                            Скачать PDF
+                          </button>
                         </div>
 
                         {(!audit.answers || audit.answers.length === 0) ? (
@@ -336,6 +268,13 @@ export default function AdminAuditsPage() {
                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             {audit.answers.map((ans: any) => (
                               <div key={ans.id} className={`p-4 rounded-xl border ${ans.isOk ? 'bg-green-50/30 border-green-100' : 'bg-white border-red-100 shadow-sm'}`}>
+                                {/* БЛОК ЗОНЫ */}
+                                <div className="mb-2">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-600 px-2 py-1 rounded-md">
+                                    {ans.zone || 'Основной раздел'}
+                                  </span>
+                                </div>
+
                                 <div className="flex justify-between gap-3 mb-2 items-start">
                                   <span className={`text-sm font-bold leading-snug ${ans.isOk ? 'text-gray-600' : 'text-gray-900'}`}>
                                     {ans.question}
@@ -357,7 +296,7 @@ export default function AdminAuditsPage() {
                                     <img src={ans.photoBase64} alt="Фото нарушения" className="max-h-48 w-full object-cover" />
                                   </div>
                                 )}
-                                {/* Добавляем этот блок для вывода комментария в интерфейсе админа */}
+                                
                                 {ans.comment && (
                                   <div className="mt-2 text-sm text-gray-700 bg-gray-50/50 p-3 rounded-lg border border-gray-200">
                                     <span className="font-bold text-gray-500 mr-1">Комментарий:</span> {ans.comment}
@@ -366,7 +305,6 @@ export default function AdminAuditsPage() {
                               </div>
                             ))}
                           </div>
-                          
                         )}
                       </td>
                     </tr>

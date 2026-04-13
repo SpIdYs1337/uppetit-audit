@@ -61,7 +61,7 @@ model Audit {
   id          String   @id @default(cuid())
   date        DateTime @default(now())
   score       Int
-  
+  maxScore    Int?
   // ДОБАВЛЕНО: onDelete: Cascade
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId      String

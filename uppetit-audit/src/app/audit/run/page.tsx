@@ -5,11 +5,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { getSession } from 'next-auth/react';
 import Link from 'next/link';
 
-// Обновленный интерфейс
 interface AnswerData {
   isOk: boolean;
   photoBase64?: string; 
-  comment?: string; // Добавили комментарий
+  comment?: string;
 }
 
 function AuditRunForm() {
@@ -27,9 +26,11 @@ function AuditRunForm() {
   
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(''); // Для индикации автосохранения
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 1. Загрузка данных чек-листа и ЧЕРНОВИКА
   useEffect(() => {
     const fetchDetails = async () => {
       if (!locationId || !checklistId) return;
@@ -51,6 +52,18 @@ function AuditRunForm() {
             setQuestions(typeof foundChecklist.items === 'string' ? JSON.parse(foundChecklist.items) : foundChecklist.items);
           } catch (e) {}
         }
+
+        // ВОССТАНОВЛЕНИЕ ЧЕРНОВИКА
+        const draftKey = `audit_draft_${locationId}_${checklistId}`;
+        const savedDraft = localStorage.getItem(draftKey);
+        if (savedDraft) {
+          try {
+            setAnswers(JSON.parse(savedDraft));
+          } catch (e) {
+            console.error('Ошибка чтения черновика');
+          }
+        }
+
       } catch (err) {
         console.error('Ошибка:', err);
       } finally {
@@ -60,7 +73,19 @@ function AuditRunForm() {
     fetchDetails();
   }, [locationId, checklistId]);
 
-  // Обработка ответа (убрали автопереход!)
+  // 2. АВТОСОХРАНЕНИЕ при каждом изменении ответов
+  useEffect(() => {
+    if (Object.keys(answers).length > 0) {
+      const draftKey = `audit_draft_${locationId}_${checklistId}`;
+      localStorage.setItem(draftKey, JSON.stringify(answers));
+      
+      setSaveStatus('Черновик сохранен');
+      const timer = setTimeout(() => setSaveStatus(''), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [answers, locationId, checklistId]);
+
+  // Обработка ответа
   const handleAnswer = (isOk: boolean) => {
     setAnswers(prev => ({
       ...prev,
@@ -77,7 +102,7 @@ function AuditRunForm() {
     }));
   };
 
-  // Сжатие и сохранение фото
+  // Сжатие и сохранение фото (Усилили сжатие до 0.6 и ширину до 600px для экономии места)
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -86,7 +111,7 @@ function AuditRunForm() {
         const img = new Image();
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 800;
+          const MAX_WIDTH = 600; // Сделали меньше, чтобы точно влезало в лимиты
           const scaleSize = MAX_WIDTH / img.width;
           canvas.width = MAX_WIDTH;
           canvas.height = img.height * scaleSize;
@@ -94,7 +119,7 @@ function AuditRunForm() {
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
           
-          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6); // Сжатие сильнее
 
           setAnswers(prev => ({
             ...prev,
@@ -123,21 +148,20 @@ function AuditRunForm() {
 
       if (!userId) {
         alert('Ошибка авторизации.');
+        setIsSubmitting(false);
         return;
       }
 
       const maxScore = questions.reduce((sum, q) => sum + (Number(q.score) || 0), 0);
       let lostPoints = 0;
 
-      // Отправляем массив с комментариями
-      // Отправляем массив с ответами и ЗОНАМИ
       const answersArray = Object.entries(answers).map(([indexStr, ans]) => {
         const q = questions[Number(indexStr)];
         if (!ans.isOk) { 
           lostPoints += (Number(q.score) || 0);
         }
         return {
-          zone: q.zone || 'Основной раздел', // <-- ДОБАВИЛИ ЗОНУ СЮДА
+          zone: q.zone || 'Основной раздел',
           questionText: q.text,
           isOk: ans.isOk,
           penalty: ans.isOk ? 0 : (Number(q.score) || 0),
@@ -156,17 +180,25 @@ function AuditRunForm() {
           locationId,
           checklistId,
           score: currentScore,
+          maxScore: maxScore, // ИСПРАВЛЕНИЕ: Добавили maxScore в отправку
           answers: answersArray 
         }),
       });
 
-      if (!res.ok) throw new Error('Ошибка при сохранении');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.error || 'Ошибка сервера. Возможно, размер фото слишком большой.');
+      }
+
+      // УСПЕХ: Очищаем черновик
+      localStorage.removeItem(`audit_draft_${locationId}_${checklistId}`);
 
       alert(`Аудит завершен!\nРезультат: ${currentScore} из ${maxScore} баллов`);
       router.push('/audit');
       
-    } catch (err) {
-      alert('Произошла ошибка при отправке данных.');
+    } catch (err: any) {
+      console.error(err);
+      alert(`Произошла ошибка при отправке данных: ${err.message}\n\nНе переживайте, ваши ответы сохранены как черновик. Попробуйте удалить слишком большие фото и отправить снова.`);
     } finally {
       setIsSubmitting(false);
     }
@@ -183,13 +215,20 @@ function AuditRunForm() {
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <header className="bg-white p-6 shadow-sm z-20">
-        <div className="flex items-center gap-4 mb-4">
-          <Link href="/audit" className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center text-gray-900 active:scale-95 transition-transform">
-            ✕
-          </Link>
-          <div>
-            <h1 className="text-sm font-black text-gray-900 leading-tight">{location?.name}</h1>
-            <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mt-1">{checklist?.title}</p>
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-4">
+            <Link href="/audit" className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center text-gray-900 active:scale-95 transition-transform">
+              ✕
+            </Link>
+            <div>
+              <h1 className="text-sm font-black text-gray-900 leading-tight">{location?.name}</h1>
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mt-1">{checklist?.title}</p>
+            </div>
+          </div>
+          
+          {/* ИНДИКАТОР СОХРАНЕНИЯ */}
+          <div className="text-[10px] font-bold text-green-500 transition-opacity duration-300 h-4">
+            {saveStatus}
           </div>
         </div>
         
@@ -211,12 +250,11 @@ function AuditRunForm() {
             </div>
           )}
 
-          {/* НОВАЯ ПЛАШКА ДЛЯ ЗОНЫ (слева вверху карточки) */}
           <div className="absolute top-0 left-0 bg-blue-50 text-blue-600 text-[10px] font-bold px-3 py-1 rounded-br-xl rounded-tl-3xl uppercase tracking-wider border-b border-r border-blue-100">
             {currentQ.zone || 'Основной раздел'}
           </div>
 
-          <div className="flex-1 mt-6"> {/* Добавил mt-6 чтобы текст не наезжал на плашки */}
+          <div className="flex-1 mt-6">
             <h2 className="text-xl font-black text-gray-900 mb-2 leading-tight">
               {currentQ.text}
             </h2>
@@ -236,14 +274,11 @@ function AuditRunForm() {
               </div>
             )}
             
-            {/* ПОЛЕ ДЛЯ КОММЕНТАРИЯ */}
-            {/* ПОЛЕ ДЛЯ КОММЕНТАРИЯ */}
             <div className="mb-6">
               <textarea
                 placeholder="Добавить комментарий к ответу (необязательно)..."
                 value={currentAnswer?.comment || ''}
                 onChange={handleCommentChange}
-                // ИСПРАВЛЕНИЕ: Добавили bg-white, text-gray-900 и четкую рамку border-2 border-gray-300
                 className="w-full p-4 rounded-2xl bg-white border-2 border-gray-300 text-gray-900 placeholder-gray-400 text-sm focus:border-[#F25C05] focus:ring-4 focus:ring-orange-500/10 outline-none transition-all resize-none"
                 rows={3}
               />
@@ -274,7 +309,6 @@ function AuditRunForm() {
                 Есть проблема
               </button>
 
-              {/* ЖЕСТКОЕ ОГРАНИЧЕНИЕ НА ФОТО */}
               <input 
                 type="file" 
                 accept="image/jpeg, image/png, image/jpg, image/webp" 

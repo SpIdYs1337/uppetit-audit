@@ -26,6 +26,9 @@ export async function POST(request: Request) {
       data: {
         title: body.title,
         items: itemsData,
+        // ДОБАВЛЕНО: Сохраняем пороги зон (с дефолтными значениями, если их нет)
+        redThreshold: body.redThreshold !== undefined ? Number(body.redThreshold) : 70,
+        yellowThreshold: body.yellowThreshold !== undefined ? Number(body.yellowThreshold) : 90,
       }
     });
     return NextResponse.json(newChecklist);
@@ -35,7 +38,7 @@ export async function POST(request: Request) {
   }
 }
 
-// ОБНОВИТЬ СУЩЕСТВУЮЩИЙ ЧЕК-ЛИСТ (Именно этого метода нам не хватало!)
+// ОБНОВИТЬ СУЩЕСТВУЮЩИЙ ЧЕК-ЛИСТ
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
@@ -46,6 +49,9 @@ export async function PUT(request: Request) {
       data: {
         title: body.title,
         items: itemsData,
+        // ДОБАВЛЕНО: Обновляем пороги зон
+        redThreshold: body.redThreshold !== undefined ? Number(body.redThreshold) : 70,
+        yellowThreshold: body.yellowThreshold !== undefined ? Number(body.yellowThreshold) : 90,
       }
     });
     return NextResponse.json(updated);

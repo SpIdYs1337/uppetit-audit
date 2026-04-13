@@ -142,6 +142,7 @@ export default function AdminUsersPage() {
               <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Роль</label>
               <select value={role} onChange={e => setRole(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 text-gray-900 font-bold outline-none focus:border-[#F25C05]">
                 <option value="AUDITOR">Аудитор (Мобильное приложение)</option>
+                <option value="TU">Территориальный управляющий (ТУ)</option>
                 <option value="ADMIN">Администратор (Веб-панель)</option>
               </select>
             </div>

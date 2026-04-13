@@ -39,7 +39,8 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { userId, locationId, checklistId, score, answers } = body;
+    // ДОБАВЛЕНО: Извлекаем maxScore из тела запроса
+    const { userId, locationId, checklistId, score, maxScore, answers } = body;
 
     // 1. Создаем сам аудит
     const newAudit = await prisma.audit.create({
@@ -48,6 +49,7 @@ export async function POST(request: Request) {
         locationId,
         checklistId,
         score: Number(score),
+        maxScore: maxScore !== undefined && maxScore !== null ? Number(maxScore) : null, // ДОБАВЛЕНО
         answers: {
           create: answers.map((ans: any) => ({
             zone: ans.zone || 'Основной раздел',

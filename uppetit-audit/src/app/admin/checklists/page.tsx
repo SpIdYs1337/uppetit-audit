@@ -10,6 +10,10 @@ export default function AdminChecklistsPage() {
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   
+  // СТЕЙТЫ ДЛЯ ПОРОГОВ (теперь это абсолютные баллы)
+  const [redThreshold, setRedThreshold] = useState(70);
+  const [yellowThreshold, setYellowThreshold] = useState(90);
+  
   const [items, setItems] = useState<any[]>([]);
 
   useEffect(() => {
@@ -33,6 +37,9 @@ export default function AdminChecklistsPage() {
     if (checklist) {
       setCurrentId(checklist.id);
       setTitle(checklist.title);
+      // Загружаем пороги (или ставим дефолт, если их вдруг нет)
+      setRedThreshold(checklist.redThreshold ?? 70);
+      setYellowThreshold(checklist.yellowThreshold ?? 90);
       try {
         setItems(typeof checklist.items === 'string' ? JSON.parse(checklist.items) : checklist.items);
       } catch (e) {
@@ -41,6 +48,8 @@ export default function AdminChecklistsPage() {
     } else {
       setCurrentId(null);
       setTitle('');
+      setRedThreshold(70);
+      setYellowThreshold(90);
       setItems([{ zone: 'Основной раздел', text: '', score: 0, isCritical: false }]);
     }
     setIsEditing(true);
@@ -70,13 +79,16 @@ export default function AdminChecklistsPage() {
 
   const handleSave = async () => {
     if (!title.trim() || items.length === 0) return alert('Заполните название и добавьте вопросы');
+    if (redThreshold >= yellowThreshold) return alert('Красная зона должна быть меньше желтой!');
 
     try {
       const method = currentId ? 'PUT' : 'POST';
       const body = {
         id: currentId,
         title,
-        items: JSON.stringify(items)
+        items: JSON.stringify(items),
+        redThreshold: Number(redThreshold),
+        yellowThreshold: Number(yellowThreshold)
       };
 
       const res = await fetch('/api/checklists', {
@@ -125,7 +137,6 @@ export default function AdminChecklistsPage() {
       {isEditing ? (
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-8">
           <div className="flex justify-between items-center mb-6">
-            {/* ИСПРАВЛЕНИЕ: Добавили text-gray-900 чтобы заголовок был видимым */}
             <h2 className="text-xl font-black text-gray-900">{currentId ? 'Редактирование' : 'Новый чек-лист'}</h2>
             <button onClick={closeEditor} className="text-gray-400 hover:text-gray-600 font-bold">✕ Закрыть</button>
           </div>
@@ -139,6 +150,51 @@ export default function AdminChecklistsPage() {
               className="w-full p-4 rounded-xl border-2 border-gray-100 focus:border-[#F25C05] outline-none font-bold text-gray-900"
               placeholder="Например: Утренний Бар"
             />
+          </div>
+
+          {/* БЛОК: НАСТРОЙКА ЗОН (ТЕПЕРЬ В БАЛЛАХ) */}
+          <div className="mb-8 p-6 bg-gray-50 rounded-2xl border border-gray-100">
+            <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide">Настройка оценки (в баллах)</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Красная зона */}
+              <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm">
+                <label className="block text-xs font-bold text-red-500 mb-2">Красная зона (до)</label>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="number" min="0" // Убрали max="100"
+                    value={redThreshold} 
+                    onChange={e => setRedThreshold(Number(e.target.value))}
+                    className="w-full p-2 text-xl font-black text-red-600 bg-red-50 rounded-lg outline-none text-center"
+                  />
+                  <span className="text-gray-400 font-bold text-sm">баллов</span>
+                </div>
+                <p className="text-[10px] text-gray-400 mt-2 text-center">от 0 до {redThreshold - 1} б.</p>
+              </div>
+
+              {/* Желтая зона */}
+              <div className="bg-white p-4 rounded-xl border border-yellow-100 shadow-sm">
+                <label className="block text-xs font-bold text-yellow-600 mb-2">Желтая зона (до)</label>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="number" min="0" // Убрали max="100"
+                    value={yellowThreshold} 
+                    onChange={e => setYellowThreshold(Number(e.target.value))}
+                    className="w-full p-2 text-xl font-black text-yellow-600 bg-yellow-50 rounded-lg outline-none text-center"
+                  />
+                  <span className="text-gray-400 font-bold text-sm">баллов</span>
+                </div>
+                <p className="text-[10px] text-gray-400 mt-2 text-center">от {redThreshold} до {yellowThreshold - 1} б.</p>
+              </div>
+
+              {/* Зеленая зона (Вычисляется автоматически) */}
+              <div className="bg-white p-4 rounded-xl border border-green-100 shadow-sm flex flex-col justify-center opacity-80">
+                <label className="block text-xs font-bold text-green-600 mb-2">Зеленая зона</label>
+                <div className="w-full p-2 text-xl font-black text-green-600 bg-green-50 rounded-lg text-center">
+                  {yellowThreshold} и выше
+                </div>
+                <p className="text-[10px] text-gray-400 mt-2 text-center">Отлично</p>
+              </div>
+            </div>
           </div>
 
           <div className="space-y-4 mb-6">
@@ -173,7 +229,6 @@ export default function AdminChecklistsPage() {
                 <div className="w-20">
                   <input 
                     type="number" 
-                    // ИСПРАВЛЕНИЕ: Убрали залипающий ноль. Теперь поле пустое, если значение 0.
                     value={item.score === 0 ? '' : item.score} 
                     onChange={e => handleUpdateItem(index, 'score', e.target.value === '' ? 0 : Number(e.target.value))}
                     placeholder="Штраф"
@@ -182,7 +237,7 @@ export default function AdminChecklistsPage() {
                   />
                 </div>
 
-                {/* НОВАЯ КНОПКА: КРИТИЧНОСТЬ */}
+                {/* КНОПКА: КРИТИЧНОСТЬ */}
                 <button 
                   title={item.isCritical ? "Критическое нарушение (снять отметку)" : "Отметить как критическое"}
                   onClick={() => handleUpdateItem(index, 'isCritical', !item.isCritical)} 
@@ -222,11 +277,27 @@ export default function AdminChecklistsPage() {
             const itemsList = typeof checklist.items === 'string' ? JSON.parse(checklist.items) : checklist.items;
             const maxScore = itemsList.reduce((sum: number, i: any) => sum + (Number(i.score) || 0), 0);
             const zones = [...new Set(itemsList.map((i: any) => i.zone || 'Основной раздел'))];
+            
+            const rT = checklist.redThreshold ?? 70;
+            const yT = checklist.yellowThreshold ?? 90;
 
             return (
               <div key={checklist.id} className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col">
                 <h3 className="text-xl font-black text-gray-900 mb-1">{checklist.title}</h3>
-                <p className="text-sm text-gray-500 font-medium mb-4">{itemsList.length} вопросов • {maxScore} баллов максимум</p>
+                <p className="text-sm text-gray-500 font-medium mb-3">{itemsList.length} вопросов • {maxScore} баллов максимум</p>
+                
+                {/* БЛОК ИНДИКАЦИИ ЗОН НА КАРТОЧКЕ */}
+                <div className="flex gap-1 mb-4">
+                  <div className="flex-1 bg-red-50 border border-red-100 text-red-600 text-[10px] font-bold py-1 text-center rounded-l-md">
+                    &lt; {rT} б.
+                  </div>
+                  <div className="flex-1 bg-yellow-50 border border-yellow-100 text-yellow-600 text-[10px] font-bold py-1 text-center">
+                    {rT} - {yT - 1} б.
+                  </div>
+                  <div className="flex-1 bg-green-50 border border-green-100 text-green-600 text-[10px] font-bold py-1 text-center rounded-r-md">
+                    {yT} б.+
+                  </div>
+                </div>
                 
                 <div className="mb-6 flex flex-wrap gap-2">
                   {zones.map((z: any) => (
