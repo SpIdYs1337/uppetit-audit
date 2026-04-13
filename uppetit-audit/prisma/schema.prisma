@@ -18,6 +18,9 @@ model User {
   
   audits       Audit[]
   visitPlans   VisitPlan[]
+  
+  // НОВОЕ: Точки, которыми управляет этот пользователь (если он ТУ)
+  managedLocations Location[] @relation("LocationToTU")
 }
 
 // 2. ТОЧКИ (Магазины)
@@ -25,6 +28,15 @@ model Location {
   id         String      @id @default(cuid())
   name       String
   address    String?
+  
+  // НОВЫЕ ПОЛЯ ДЛЯ АКТИВНОСТИ
+  isActive   Boolean     @default(true) // Включена ли точка
+  activeFrom DateTime?   // Дата начала проведения чек-листов
+  activeTo   DateTime?   // Дата окончания
+  
+  // ПРИВЯЗКА К ТЕРРИТОРИАЛЬНОМУ УПРАВЛЯЮЩЕМУ (ТУ)
+  tuId       String?     // Может быть пустым (точка нераспределена)
+  tu         User?       @relation("LocationToTU", fields: [tuId], references: [id], onDelete: SetNull)
   
   audits     Audit[]
   visitPlans VisitPlan[]
