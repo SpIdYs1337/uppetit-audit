@@ -15,8 +15,9 @@ model User {
   passwordHash String?  
   inviteToken  String?     @unique 
   role         String      @default("AUDITOR")
+  
   audits       Audit[]
-  visitPlans   VisitPlan[] // <-- ДОБАВЬ ЭТУ СТРОЧКУ
+  visitPlans   VisitPlan[]
 }
 
 // 2. ТОЧКИ (Магазины)
@@ -24,8 +25,9 @@ model Location {
   id         String      @id @default(cuid())
   name       String
   address    String?
+  
   audits     Audit[]
-  visitPlans VisitPlan[] // <-- ДОБАВЬ ЭТУ СТРОЧКУ
+  visitPlans VisitPlan[]
 }
 
 // 3. ЧЕК-ЛИСТЫ (Шаблоны)
@@ -43,33 +45,33 @@ model Checklist {
 }
 
 // 4. АУДИТЫ (Результаты проверок)
-// ... твои верхние модели (User, Location, Checklist)
-
 model Audit {
   id          String   @id @default(cuid())
   date        DateTime @default(now())
   score       Int
   
-  user        User     @relation(fields: [userId], references: [id])
+  // ДОБАВЛЕНО: onDelete: Cascade
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId      String
   
-  location    Location @relation(fields: [locationId], references: [id])
+  // ДОБАВЛЕНО: onDelete: Cascade
+  location    Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
   locationId  String
   
-  checklist   Checklist @relation(fields: [checklistId], references: [id])
+  // ДОБАВЛЕНО: onDelete: Cascade
+  checklist   Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
   checklistId String
 
-  // ДОБАВЛЯЕМ СВЯЗЬ С ОТВЕТАМИ
   answers     Answer[]
 }
 
-// ДОБАВЛЯЕМ НОВУЮ ТАБЛИЦУ ДЛЯ ОТВЕТОВ С ФОТО
+// 5. ОТВЕТЫ С ФОТО
 model Answer {
   id          String  @id @default(cuid())
   auditId     String
   audit       Audit   @relation(fields: [auditId], references: [id], onDelete: Cascade)
   
-  zone        String? @default("Основной раздел") // <-- НОВОЕ ПОЛЕ ДЛЯ ЗОНЫ
+  zone        String? @default("Основной раздел")
   question    String  
   isOk        Boolean 
   penalty     Int     @default(0) 
@@ -77,7 +79,7 @@ model Answer {
   comment     String? 
 }
 
-// Добавь это в самый низ файла:
+// 6. ПЛАНЫ ВИЗИТОВ
 model VisitPlan {
   id         String   @id @default(cuid())
   userId     String
@@ -88,9 +90,3 @@ model VisitPlan {
   status     String   @default("PLANNED") // PLANNED (запланировано) или DONE (выполнено)
   createdAt  DateTime @default(now())
 }
-
-// ВАЖНО: Найди модель User и добавь туда строчку:
-// visitPlans   VisitPlan[]
-
-// ВАЖНО: Найди модель Location и добавь туда строчку:
-// visitPlans   VisitPlan[]
