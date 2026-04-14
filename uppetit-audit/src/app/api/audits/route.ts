@@ -67,27 +67,27 @@ export async function POST(request: Request) {
         score: Number(score),
         maxScore: maxScore !== undefined && maxScore !== null ? Number(maxScore) : null,
         
-        // --- НОВЫЕ ПОЛЯ ---
         shiftEmployees: shiftEmployees || [],
         generalComment: generalComment || null,
-        // ------------------
 
         answers: {
           create: answers.map((ans: any) => ({
             zone: ans.zone || 'Основной раздел',
             question: ans.questionText || 'Без текста',
             
-            // 🔥 ИСПРАВЛЕНИЕ ОШИБКИ: Жесткая проверка. 
-            // Если isOk равно undefined, ставим false, чтобы база не падала
+            // Жесткая проверка. Если isOk равно undefined, ставим false, чтобы база не падала
             isOk: typeof ans.isOk === 'boolean' ? ans.isOk : false, 
             
             penalty: ans.penalty || 0,
-            photoBase64: ans.photoBase64 || null,
+            
+            // 🔥 ИСПРАВЛЕНИЕ: Теперь принимаем и сохраняем МАССИВ фотографий
+            photos: Array.isArray(ans.photos) ? ans.photos : [], 
+            
             comment: ans.comment || null
           }))
         }
       },
-      // 🔥 ДОБАВЛЕНО: Подтягиваем связи, чтобы знать, КОМУ отправлять Push
+      // Подтягиваем связи, чтобы знать, КОМУ отправлять Push
       include: {
         location: {
           include: { tu: true }

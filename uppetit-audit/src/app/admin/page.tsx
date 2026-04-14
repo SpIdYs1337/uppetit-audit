@@ -19,7 +19,10 @@ export default function AdminUsersPage() {
   const fetchUsers = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/users');
+      // ИСПРАВЛЕНИЕ 1: Отключаем кэш, чтобы всегда видеть свежих сотрудников
+      const res = await fetch(`/api/users?t=${new Date().getTime()}`, {
+        cache: 'no-store'
+      });
       setUsers(await res.json());
     } catch (err) { 
       console.error(err); 
@@ -62,7 +65,6 @@ export default function AdminUsersPage() {
         // Генерация ссылки для нового пользователя
         if (!currentId && data.inviteToken) {
           const link = `${window.location.origin}/setup-password?token=${data.inviteToken}`;
-          // Используем prompt, чтобы админу было удобно скопировать ссылку
           prompt('СОТРУДНИК СОЗДАН! Скопируйте эту ссылку и отправьте ему для установки пароля:', link);
         }
         
@@ -110,13 +112,16 @@ export default function AdminUsersPage() {
   if (isLoading) return <div className="p-8 text-gray-500 font-bold">Загрузка...</div>;
 
   return (
-    
-    
     <div className="p-8 max-w-6xl mx-auto">
       <div className="flex justify-between items-end mb-8">
         <div>
           <h1 className="text-3xl font-black text-gray-900 tracking-tight">Сотрудники</h1>
           <p className="text-gray-500 mt-2">Управление персоналом и доступами</p>
+          
+          {/* Кнопка включения уведомлений для Админа */}
+          <div className="mt-4 max-w-[200px]">
+            <PushSubscribe />
+          </div>
         </div>
         
         {!isEditing && (
@@ -125,9 +130,6 @@ export default function AdminUsersPage() {
           </button>
         )}
       </div>
-      
-
-             
 
       {isEditing ? (
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-8 max-w-2xl">
@@ -151,6 +153,8 @@ export default function AdminUsersPage() {
               <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Роль</label>
               <select value={role} onChange={e => setRole(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 text-gray-900 font-bold outline-none focus:border-[#F25C05]">
                 <option value="AUDITOR">Аудитор (Мобильное приложение)</option>
+                {/* ИСПРАВЛЕНИЕ 2: Вернули опцию ТУ */}
+                <option value="TU">Территориальный управляющий (ТУ)</option>
                 <option value="ADMIN">Администратор (Веб-панель)</option>
               </select>
             </div>
@@ -172,7 +176,11 @@ export default function AdminUsersPage() {
               <div key={user.id} className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col">
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="text-xl font-black text-gray-900">{user.login}</h3>
-                  <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-md ${user.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                  {/* ИСПРАВЛЕНИЕ 3: Выделяем ТУ черной плашкой */}
+                  <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-md 
+                    ${user.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' : 
+                      user.role === 'TU' ? 'bg-zinc-900 text-white' : 
+                      'bg-blue-100 text-blue-700'}`}>
                     {user.role}
                   </span>
                 </div>

@@ -4,9 +4,10 @@ import { useState, useEffect, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSession } from 'next-auth/react';
 
+// ИСПРАВЛЕНИЕ 1: Теперь мы храним массив фотографий
 interface AnswerData {
   isOk: boolean;
-  photoBase64?: string; 
+  photos?: string[]; 
   comment?: string;
 }
 
@@ -103,9 +104,15 @@ function AuditRunForm() {
 
             if (savedDraft) {
               const parsedAnswers = JSON.parse(savedDraft);
+              // Миграция старых черновиков: если есть photoBase64, превращаем в массив
+              Object.keys(parsedAnswers).forEach(key => {
+                if (parsedAnswers[key].photoBase64 && !parsedAnswers[key].photos) {
+                  parsedAnswers[key].photos = [parsedAnswers[key].photoBase64];
+                  delete parsedAnswers[key].photoBase64;
+                }
+              });
               setAnswers(parsedAnswers);
 
-              // ИСПРАВЛЕНИЕ: Считаем отвеченными только те, где явно есть isOk
               const answeredKeys = Object.keys(parsedAnswers).filter(k => parsedAnswers[Number(k)]?.isOk !== undefined).map(Number);
               const firstUnanswered = parsedQuestions.findIndex((_: any, idx: number) => !answeredKeys.includes(idx));
               
@@ -177,9 +184,12 @@ function AuditRunForm() {
     setEmployees(newEmps);
   };
 
+  // ИСПРАВЛЕНИЕ 2: Обработка нескольких фотографий сразу
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    files.forEach(file => {
       const reader = new FileReader();
       reader.onloadend = () => {
         const img = new Image();
@@ -192,18 +202,35 @@ function AuditRunForm() {
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
           const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6); 
-          setAnswers(prev => ({
-            ...prev,
-            [currentIndex]: { ...prev[currentIndex], photoBase64: compressedBase64 }
-          }));
+          
+          setAnswers(prev => {
+            const currentPhotos = prev[currentIndex]?.photos || [];
+            return {
+              ...prev,
+              [currentIndex]: { ...prev[currentIndex], photos: [...currentPhotos, compressedBase64] }
+            };
+          });
         };
         img.src = reader.result as string;
       };
       reader.readAsDataURL(file);
-    }
+    });
+
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // ИСПРАВЛЕНИЕ: Жестко ищем вопрос, где `isOk` === undefined
+  // ИСПРАВЛЕНИЕ 3: Удаление конкретного фото из массива
+  const handleRemovePhoto = (photoIndex: number) => {
+    setAnswers(prev => {
+      const currentPhotos = prev[currentIndex]?.photos || [];
+      const newPhotos = currentPhotos.filter((_, idx) => idx !== photoIndex);
+      return {
+        ...prev,
+        [currentIndex]: { ...prev[currentIndex], photos: newPhotos }
+      };
+    });
+  };
+
   const firstUnansweredIndex = questions.findIndex((_, idx) => answers[idx]?.isOk === undefined);
   const isAllAnswered = firstUnansweredIndex === -1;
 
@@ -248,6 +275,7 @@ function AuditRunForm() {
       const maxScore = questions.reduce((sum, q) => sum + (Number(q.score) || 0), 0);
       let lostPoints = 0;
 
+      // ИСПРАВЛЕНИЕ 4: Отправляем массив photos
       const answersArray = Object.entries(answers).map(([indexStr, ans]) => {
         const q = questions[Number(indexStr)];
         if (!ans.isOk) { lostPoints += (Number(q.score) || 0); }
@@ -256,7 +284,7 @@ function AuditRunForm() {
           questionText: q.text,
           isOk: ans.isOk,
           penalty: ans.isOk ? 0 : (Number(q.score) || 0),
-          photoBase64: ans.photoBase64,
+          photos: ans.photos || [], // Передаем массив фото!
           comment: ans.comment
         };
       });
@@ -304,7 +332,6 @@ function AuditRunForm() {
   const currentQ = questions[currentIndex];
   const currentAnswer = answers[currentIndex];
   
-  // ИСПРАВЛЕНИЕ: Прогресс бар теперь учитывает только полностью отвеченные вопросы (где есть Да/Нет)
   const answeredCount = Object.values(answers).filter(a => a.isOk !== undefined).length;
   const progressPercent = isFinalStep ? 100 : (answeredCount / questions.length) * 100;
 
@@ -405,15 +432,20 @@ function AuditRunForm() {
               <h2 className="text-xl font-black text-gray-900 mb-2 leading-tight">{currentQ.text}</h2>
               <p className="text-xs text-gray-400 font-medium mb-4">Штраф: <span className="text-orange-500 font-bold">-{currentQ.score} б.</span></p>
 
-              {currentAnswer?.photoBase64 && (
-                <div className="mb-4 relative rounded-xl overflow-hidden border border-gray-200">
-                  <img src={currentAnswer.photoBase64} alt="Фото нарушения" className="w-full h-40 object-cover" />
-                  <button 
-                    onClick={() => setAnswers(prev => { const newA = {...prev}; delete newA[currentIndex].photoBase64; return newA; })}
-                    className="absolute top-2 right-2 bg-white/80 backdrop-blur text-red-500 p-2 rounded-lg font-bold text-xs shadow-sm"
-                  >
-                    Удалить фото
-                  </button>
+              {/* ИСПРАВЛЕНИЕ 5: Горизонтальный список фотографий */}
+              {currentAnswer?.photos && currentAnswer.photos.length > 0 && (
+                <div className="mb-4 flex gap-2 overflow-x-auto pb-2 snap-x">
+                  {currentAnswer.photos.map((photoBase64, idx) => (
+                    <div key={idx} className="relative rounded-xl overflow-hidden border border-gray-200 flex-shrink-0 w-24 h-24 snap-start">
+                      <img src={photoBase64} alt={`Фото ${idx + 1}`} className="w-full h-full object-cover" />
+                      <button 
+                        onClick={() => handleRemovePhoto(idx)}
+                        className="absolute top-1 right-1 bg-white/90 backdrop-blur text-red-500 w-6 h-6 flex items-center justify-center rounded-md font-bold text-xs shadow-sm"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
               
@@ -444,7 +476,8 @@ function AuditRunForm() {
                   Есть проблема
                 </button>
 
-                <input type="file" accept="image/jpeg, image/png, image/jpg, image/webp" capture="environment" ref={fileInputRef} onChange={handlePhotoCapture} className="hidden" />
+                {/* Добавили multiple, чтобы можно было выбрать несколько фото из галереи */}
+                <input type="file" accept="image/jpeg, image/png, image/jpg, image/webp" capture="environment" multiple ref={fileInputRef} onChange={handlePhotoCapture} className="hidden" />
                 
                 <button onClick={() => fileInputRef.current?.click()} className="w-16 flex items-center justify-center bg-gray-100 text-gray-500 rounded-2xl font-bold border-2 border-transparent active:scale-95 hover:bg-gray-200 transition-colors">
                   <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>

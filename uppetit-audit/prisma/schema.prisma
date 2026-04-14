@@ -93,7 +93,7 @@ model Answer {
   question    String  
   isOk        Boolean 
   penalty     Int     @default(0) 
-  photoBase64 String? 
+  photos      String[] 
   comment     String? 
 }
 

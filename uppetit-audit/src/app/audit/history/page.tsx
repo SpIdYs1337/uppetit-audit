@@ -68,24 +68,32 @@ export default function AuditHistoryPage() {
 
     const fullReportHtml = (!audit.answers || audit.answers.length === 0)
       ? '<p>Детализация отсутствует.</p>'
-      : audit.answers.map((v: any) => `
-        <div class="item">
-          <div class="zone-badge">${v.zone || 'Основной раздел'}</div>
-          <table class="item-table">
-            <tr>
-              <td class="icon-cell ${v.isOk ? 'icon-green' : 'icon-red'}">◯</td>
-              <td>
-                <div class="question-text">${v.question}</div>
-                <div class="${v.isOk ? 'status-green' : 'status-red'}">
-                  ${v.isOk ? 'соответствие' : 'несоответствие'}
-                </div>
-                ${v.comment ? `<div class="comment">Комментарий: ${v.comment}</div>` : ''}
-                ${v.photoBase64 ? `<img class="photo" src="${v.photoBase64}" />` : ''}
-              </td>
-            </tr>
-          </table>
-        </div>
-      `).join('');
+      : audit.answers.map((v: any) => {
+          // Совместимость со старыми записями и работа с массивом новых фото
+          const photosArray = v.photos && v.photos.length > 0 ? v.photos : (v.photoBase64 ? [v.photoBase64] : []);
+          const photosHtml = photosArray.length > 0 
+            ? `<div class="photos-container">${photosArray.map((img: string) => `<img class="photo" src="${img}" />`).join('')}</div>` 
+            : '';
+
+          return `
+          <div class="item">
+            <div class="zone-badge">${v.zone || 'Основной раздел'}</div>
+            <table class="item-table">
+              <tr>
+                <td class="icon-cell ${v.isOk ? 'icon-green' : 'icon-red'}">◯</td>
+                <td>
+                  <div class="question-text">${v.question}</div>
+                  <div class="${v.isOk ? 'status-green' : 'status-red'}">
+                    ${v.isOk ? 'соответствие' : 'несоответствие'}
+                  </div>
+                  ${v.comment ? `<div class="comment">Комментарий: ${v.comment}</div>` : ''}
+                  ${photosHtml}
+                </td>
+              </tr>
+            </table>
+          </div>
+        `;
+      }).join('');
 
     const element = document.createElement('div');
     element.innerHTML = `
@@ -122,7 +130,10 @@ export default function AuditHistoryPage() {
         .status-green { color: #50cd89; font-size: 11px; font-weight: bold; }
         .status-red { color: #f1416c; font-size: 11px; font-weight: bold; }
         .comment { color: #009ef7; font-size: 12px; font-weight: bold; margin-top: 6px; }
-        .photo { max-width: 250px; max-height: 250px; border-radius: 6px; margin-top: 10px; display: block; }
+        
+        /* ИСПРАВЛЕНИЕ: Стили для нескольких фотографий */
+        .photos-container { margin-top: 10px; }
+        .photo { max-width: 180px; max-height: 180px; border-radius: 6px; display: inline-block; margin-right: 10px; margin-bottom: 10px; }
       </style>
       <div class="pdf-container">
         <table>
@@ -251,36 +262,46 @@ export default function AuditHistoryPage() {
                       <div className="text-sm text-orange-600 font-bold bg-orange-50 p-3 rounded-xl border border-orange-100">Детализация не сохранилась.</div>
                     ) : (
                       <div className="space-y-4">
-                        {audit.answers.map((ans: any) => (
-                          <div key={ans.id} className={`p-4 rounded-2xl border ${ans.isOk ? 'bg-white border-gray-100' : 'bg-red-50/50 border-red-100'}`}>
-                            <div className="mb-2">
-                              <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-600 px-2 py-1 rounded-md">
-                                {ans.zone || 'Основной раздел'}
-                              </span>
-                            </div>
-                            
-                            <div className="flex justify-between items-start gap-3 mb-2">
-                              <span className="text-sm font-bold text-gray-900 leading-tight">{ans.question}</span>
-                              {ans.isOk ? (
-                                <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-lg whitespace-nowrap">✓ Ок</span>
-                              ) : (
-                                <span className="text-xs font-black text-red-500 bg-red-100 px-2 py-1 rounded-lg whitespace-nowrap">-{ans.penalty} б.</span>
+                        {audit.answers.map((ans: any) => {
+                          // Поддержка как старого формата photoBase64, так и нового photos[]
+                          const photosToRender = ans.photos && ans.photos.length > 0 ? ans.photos : (ans.photoBase64 ? [ans.photoBase64] : []);
+                          
+                          return (
+                            <div key={ans.id} className={`p-4 rounded-2xl border ${ans.isOk ? 'bg-white border-gray-100' : 'bg-red-50/50 border-red-100'}`}>
+                              <div className="mb-2">
+                                <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-600 px-2 py-1 rounded-md">
+                                  {ans.zone || 'Основной раздел'}
+                                </span>
+                              </div>
+                              
+                              <div className="flex justify-between items-start gap-3 mb-2">
+                                <span className="text-sm font-bold text-gray-900 leading-tight">{ans.question}</span>
+                                {ans.isOk ? (
+                                  <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-lg whitespace-nowrap">✓ Ок</span>
+                                ) : (
+                                  <span className="text-xs font-black text-red-500 bg-red-100 px-2 py-1 rounded-lg whitespace-nowrap">-{ans.penalty} б.</span>
+                                )}
+                              </div>
+                              
+                              {ans.comment && (
+                                <div className="mt-2 text-sm text-gray-700 bg-gray-100/50 p-3 rounded-xl border border-gray-200/50">
+                                  <span className="font-bold text-gray-500 mr-1">Комментарий:</span> {ans.comment}
+                                </div>
+                              )}
+
+                              {/* ИСПРАВЛЕНИЕ: Вывод нескольких фото в интерфейс */}
+                              {photosToRender.length > 0 && (
+                                <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
+                                  {photosToRender.map((photo: string, idx: number) => (
+                                    <div key={idx} className="overflow-hidden rounded-lg border border-gray-200 flex-shrink-0 w-24 h-24 sm:w-32 sm:h-32">
+                                      <img src={photo} alt={`Фото ${idx + 1}`} className="w-full h-full object-cover" />
+                                    </div>
+                                  ))}
+                                </div>
                               )}
                             </div>
-                            
-                            {ans.comment && (
-                              <div className="mt-2 text-sm text-gray-700 bg-gray-100/50 p-3 rounded-xl border border-gray-200/50">
-                                <span className="font-bold text-gray-500 mr-1">Комментарий:</span> {ans.comment}
-                              </div>
-                            )}
-
-                            {ans.photoBase64 && (
-                              <div className="mt-3 overflow-hidden rounded-lg border border-gray-100">
-                                <img src={ans.photoBase64} alt="Фото" className="max-h-48 w-full object-cover" />
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
