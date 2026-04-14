@@ -38,7 +38,7 @@ export default function LoginPage() {
         const userRole = sessionData?.user?.role;
 
         if (userRole === 'ADMIN') {
-          window.location.href = '/admin'; 
+          window.location.href = '/admin/users'; 
         } else {
           window.location.href = '/audit'; 
         }
