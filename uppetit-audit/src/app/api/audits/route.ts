@@ -170,3 +170,32 @@ async function sendWebPushNotifications(audit: any) {
   
   console.log(`Push-уведомления успешно отправлены (${subscriptionsToNotify.size} шт.)`);
 }
+
+// --- УДАЛЕНИЕ АУДИТОВ ---
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    const clearAll = searchParams.get('clearAll');
+
+    // Если запросили очистку ВСЕЙ истории
+    if (clearAll === 'true') {
+      await prisma.audit.deleteMany({});
+      return NextResponse.json({ success: true, message: 'История полностью очищена' });
+    }
+
+    // Если запросили удаление конкретного аудита
+    if (id) {
+      await prisma.audit.delete({
+        where: { id }
+      });
+      return NextResponse.json({ success: true, message: 'Аудит успешно удален' });
+    }
+
+    return NextResponse.json({ error: 'Не указан ID для удаления' }, { status: 400 });
+
+  } catch (error) {
+    console.error("Ошибка при удалении аудита:", error);
+    return NextResponse.json({ error: 'Внутренняя ошибка сервера при удалении' }, { status: 500 });
+  }
+}

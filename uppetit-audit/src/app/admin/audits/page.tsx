@@ -14,7 +14,7 @@ export default function AdminAuditsPage() {
 
   const fetchAudits = async () => {
     try {
-      const res = await fetch('/api/audits');
+      const res = await fetch(`/api/audits?t=${new Date().getTime()}`, { cache: 'no-store' });
       const data = await res.json();
       setAudits(data);
     } catch (err) {
@@ -44,28 +44,34 @@ export default function AdminAuditsPage() {
     } catch (e) { return 0; }
   };
 
+  // ИСПРАВЛЕНИЕ 1: Строгая проверка ответа сервера при удалении одного аудита
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (!confirm('Точно удалить этот аудит?')) return;
     
     try {
-      await fetch(`/api/audits/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/audits?id=${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Ошибка сервера');
+      
       setAudits(prev => prev.filter(a => a.id !== id));
     } catch (err) {
-      alert('Ошибка при удалении');
+      alert('Ошибка при удалении. Возможно, аудит уже удален.');
     }
   };
 
+  // ИСПРАВЛЕНИЕ 2: Строгая проверка при очистке всей истории
   const handleClearHistory = async () => {
     if (!confirm('ВНИМАНИЕ! Это действие удалит АБСОЛЮТНО ВСЕ аудиты из базы. Продолжить?')) return;
     if (!confirm('Вы абсолютно уверены? Это нельзя отменить.')) return;
 
     try {
-      await fetch(`/api/audits/all`, { method: 'DELETE' });
+      const res = await fetch(`/api/audits?clearAll=true`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Ошибка сервера');
+
       setAudits([]);
       setExpandedId(null);
     } catch (err) {
-      alert('Ошибка при очистке');
+      alert('Ошибка при очистке истории');
     }
   };
 
@@ -95,7 +101,6 @@ export default function AdminAuditsPage() {
     const fullReportHtml = (!audit.answers || audit.answers.length === 0)
       ? '<p>Детализация отсутствует.</p>'
       : audit.answers.map((v: any) => {
-          // ИСПРАВЛЕНИЕ: Формируем HTML для нескольких фото
           const photosArray = v.photos && v.photos.length > 0 ? v.photos : (v.photoBase64 ? [v.photoBase64] : []);
           const photosHtml = photosArray.length > 0 
             ? `<div class="photos-container">${photosArray.map((img: string) => `<img class="photo" src="${img}" />`).join('')}</div>` 
@@ -157,7 +162,6 @@ export default function AdminAuditsPage() {
         .status-red { color: #f1416c; font-size: 11px; font-weight: bold; }
         .comment { color: #009ef7; font-size: 12px; font-weight: bold; margin-top: 6px; }
         
-        /* ИСПРАВЛЕНИЕ: Стили для нескольких фотографий */
         .photos-container { margin-top: 10px; }
         .photo { max-width: 180px; max-height: 180px; border-radius: 6px; display: inline-block; margin-right: 10px; margin-bottom: 10px; }
       </style>
@@ -325,7 +329,6 @@ export default function AdminAuditsPage() {
                         ) : (
                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             {audit.answers.map((ans: any) => {
-                              // ИСПРАВЛЕНИЕ: Извлекаем массив фото для UI-отрисовки
                               const photosToRender = ans.photos && ans.photos.length > 0 ? ans.photos : (ans.photoBase64 ? [ans.photoBase64] : []);
                               
                               return (
@@ -352,7 +355,6 @@ export default function AdminAuditsPage() {
                                     )}
                                   </div>
                                   
-                                  {/* ИСПРАВЛЕНИЕ: Отрисовка нескольких фото в панели админа */}
                                   {photosToRender.length > 0 && (
                                     <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
                                       {photosToRender.map((photo: string, idx: number) => (

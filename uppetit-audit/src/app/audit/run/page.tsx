@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSession } from 'next-auth/react';
 
-// ИСПРАВЛЕНИЕ 1: Теперь мы храним массив фотографий
+// Теперь мы храним массив фотографий
 interface AnswerData {
   isOk: boolean;
   photos?: string[]; 
@@ -184,7 +184,7 @@ function AuditRunForm() {
     setEmployees(newEmps);
   };
 
-  // ИСПРАВЛЕНИЕ 2: Обработка нескольких фотографий сразу
+  // Обработка нескольких фотографий сразу
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
@@ -219,7 +219,7 @@ function AuditRunForm() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // ИСПРАВЛЕНИЕ 3: Удаление конкретного фото из массива
+  // Удаление конкретного фото из массива
   const handleRemovePhoto = (photoIndex: number) => {
     setAnswers(prev => {
       const currentPhotos = prev[currentIndex]?.photos || [];
@@ -275,7 +275,7 @@ function AuditRunForm() {
       const maxScore = questions.reduce((sum, q) => sum + (Number(q.score) || 0), 0);
       let lostPoints = 0;
 
-      // ИСПРАВЛЕНИЕ 4: Отправляем массив photos
+      // Отправляем массив photos
       const answersArray = Object.entries(answers).map(([indexStr, ans]) => {
         const q = questions[Number(indexStr)];
         if (!ans.isOk) { lostPoints += (Number(q.score) || 0); }
@@ -284,7 +284,7 @@ function AuditRunForm() {
           questionText: q.text,
           isOk: ans.isOk,
           penalty: ans.isOk ? 0 : (Number(q.score) || 0),
-          photos: ans.photos || [], // Передаем массив фото!
+          photos: ans.photos || [], // Передаем массив фото
           comment: ans.comment
         };
       });
@@ -432,7 +432,7 @@ function AuditRunForm() {
               <h2 className="text-xl font-black text-gray-900 mb-2 leading-tight">{currentQ.text}</h2>
               <p className="text-xs text-gray-400 font-medium mb-4">Штраф: <span className="text-orange-500 font-bold">-{currentQ.score} б.</span></p>
 
-              {/* ИСПРАВЛЕНИЕ 5: Горизонтальный список фотографий */}
+              {/* Горизонтальный список фотографий */}
               {currentAnswer?.photos && currentAnswer.photos.length > 0 && (
                 <div className="mb-4 flex gap-2 overflow-x-auto pb-2 snap-x">
                   {currentAnswer.photos.map((photoBase64, idx) => (
@@ -476,8 +476,8 @@ function AuditRunForm() {
                   Есть проблема
                 </button>
 
-                {/* Добавили multiple, чтобы можно было выбрать несколько фото из галереи */}
-                <input type="file" accept="image/jpeg, image/png, image/jpg, image/webp" capture="environment" multiple ref={fileInputRef} onChange={handlePhotoCapture} className="hidden" />
+                {/* ИСПРАВЛЕНИЕ: Убрали capture="environment", теперь телефон предложит Галерею или Камеру */}
+                <input type="file" accept="image/jpeg, image/png, image/jpg, image/webp" multiple ref={fileInputRef} onChange={handlePhotoCapture} className="hidden" />
                 
                 <button onClick={() => fileInputRef.current?.click()} className="w-16 flex items-center justify-center bg-gray-100 text-gray-500 rounded-2xl font-bold border-2 border-transparent active:scale-95 hover:bg-gray-200 transition-colors">
                   <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
