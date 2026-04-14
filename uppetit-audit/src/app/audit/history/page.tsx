@@ -141,7 +141,7 @@ export default function AuditHistoryPage() {
               </table>
             </td>
             <td style="width: 30%; text-align: right;">
-              <img src="/logo.png" class="logo-img" alt="UPPETIT" />
+              <img src="/logo3.png" class="logo-img" alt="UPPETIT" />
             </td>
           </tr>
         </table>

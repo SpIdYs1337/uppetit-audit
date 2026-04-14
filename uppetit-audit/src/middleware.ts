@@ -19,12 +19,12 @@ export async function middleware(req: NextRequest) {
 
   if (token && (isAuthPage || isSetupPasswordPage)) {
     // И ТУ, и Аудиторы идут на /audit
-    url.pathname = token.role === 'ADMIN' ? '/admin' : '/audit';
+    url.pathname = token.role === 'ADMIN' ? '/admin/users' : '/audit';
     return NextResponse.redirect(url);
   }
 
   if (token) {
-    const isAdminRoute = url.pathname.startsWith('/admin');
+    const isAdminRoute = url.pathname.startsWith('/admin/users');
     const isAuditRoute = url.pathname.startsWith('/audit');
 
     if (isAdminRoute && token.role !== 'ADMIN') {
@@ -33,7 +33,7 @@ export async function middleware(req: NextRequest) {
     }
 
     if (isAuditRoute && token.role === 'ADMIN') {
-      url.pathname = '/admin';
+      url.pathname = '/admin/users';
       return NextResponse.redirect(url);
     }
   }
