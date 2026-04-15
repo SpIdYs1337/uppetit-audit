@@ -322,7 +322,8 @@ export default function LocationsPage() {
   };
 
   return (
-    <div className="w-full max-w-[1400px] mx-auto pb-12 overflow-hidden">
+    // ИСПРАВЛЕНИЕ: Добавлен min-w-0, чтобы запретить растягивать страницу
+    <div className="w-full min-w-0 max-w-[1400px] mx-auto pb-12">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-gray-900">Точки UPPETIT</h1>
@@ -341,8 +342,8 @@ export default function LocationsPage() {
         <div className="text-center py-10 text-gray-500 font-medium">Загрузка структуры...</div>
       ) : (
         <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          {/* Верхняя часть: Колонки Территориальных Управляющих */}
-          <div className="flex gap-4 sm:gap-6 overflow-x-auto pb-6 mb-2 items-start snap-x">
+          {/* ИСПРАВЛЕНИЕ: w-full min-w-0 и скрытие скроллбара */}
+          <div className="w-full min-w-0 flex gap-4 sm:gap-6 overflow-x-auto pb-6 mb-2 items-start snap-x [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {tus.length === 0 ? (
               <div className="w-full bg-blue-50 text-blue-600 p-4 rounded-xl border border-blue-100 text-sm font-medium">
                 Подсказка: Создайте сотрудника с ролью "TU" в разделе Сотрудники, чтобы здесь появилась колонка для распределения.
@@ -362,10 +363,10 @@ export default function LocationsPage() {
             )}
           </div>
 
-          {/* Нижняя часть: Нераспределенные точки */}
-          <div className="border-t border-gray-200 pt-6 sm:pt-8">
+          <div className="border-t border-gray-200 pt-6 sm:pt-8 w-full min-w-0">
             <h2 className="text-lg sm:text-xl font-black text-gray-800 mb-4 px-1">Корзина (Нераспределенные)</h2>
-            <div className="flex overflow-x-auto pb-4 snap-x">
+            {/* ИСПРАВЛЕНИЕ: И здесь скрыт системный скроллбар */}
+            <div className="w-full min-w-0 flex overflow-x-auto pb-4 snap-x [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
               <div className="snap-start">
                 <Column 
                   id="unassigned" 
