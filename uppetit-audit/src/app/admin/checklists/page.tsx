@@ -45,7 +45,7 @@ function SortableItem({
       <div 
         {...attributes} 
         {...listeners} 
-        className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-[#F25C05] p-2 -ml-2 -mr-1 flex-shrink-0"
+        className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-[#F25C05] p-2 -ml-2 -mr-1 flex-shrink-0 touch-none"
         title="Потяните, чтобы переместить"
       >
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -122,6 +122,9 @@ export default function AdminChecklistsPage() {
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   
+  // ИСПРАВЛЕНИЕ 1: Состояние для ролей
+  const [allowedRoles, setAllowedRoles] = useState<string[]>(['AUDITOR', 'TU']);
+  
   const [redThreshold, setRedThreshold] = useState(70);
   const [yellowThreshold, setYellowThreshold] = useState(90);
   
@@ -159,9 +162,18 @@ export default function AdminChecklistsPage() {
       setTitle(checklist.title);
       setRedThreshold(checklist.redThreshold ?? 70);
       setYellowThreshold(checklist.yellowThreshold ?? 90);
+      
+      // ИСПРАВЛЕНИЕ 2: Подтягиваем роли при редактировании
+      let roles = ['AUDITOR', 'TU'];
+      if (checklist.allowedRoles) {
+        try {
+          roles = typeof checklist.allowedRoles === 'string' ? JSON.parse(checklist.allowedRoles) : checklist.allowedRoles;
+        } catch (e) {}
+      }
+      setAllowedRoles(roles.length > 0 ? roles : ['AUDITOR', 'TU']);
+
       try {
         const parsedItems = typeof checklist.items === 'string' ? JSON.parse(checklist.items) : checklist.items;
-        // Каждому вопросу нужен уникальный ID для работы DND
         const itemsWithIds = parsedItems.map((item: any) => ({
           ...item,
           id: item.id || Math.random().toString(36).substring(2, 9) 
@@ -173,6 +185,7 @@ export default function AdminChecklistsPage() {
     } else {
       setCurrentId(null);
       setTitle('');
+      setAllowedRoles(['AUDITOR', 'TU']); // Роли по умолчанию для нового чек-листа
       setRedThreshold(70);
       setYellowThreshold(90);
       setItems([{ id: Math.random().toString(36).substring(2, 9), zone: 'Основной раздел', text: '', score: 0, isCritical: false }]);
@@ -183,6 +196,15 @@ export default function AdminChecklistsPage() {
   const closeEditor = () => {
     setIsEditing(false);
     setCurrentId(null);
+  };
+
+  // ИСПРАВЛЕНИЕ 3: Функция переключения ролей
+  const handleRoleToggle = (role: string) => {
+    setAllowedRoles(prev => 
+      prev.includes(role) 
+        ? prev.filter(r => r !== role) // Если роль есть - удаляем
+        : [...prev, role]              // Если роли нет - добавляем
+    );
   };
 
   const handleAddItem = () => {
@@ -198,7 +220,6 @@ export default function AdminChecklistsPage() {
     setItems(items.filter(item => item.id !== id));
   };
 
-  // Обработка окончания перетаскивания списка
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     
@@ -206,7 +227,6 @@ export default function AdminChecklistsPage() {
       setItems((items) => {
         const oldIndex = items.findIndex((item) => item.id === active.id);
         const newIndex = items.findIndex((item) => item.id === over.id);
-        
         return arrayMove(items, oldIndex, newIndex);
       });
     }
@@ -214,17 +234,19 @@ export default function AdminChecklistsPage() {
 
   const handleSave = async () => {
     if (!title.trim() || items.length === 0) return alert('Заполните название и добавьте вопросы');
+    if (allowedRoles.length === 0) return alert('Выберите хотя бы одну роль, которой доступен этот чек-лист');
     if (redThreshold >= yellowThreshold) return alert('Красная зона должна быть меньше желтой!');
 
     try {
       const method = currentId ? 'PUT' : 'POST';
-      // Передаем items, сохраняя их порядок (и их ID)
       const body = {
         id: currentId,
         title,
         items: JSON.stringify(items),
         redThreshold: Number(redThreshold),
-        yellowThreshold: Number(yellowThreshold)
+        yellowThreshold: Number(yellowThreshold),
+        // ИСПРАВЛЕНИЕ 4: Отправляем роли на сервер в виде JSON-строки
+        allowedRoles: JSON.stringify(allowedRoles)
       };
 
       const res = await fetch('/api/checklists', {
@@ -257,21 +279,21 @@ export default function AdminChecklistsPage() {
   if (isLoading) return <div className="p-8 text-gray-500 font-bold">Загрузка...</div>;
 
   return (
-    <div className="p-8 max-w-6xl mx-auto pb-20">
-      <div className="flex justify-between items-end mb-8">
+    <div className="p-4 md:p-8 max-w-6xl mx-auto pb-20">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-black text-gray-900 tracking-tight">Чек-листы</h1>
-          <p className="text-gray-500 mt-2">Управление списками проверок и их зонами</p>
+          <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">Чек-листы</h1>
+          <p className="text-gray-500 mt-2 text-sm md:text-base">Управление списками проверок и их зонами</p>
         </div>
         {!isEditing && (
-          <button onClick={() => openEditor()} className="bg-black text-white px-6 py-3 rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-lg shadow-black/10">
+          <button onClick={() => openEditor()} className="w-full md:w-auto bg-black text-white px-6 py-3 rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-lg shadow-black/10">
             + Создать чек-лист
           </button>
         )}
       </div>
 
       {isEditing ? (
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 mb-8">
+        <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-100 mb-8">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-black text-gray-900">{currentId ? 'Редактирование' : 'Новый чек-лист'}</h2>
             <button onClick={closeEditor} className="text-gray-400 hover:text-gray-600 font-bold">✕ Закрыть</button>
@@ -288,8 +310,30 @@ export default function AdminChecklistsPage() {
             />
           </div>
 
+          {/* ИСПРАВЛЕНИЕ 5: Блок выбора ролей */}
+          <div className="mb-6 bg-gray-50 p-4 md:p-6 rounded-2xl border border-gray-100">
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Кто может проводить аудит по этому чек-листу?</label>
+            <div className="flex flex-wrap gap-3">
+              {[
+                { id: 'AUDITOR', label: 'Аудиторы' },
+                { id: 'TU', label: 'ТУ (Управляющие)' },
+                { id: 'ADMIN', label: 'Администраторы' }
+              ].map(role => (
+                <label key={role.id} className="flex items-center gap-2 cursor-pointer bg-white p-3 rounded-xl border border-gray-200 hover:border-[#F25C05] transition-colors shadow-sm select-none">
+                  <input 
+                    type="checkbox" 
+                    className="w-5 h-5 text-[#F25C05] rounded focus:ring-[#F25C05] cursor-pointer"
+                    checked={allowedRoles.includes(role.id)}
+                    onChange={() => handleRoleToggle(role.id)}
+                  />
+                  <span className="text-sm font-bold text-gray-700">{role.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           {/* БЛОК: НАСТРОЙКА ЗОН (ТЕПЕРЬ В БАЛЛАХ) */}
-          <div className="mb-8 p-6 bg-gray-50 rounded-2xl border border-gray-100">
+          <div className="mb-8 p-4 md:p-6 bg-gray-50 rounded-2xl border border-gray-100">
             <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide">Настройка оценки (в баллах)</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Красная зона */}
@@ -352,11 +396,11 @@ export default function AdminChecklistsPage() {
 
           </div>
 
-          <div className="flex justify-between items-center border-t border-gray-100 pt-6 mt-4">
-            <button onClick={handleAddItem} className="text-[#F25C05] font-bold bg-orange-50 px-4 py-2 rounded-xl hover:bg-orange-100 transition-colors">
+          <div className="flex flex-col sm:flex-row justify-between items-center border-t border-gray-100 pt-6 mt-4 gap-4">
+            <button onClick={handleAddItem} className="w-full sm:w-auto text-[#F25C05] font-bold bg-orange-50 px-4 py-3 rounded-xl hover:bg-orange-100 transition-colors">
               + Добавить вопрос
             </button>
-            <button onClick={handleSave} className="bg-[#F25C05] text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-orange-500/20 hover:bg-orange-600 transition-all">
+            <button onClick={handleSave} className="w-full sm:w-auto bg-[#F25C05] text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-orange-500/20 hover:bg-orange-600 transition-all">
               Сохранить чек-лист
             </button>
           </div>
@@ -371,11 +415,28 @@ export default function AdminChecklistsPage() {
             const rT = checklist.redThreshold ?? 70;
             const yT = checklist.yellowThreshold ?? 90;
 
+            // Извлекаем роли для отрисовки
+            let rolesList = ['AUDITOR', 'TU'];
+            if (checklist.allowedRoles) {
+              try { rolesList = typeof checklist.allowedRoles === 'string' ? JSON.parse(checklist.allowedRoles) : checklist.allowedRoles; } catch(e){}
+            }
+            const roleLabels: Record<string, string> = { AUDITOR: 'Аудиторы', TU: 'ТУ', ADMIN: 'Админы' };
+
             return (
               <div key={checklist.id} className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col">
                 <h3 className="text-xl font-black text-gray-900 mb-1">{checklist.title}</h3>
                 <p className="text-sm text-gray-500 font-medium mb-3">{itemsList.length} вопросов • {maxScore} баллов максимум</p>
                 
+                {/* ИСПРАВЛЕНИЕ 6: Отображение кому доступен чек-лист */}
+                <div className="mb-4 flex flex-wrap gap-1 items-center bg-gray-50 p-2 rounded-lg border border-gray-100">
+                  <span className="text-[10px] uppercase font-bold text-gray-400 mr-1">Доступ:</span>
+                  {rolesList.map((r: string) => (
+                    <span key={r} className="text-[10px] font-bold uppercase tracking-wider bg-purple-100 text-purple-700 px-2 py-0.5 rounded-md">
+                      {roleLabels[r] || r}
+                    </span>
+                  ))}
+                </div>
+
                 {/* БЛОК ИНДИКАЦИИ ЗОН НА КАРТОЧКЕ */}
                 <div className="flex gap-1 mb-4">
                   <div className="flex-1 bg-red-50 border border-red-100 text-red-600 text-[10px] font-bold py-1 text-center rounded-l-md">

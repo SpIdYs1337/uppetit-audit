@@ -54,6 +54,7 @@ model Checklist {
   yellowThreshold Int      @default(90) // Порог желтой зоны (в процентах)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  allowedRoles    String?  @default("[\"AUDITOR\", \"TU\"]")
   
   audits          Audit[]  
 }

@@ -26,9 +26,10 @@ export async function POST(request: Request) {
       data: {
         title: body.title,
         items: itemsData,
-        // ДОБАВЛЕНО: Сохраняем пороги зон (с дефолтными значениями, если их нет)
         redThreshold: body.redThreshold !== undefined ? Number(body.redThreshold) : 70,
         yellowThreshold: body.yellowThreshold !== undefined ? Number(body.yellowThreshold) : 90,
+        // ДОБАВЛЕНО: Сохраняем роли, которым доступен чек-лист
+        allowedRoles: body.allowedRoles || JSON.stringify(['AUDITOR', 'TU']),
       }
     });
     return NextResponse.json(newChecklist);
@@ -49,9 +50,10 @@ export async function PUT(request: Request) {
       data: {
         title: body.title,
         items: itemsData,
-        // ДОБАВЛЕНО: Обновляем пороги зон
         redThreshold: body.redThreshold !== undefined ? Number(body.redThreshold) : 70,
         yellowThreshold: body.yellowThreshold !== undefined ? Number(body.yellowThreshold) : 90,
+        // ДОБАВЛЕНО: Обновляем роли
+        allowedRoles: body.allowedRoles,
       }
     });
     return NextResponse.json(updated);
