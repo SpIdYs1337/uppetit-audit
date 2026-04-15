@@ -31,7 +31,7 @@ function LocationCard({
   loc, 
   updateLocation, 
   handleDelete,
-  handleEdit // ИСПРАВЛЕНИЕ: Добавили пропс для редактирования
+  handleEdit
 }: { 
   loc: Location; 
   updateLocation: (id: string, data: Partial<Location>) => void;
@@ -45,20 +45,17 @@ function LocationCard({
   return (
     <div ref={setNodeRef} style={style} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-3 flex flex-col gap-3 group hover:shadow-md transition-shadow">
       <div className="flex justify-between items-start gap-2">
-        {/* ИСПРАВЛЕНИЕ: Добавили touch-none, чтобы страница не прыгала при попытке взять карточку */}
         <div {...listeners} {...attributes} className="cursor-grab text-gray-400 hover:text-[#F25C05] p-2 -ml-2 -mt-1 flex-shrink-0 touch-none">
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8h16M4 16h16" />
           </svg>
         </div>
 
-        {/* Название и адрес */}
         <div className="flex-1 min-w-0 pt-0.5">
           <h4 className="font-bold text-gray-900 truncate leading-tight">{loc.name}</h4>
           {loc.address && <p className="text-xs text-gray-500 truncate mt-1">{loc.address}</p>}
         </div>
 
-        {/* Переключатель активности */}
         <label className="flex items-center cursor-pointer flex-shrink-0 pt-0.5" onPointerDown={(e) => e.stopPropagation()}>
           <input 
             type="checkbox" className="sr-only peer" checked={loc.isActive}
@@ -68,7 +65,6 @@ function LocationCard({
         </label>
       </div>
 
-      {/* Даты активности */}
       <div className="flex gap-1 text-[10px] items-center bg-gray-50 p-2 rounded-lg mt-1" onPointerDown={(e) => e.stopPropagation()}>
         <span className="text-gray-400 font-medium whitespace-nowrap">Период:</span>
         <input 
@@ -86,7 +82,6 @@ function LocationCard({
         />
       </div>
 
-      {/* Последний аудит и кнопки управления */}
       <div className="flex justify-between items-end mt-1">
         <div className="text-[11px] flex-1">
           {lastAudit ? (
@@ -98,7 +93,6 @@ function LocationCard({
           )}
         </div>
         
-        {/* Кнопки редактирования и удаления */}
         <div className="flex gap-2 ml-2">
           <button 
             onPointerDown={(e) => e.stopPropagation()}
@@ -135,7 +129,6 @@ function Column({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
 
-  // ИСПРАВЛЕНИЕ: Адаптивная ширина колонки (на мобилках занимает почти весь экран)
   return (
     <div ref={setNodeRef} className={`bg-gray-50/80 border border-gray-100 p-3 sm:p-4 rounded-2xl min-w-[85vw] sm:min-w-[340px] w-[85vw] sm:w-[340px] shrink-0 flex flex-col transition-colors ${isOver ? 'bg-orange-50 border-orange-200 shadow-inner' : ''}`}>
       <div className="flex justify-between items-center mb-4 px-2">
@@ -157,23 +150,21 @@ export default function LocationsPage() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [tus, setTus] = useState<User[]>([]);
   
-  // Состояния для модального окна
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingLocation, setEditingLocation] = useState<Location | null>(null); // ИСПРАВЛЕНИЕ: Храним редактируемую точку
+  const [editingLocation, setEditingLocation] = useState<Location | null>(null);
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [isFetching, setIsFetching] = useState(true);
 
-  // ИСПРАВЛЕНИЕ: Настройка правильных сенсоров для мобилок и ПК
   const sensors = useSensors(
     useSensor(MouseSensor, {
-      activationConstraint: { distance: 5 }, // Для мышки: тащим после сдвига на 5px
+      activationConstraint: { distance: 5 },
     }),
     useSensor(TouchSensor, {
       activationConstraint: {
-        delay: 150, // Для пальца: ждем 150мс удержания перед стартом (позволяет скроллить страницу без конфликтов)
+        delay: 150,
         tolerance: 5,
       },
     })
@@ -212,7 +203,6 @@ export default function LocationsPage() {
     fetchData();
   }, []);
 
-  // Открытие модалки для СОЗДАНИЯ
   const openCreateModal = () => {
     setEditingLocation(null);
     setName('');
@@ -221,7 +211,6 @@ export default function LocationsPage() {
     setIsModalOpen(true);
   };
 
-  // Открытие модалки для РЕДАКТИРОВАНИЯ
   const openEditModal = (loc: Location) => {
     setEditingLocation(loc);
     setName(loc.name);
@@ -230,7 +219,6 @@ export default function LocationsPage() {
     setIsModalOpen(true);
   };
 
-  // Сохранение (Создание или Обновление)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -238,7 +226,6 @@ export default function LocationsPage() {
 
     try {
       if (editingLocation) {
-        // РЕДАКТИРОВАНИЕ
         const res = await fetch(`/api/locations`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -247,10 +234,8 @@ export default function LocationsPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Ошибка при обновлении');
         
-        // Оптимистично обновляем UI
         setLocations(prev => prev.map(loc => loc.id === editingLocation.id ? { ...loc, name, address: address || null } : loc));
       } else {
-        // СОЗДАНИЕ
         const res = await fetch('/api/locations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -259,7 +244,7 @@ export default function LocationsPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Что-то пошло не так');
         
-        fetchData(); // Перезапрашиваем с сервера, чтобы получить ID новой точки
+        fetchData();
       }
 
       setIsModalOpen(false);
@@ -270,7 +255,6 @@ export default function LocationsPage() {
     }
   };
 
-  // Удаление точки
   const handleDelete = async (id: string, locationName: string) => {
     const isConfirmed = window.confirm(`Вы уверены, что хотите удалить точку "${locationName}"?`);
     if (!isConfirmed) return;
@@ -291,7 +275,6 @@ export default function LocationsPage() {
     }
   };
 
-  // Обновление скрытых полей (статус, даты) при клике на карточке
   const updateLocation = async (id: string, data: Partial<Location>) => {
     setLocations(prev => prev.map(loc => loc.id === id ? { ...loc, ...data } : loc));
     
@@ -307,7 +290,6 @@ export default function LocationsPage() {
     }
   };
 
-  // Обработка окончания перетаскивания (смена ТУ)
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over) return;
@@ -322,8 +304,21 @@ export default function LocationsPage() {
   };
 
   return (
-    // ИСПРАВЛЕНИЕ: Добавлен min-w-0, чтобы запретить растягивать страницу
-    <div className="w-full min-w-0 max-w-[1400px] mx-auto pb-12">
+    <div className="w-full min-w-0 max-w-[1400px] mx-auto pb-12 overflow-hidden">
+      
+      {/* 100% ГАРАНТИЯ СКРЫТИЯ СКРОЛЛБАРОВ: Вставляем чистый CSS */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .hide-scroll::-webkit-scrollbar {
+          display: none !important;
+          width: 0 !important;
+          height: 0 !important;
+        }
+        .hide-scroll {
+          -ms-overflow-style: none !important; 
+          scrollbar-width: none !important; 
+        }
+      `}} />
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-gray-900">Точки UPPETIT</h1>
@@ -342,8 +337,8 @@ export default function LocationsPage() {
         <div className="text-center py-10 text-gray-500 font-medium">Загрузка структуры...</div>
       ) : (
         <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          {/* ИСПРАВЛЕНИЕ: w-full min-w-0 и скрытие скроллбара */}
-          <div className="w-full min-w-0 flex gap-4 sm:gap-6 overflow-x-auto pb-6 mb-2 items-start snap-x [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          {/* Применяем класс hide-scroll */}
+          <div className="hide-scroll w-full min-w-0 flex gap-4 sm:gap-6 overflow-x-auto pb-6 mb-2 items-start snap-x">
             {tus.length === 0 ? (
               <div className="w-full bg-blue-50 text-blue-600 p-4 rounded-xl border border-blue-100 text-sm font-medium">
                 Подсказка: Создайте сотрудника с ролью "TU" в разделе Сотрудники, чтобы здесь появилась колонка для распределения.
@@ -365,8 +360,8 @@ export default function LocationsPage() {
 
           <div className="border-t border-gray-200 pt-6 sm:pt-8 w-full min-w-0">
             <h2 className="text-lg sm:text-xl font-black text-gray-800 mb-4 px-1">Корзина (Нераспределенные)</h2>
-            {/* ИСПРАВЛЕНИЕ: И здесь скрыт системный скроллбар */}
-            <div className="w-full min-w-0 flex overflow-x-auto pb-4 snap-x [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            {/* И сюда тоже применяем класс hide-scroll */}
+            <div className="hide-scroll w-full min-w-0 flex overflow-x-auto pb-4 snap-x">
               <div className="snap-start">
                 <Column 
                   id="unassigned" 
