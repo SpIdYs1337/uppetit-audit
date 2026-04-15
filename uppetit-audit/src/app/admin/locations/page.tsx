@@ -306,23 +306,38 @@ export default function LocationsPage() {
   return (
     <div className="w-full min-w-0 max-w-[1400px] mx-auto pb-12 overflow-hidden">
       
-      {/* ЖЕСТКАЯ ЗАЩИТА: Отключаем горизонтальный скролл на уровне всего документа! */}
+      {/* РАДИКАЛЬНОЕ ИСПРАВЛЕНИЕ: 
+        1. Скрываем скроллбары для всех вебкитов (Chrome/Safari/iOS)
+        2. Скрываем для Firefox
+        3. Прячем возможные отступы
+      */}
       <style dangerouslySetInnerHTML={{__html: `
-        /* Запрещаем странице разъезжаться */
+        /* Запрещаем всей странице скроллиться по горизонтали */
         html, body {
           overflow-x: hidden !important;
-          max-width: 100vw !important;
+          width: 100%;
         }
         
-        /* Скрываем системные скроллбары внутри колонок */
-        .hide-scroll::-webkit-scrollbar {
-          display: none !important;
-          width: 0 !important;
-          height: 0 !important;
-        }
+        /* Скрываем скроллбары */
         .hide-scroll {
-          -ms-overflow-style: none !important; 
-          scrollbar-width: none !important; 
+          overflow-x: auto;
+          overflow-y: hidden;
+          -webkit-overflow-scrolling: touch; /* Плавный скролл на iOS */
+          scrollbar-width: none; /* Firefox */
+          -ms-overflow-style: none; /* IE/Edge */
+        }
+        
+        .hide-scroll::-webkit-scrollbar {
+          display: none; /* Chrome/Safari/iOS */
+          width: 0px;
+          height: 0px;
+          background: transparent;
+        }
+
+        /* Обрезка контента для страховки */
+        .scroll-wrapper {
+          width: 100%;
+          overflow: hidden;
         }
       `}} />
 
@@ -344,44 +359,54 @@ export default function LocationsPage() {
         <div className="text-center py-10 text-gray-500 font-medium">Загрузка структуры...</div>
       ) : (
         <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          <div className="hide-scroll w-full min-w-0 flex gap-4 sm:gap-6 overflow-x-auto pb-6 mb-2 items-start snap-x">
-            {tus.length === 0 ? (
-              <div className="w-full bg-blue-50 text-blue-600 p-4 rounded-xl border border-blue-100 text-sm font-medium">
-                Подсказка: Создайте сотрудника с ролью "TU" в разделе Сотрудники, чтобы здесь появилась колонка для распределения.
-              </div>
-            ) : (
-              tus.map(tu => (
-                <div key={tu.id} className="snap-start">
-                  <Column 
-                    id={tu.id} title={`ТУ: ${tu.login}`} 
-                    locations={locations.filter(l => l.tuId === tu.id)} 
-                    updateLocation={updateLocation}
-                    handleDelete={handleDelete}
-                    handleEdit={openEditModal}
-                  />
+          
+          {/* Контейнер-обертка для страховки от вылезания контента */}
+          <div className="scroll-wrapper">
+            {/* Сама скроллируемая область с классом hide-scroll */}
+            <div className="hide-scroll flex gap-4 sm:gap-6 pb-6 mb-2 items-start snap-x">
+              {tus.length === 0 ? (
+                <div className="w-full bg-blue-50 text-blue-600 p-4 rounded-xl border border-blue-100 text-sm font-medium">
+                  Подсказка: Создайте сотрудника с ролью "TU" в разделе Сотрудники, чтобы здесь появилась колонка для распределения.
                 </div>
-              ))
-            )}
+              ) : (
+                tus.map(tu => (
+                  <div key={tu.id} className="snap-start">
+                    <Column 
+                      id={tu.id} title={`ТУ: ${tu.login}`} 
+                      locations={locations.filter(l => l.tuId === tu.id)} 
+                      updateLocation={updateLocation}
+                      handleDelete={handleDelete}
+                      handleEdit={openEditModal}
+                    />
+                  </div>
+                ))
+              )}
+            </div>
           </div>
 
           <div className="border-t border-gray-200 pt-6 sm:pt-8 w-full min-w-0">
             <h2 className="text-lg sm:text-xl font-black text-gray-800 mb-4 px-1">Корзина (Нераспределенные)</h2>
-            <div className="hide-scroll w-full min-w-0 flex overflow-x-auto pb-4 snap-x">
-              <div className="snap-start">
-                <Column 
-                  id="unassigned" 
-                  title="Отвязанные точки" 
-                  locations={locations.filter(l => !l.tuId)} 
-                  updateLocation={updateLocation} 
-                  handleDelete={handleDelete}
-                  handleEdit={openEditModal}
-                />
+            
+            <div className="scroll-wrapper">
+              <div className="hide-scroll flex pb-4 snap-x">
+                <div className="snap-start">
+                  <Column 
+                    id="unassigned" 
+                    title="Отвязанные точки" 
+                    locations={locations.filter(l => !l.tuId)} 
+                    updateLocation={updateLocation} 
+                    handleDelete={handleDelete}
+                    handleEdit={openEditModal}
+                  />
+                </div>
               </div>
             </div>
+            
           </div>
         </DndContext>
       )}
 
+      {/* МОДАЛЬНОЕ ОКНО ДОБАВЛЕНИЯ / РЕДАКТИРОВАНИЯ ТОЧКИ */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
