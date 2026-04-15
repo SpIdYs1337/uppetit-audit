@@ -112,7 +112,6 @@ function SortableItem({
   );
 }
 
-
 // --- ОСНОВНАЯ СТРАНИЦА ---
 export default function AdminChecklistsPage() {
   const [checklists, setChecklists] = useState<any[]>([]);
@@ -174,6 +173,7 @@ export default function AdminChecklistsPage() {
 
       try {
         const parsedItems = typeof checklist.items === 'string' ? JSON.parse(checklist.items) : checklist.items;
+        // Каждому вопросу нужен уникальный ID для работы DND
         const itemsWithIds = parsedItems.map((item: any) => ({
           ...item,
           id: item.id || Math.random().toString(36).substring(2, 9) 
@@ -220,6 +220,7 @@ export default function AdminChecklistsPage() {
     setItems(items.filter(item => item.id !== id));
   };
 
+  // Обработка окончания перетаскивания списка
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     
@@ -227,6 +228,7 @@ export default function AdminChecklistsPage() {
       setItems((items) => {
         const oldIndex = items.findIndex((item) => item.id === active.id);
         const newIndex = items.findIndex((item) => item.id === over.id);
+        
         return arrayMove(items, oldIndex, newIndex);
       });
     }
@@ -239,6 +241,7 @@ export default function AdminChecklistsPage() {
 
     try {
       const method = currentId ? 'PUT' : 'POST';
+      // Передаем items, сохраняя их порядок (и их ID)
       const body = {
         id: currentId,
         title,
@@ -415,7 +418,7 @@ export default function AdminChecklistsPage() {
             const rT = checklist.redThreshold ?? 70;
             const yT = checklist.yellowThreshold ?? 90;
 
-            // Извлекаем роли для отрисовки
+            // ИСПРАВЛЕНИЕ 6: Извлекаем роли для отрисовки
             let rolesList = ['AUDITOR', 'TU'];
             if (checklist.allowedRoles) {
               try { rolesList = typeof checklist.allowedRoles === 'string' ? JSON.parse(checklist.allowedRoles) : checklist.allowedRoles; } catch(e){}
@@ -427,7 +430,7 @@ export default function AdminChecklistsPage() {
                 <h3 className="text-xl font-black text-gray-900 mb-1">{checklist.title}</h3>
                 <p className="text-sm text-gray-500 font-medium mb-3">{itemsList.length} вопросов • {maxScore} баллов максимум</p>
                 
-                {/* ИСПРАВЛЕНИЕ 6: Отображение кому доступен чек-лист */}
+                {/* Вывод ролей */}
                 <div className="mb-4 flex flex-wrap gap-1 items-center bg-gray-50 p-2 rounded-lg border border-gray-100">
                   <span className="text-[10px] uppercase font-bold text-gray-400 mr-1">Доступ:</span>
                   {rolesList.map((r: string) => (
