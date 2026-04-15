@@ -306,8 +306,15 @@ export default function LocationsPage() {
   return (
     <div className="w-full min-w-0 max-w-[1400px] mx-auto pb-12 overflow-hidden">
       
-      {/* 100% ГАРАНТИЯ СКРЫТИЯ СКРОЛЛБАРОВ: Вставляем чистый CSS */}
+      {/* ЖЕСТКАЯ ЗАЩИТА: Отключаем горизонтальный скролл на уровне всего документа! */}
       <style dangerouslySetInnerHTML={{__html: `
+        /* Запрещаем странице разъезжаться */
+        html, body {
+          overflow-x: hidden !important;
+          max-width: 100vw !important;
+        }
+        
+        /* Скрываем системные скроллбары внутри колонок */
         .hide-scroll::-webkit-scrollbar {
           display: none !important;
           width: 0 !important;
@@ -337,7 +344,6 @@ export default function LocationsPage() {
         <div className="text-center py-10 text-gray-500 font-medium">Загрузка структуры...</div>
       ) : (
         <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          {/* Применяем класс hide-scroll */}
           <div className="hide-scroll w-full min-w-0 flex gap-4 sm:gap-6 overflow-x-auto pb-6 mb-2 items-start snap-x">
             {tus.length === 0 ? (
               <div className="w-full bg-blue-50 text-blue-600 p-4 rounded-xl border border-blue-100 text-sm font-medium">
@@ -360,7 +366,6 @@ export default function LocationsPage() {
 
           <div className="border-t border-gray-200 pt-6 sm:pt-8 w-full min-w-0">
             <h2 className="text-lg sm:text-xl font-black text-gray-800 mb-4 px-1">Корзина (Нераспределенные)</h2>
-            {/* И сюда тоже применяем класс hide-scroll */}
             <div className="hide-scroll w-full min-w-0 flex overflow-x-auto pb-4 snap-x">
               <div className="snap-start">
                 <Column 
@@ -377,7 +382,6 @@ export default function LocationsPage() {
         </DndContext>
       )}
 
-      {/* МОДАЛЬНОЕ ОКНО ДОБАВЛЕНИЯ / РЕДАКТИРОВАНИЯ ТОЧКИ */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
