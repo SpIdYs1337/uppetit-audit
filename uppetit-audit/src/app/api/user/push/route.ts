@@ -1,24 +1,31 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { getToken } from 'next-auth/jwt';
+import { requireAuth } from '@/lib/requireAuth'; // <-- Наш единый центр безопасности
 
 export async function POST(req: Request) {
+  // 1. Пропускаем только авторизованных пользователей (любая роль)
+  const { error, session } = await requireAuth();
+  if (error) return error;
+
   try {
-    const token = await getToken({ req: req as any, secret: process.env.AUTH_SECRET });
-    if (!token?.id) {
-      return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
+    const { subscription } = await req.json();
+    
+    // Получаем ID пользователя из проверенной сессии
+    const userId = (session.user as any)?.id;
+
+    if (!userId) {
+      return NextResponse.json({ error: 'Не удалось определить ID пользователя' }, { status: 400 });
     }
 
-    const { subscription } = await req.json();
-
+    // 2. Обновляем подписку в базе данных
     await prisma.user.update({
-      where: { id: token.id as string },
+      where: { id: userId },
       data: { pushSubscription: JSON.stringify(subscription) }
     });
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('Ошибка сохранения подписки:', error);
+  } catch (err) {
+    console.error('Ошибка сохранения подписки:', err);
     return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 });
   }
 }

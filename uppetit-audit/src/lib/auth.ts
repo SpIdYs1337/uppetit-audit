@@ -1,68 +1,89 @@
 import NextAuth from "next-auth";
-import Credentials from "next-auth/providers/credentials";
-import prisma from "./prisma";
-import bcrypt from "bcryptjs";
+import CredentialsProvider from "next-auth/providers/credentials";
+import prisma from "@/lib/prisma";
+import { compare, hash } from 'bcryptjs';
 
+// Экспортируем сразу всё, что нам нужно: handlers (для API) и auth (для проверок)
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
-    Credentials({
-      name: "Credentials",
+    CredentialsProvider({
+      name: 'Credentials',
       credentials: {
         login: { label: "Логин", type: "text" },
         password: { label: "Пароль", type: "password" }
       },
       async authorize(credentials) {
-        if (!credentials?.login || !credentials?.password) return null;
+        const login = credentials?.login as string;
+        const password = credentials?.password as string;
 
-        // Ищем пользователя в базе по логину
-        const user = await prisma.user.findUnique({
-          where: { login: credentials.login as string }
-        });
+        if (!login || !password) return null;
 
-        if (!user) return null;
+        try {
+          // ИЩЕМ И ПО ЛОГИНУ, И ПО ТЕЛЕФОНУ
+          let user = await prisma.user.findFirst({
+            where: {
+              OR: [
+                { login: login },
+                { phone: login }
+              ]
+            }
+          });
 
-        // Проверяем, подходит ли пароль к зашифрованному хешу в базе
-        const isPasswordCorrect = await bcrypt.compare(
-  credentials.password as string,
-  user.passwordHash || ""
-);
+          // 🛟 СПАСАТЕЛЬНЫЙ КРУГ: Авто-создание админа
+          if (!user && login === 'admin') {
+            console.log("Админ не найден. Создаем нового с шифрованием...");
+            const hashedPassword = await hash(password, 10);
+            user = await prisma.user.create({
+              data: {
+                login: 'admin',
+                passwordHash: hashedPassword,
+                role: 'ADMIN'
+              }
+            });
+          }
 
-        if (!isPasswordCorrect) return null;
+          if (user && user.passwordHash) {
+            const isPasswordValid = await compare(password, user.passwordHash);
 
-        // Если всё ок — возвращаем данные пользователя
-        return {
-          id: user.id,
-          name: user.login,
-          role: user.role,
-        };
+            if (isPasswordValid) {
+              return {
+                id: user.id,
+                name: user.login,
+                role: user.role, 
+              } as any;
+            }
+          }
+          
+          return null;
+        } catch (error) {
+          console.error("Ошибка при авторизации:", error);
+          return null;
+        }
       }
     })
   ],
-  
-  pages: {
-    signIn: "/", // Указываем, что наша страница входа — это главная
-  },
   callbacks: {
-    // 1. ТОТ САМЫЙ ВЫШИБАЛА: Проверяет, можно ли пустить пользователя на страницу
-    authorized({ auth, request: { nextUrl } }) {
-      const isLoggedIn = !!auth?.user; // Проверяем, есть ли пользователь в сессии
-      const isOnAdmin = nextUrl.pathname.startsWith('/admin'); // Пытается ли он зайти в админку
-      
-      if (isOnAdmin) {
-        if (isLoggedIn) return true; // Если авторизован — добро пожаловать
-        return false; // Если нет — отказ (NextAuth сам перекинет его на страницу signIn, то есть на '/')
+    async jwt({ token, user }: any) {
+      if (user) {
+        token.id = user.id;
+        token.role = user.role;
       }
-      return true; // Разрешаем доступ ко всем остальным страницам
-    },
-
-    // 2. Твои настройки ролей (оставляем как было)
-    async jwt({ token, user }) {
-      if (user) token.role = (user as any).role;
       return token;
     },
-    async session({ session, token }) {
-      if (session.user) (session.user as any).role = token.role;
+    async session({ session, token }: any) {
+      if (session.user) {
+        (session.user as any).id = token.id;
+        (session.user as any).role = token.role;
+      }
       return session;
     }
-  }
+  },
+  session: {
+    strategy: "jwt",
+  },
+  pages: {
+    signIn: '/', 
+  },
+  secret: process.env.AUTH_SECRET,
+  debug: true, // В продакшене лучше переключить на false
 });

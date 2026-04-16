@@ -1,7 +1,22 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { z } from 'zod';
+import { requireAuth } from '@/lib/requireAuth'; // <-- Наш щит безопасности
+
+export const dynamic = 'force-dynamic';
+
+// --- ZOD СХЕМА ДЛЯ ВАЛИДАЦИИ ---
+const schedulePostSchema = z.object({
+  userId: z.string().min(1, 'Укажите сотрудника'),
+  locationId: z.string().min(1, 'Укажите точку'),
+  date: z.string().min(1, 'Укажите дату'),
+});
 
 export async function GET(request: Request) {
+  // 1. Просмотр расписания доступен всем авторизованным пользователям
+  const { error } = await requireAuth();
+  if (error) return error;
+
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get('userId');
 
@@ -17,27 +32,49 @@ export async function GET(request: Request) {
     });
     return NextResponse.json(plans);
   } catch (error) { 
-    return NextResponse.json({ error: 'Ошибка' }, { status: 500 }); 
+    return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 }); 
   }
 }
 
 export async function POST(request: Request) {
+  // 1. Создавать планы могут только АДМИНЫ и ТУ
+  const { error } = await requireAuth(['ADMIN', 'TU']);
+  if (error) return error;
+
   try {
-    const { userId, locationId, date } = await request.json();
+    const body = await request.json();
+    
+    // 2. ВАЛИДАЦИЯ ZOD
+    const parsedData = schedulePostSchema.parse(body);
+
     const newPlan = await prisma.visitPlan.create({
-      data: { userId, locationId, date: new Date(date) } // status по умолчанию будет 'PLANNED'
+      data: { 
+        userId: parsedData.userId, 
+        locationId: parsedData.locationId, 
+        date: new Date(parsedData.date) 
+      } // status по умолчанию будет 'PLANNED'
     });
     return NextResponse.json(newPlan);
   } catch (error) { 
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: 'Неверные данные', details: error.issues }, { status: 400 });
+    }
     return NextResponse.json({ error: 'Ошибка сохранения' }, { status: 500 }); 
   }
 }
 
 export async function DELETE(request: Request) {
+  // 1. Удалять планы могут только АДМИНЫ и ТУ
+  const { error } = await requireAuth(['ADMIN', 'TU']);
+  if (error) return error;
+
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-    await prisma.visitPlan.delete({ where: { id: id as string } });
+    
+    if (!id) return NextResponse.json({ error: 'ID не указан' }, { status: 400 });
+
+    await prisma.visitPlan.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) { 
     return NextResponse.json({ error: 'Ошибка удаления' }, { status: 500 }); 
