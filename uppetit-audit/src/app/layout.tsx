@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import UpdateChecker from "@/components/UpdateChecker"; // <-- 1. ДОБАВИЛИ ИМПОРТ
+import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
   title: "UPPETIT Audit",
@@ -13,7 +14,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  viewportFit: "cover", // Это заставляет приложение занять весь экран
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -24,11 +25,12 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <body>
-        {children}
+        {/* ОБЕРНУЛИ ВСЁ В PROVIDERS */}
+        <Providers>
+          {children}
+        </Providers>
         
-        {/* 2. ВСТАВИЛИ КОМПОНЕНТ ПРОВЕРКИ ОБНОВЛЕНИЙ */}
         <UpdateChecker />
-        
       </body>
     </html>
   );
