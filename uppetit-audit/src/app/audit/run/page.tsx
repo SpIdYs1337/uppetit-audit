@@ -36,13 +36,13 @@ function AuditRunForm() {
   const progressPercent = audit.isFinalStep ? 100 : (answeredCount / audit.questions.length) * 100;
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className="flex flex-col min-h-screen bg-gray-50 text-gray-900"> 
       
       {/* HEADER */}
       <header className="bg-white p-6 shadow-sm z-20">
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-4">
-            <button onClick={audit.handlers.handleCancel} className="w-10 h-10 bg-gray-50 hover:bg-red-50 hover:text-red-500 rounded-full font-bold transition-all">✕</button>
+            <button onClick={audit.handlers.handleCancel} className="w-10 h-10 bg-gray-50 hover:bg-red-50 hover:text-red-500 rounded-full font-bold transition-all text-gray-900">✕</button>
             <div>
               <h1 className="text-sm font-black text-gray-900 leading-tight">{audit.location?.name || 'Загрузка...'}</h1>
               <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold mt-1">{audit.checklist?.title}</p>
