@@ -15,17 +15,21 @@ const locationUpdateSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+// ИЗМЕНЕНО: Типизируем params как Promise, как того требует новый Next.js
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   // ИЗМЕНЕНО: Строгий Role.ADMIN
   const { error } = await requireAuth([Role.ADMIN]);
   if (error) return error;
 
   try {
+    // ИЗМЕНЕНО: Достаем id через await
+    const { id } = await params;
+
     const body = await req.json();
     const parsedData = locationUpdateSchema.parse(body);
 
     const updatedLocation = await prisma.location.update({
-      where: { id: params.id },
+      where: { id }, // Используем извлеченный id
       data: parsedData,
     });
 
