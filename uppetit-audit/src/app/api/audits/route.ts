@@ -1,191 +1,161 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import webpush from 'web-push';
+import { requireAuth } from '@/lib/requireAuth';
 import { z } from 'zod';
-import { requireAuth } from '@/lib/requireAuth'; // <-- Наш единый хелпер безопасности
+import { Role } from '@prisma/client'; // <-- Импортируем Enum ролей
 
-webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT || 'mailto:admin@uppetit.ru',
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-);
+export const dynamic = 'force-dynamic';
 
+// --- СХЕМА ВАЛИДАЦИИ ---
 const auditPostSchema = z.object({
-  userId: z.string(),
-  locationId: z.string(),
-  checklistId: z.string(),
+  userId: z.string().min(1, "Требуется ID пользователя"),
+  locationId: z.string().min(1, "Требуется ID точки"),
+  checklistId: z.string().min(1, "Требуется ID чек-листа"),
   score: z.number(),
-  maxScore: z.number().nullable().optional(),
-  shiftEmployees: z.array(z.string()).optional().default([]),
-  generalComment: z.string().nullable().optional(),
+  maxScore: z.number().optional(),
+  shiftEmployees: z.array(z.string()).default([]),
+  generalComment: z.string().optional(),
   answers: z.array(z.object({
     zone: z.string().optional(),
-    questionText: z.string().optional(),
-    isOk: z.boolean().optional(),
-    penalty: z.number().optional(),
-    photos: z.array(z.string()).optional(),
-    comment: z.string().nullable().optional()
+    questionText: z.string(),
+    isOk: z.boolean(),
+    penalty: z.number().default(0),
+    photos: z.array(z.string()).default([]),
+    comment: z.string().optional()
   }))
 });
 
-export async function GET() {
-  // 1. Доступно всем авторизованным
+export async function POST(req: Request) {
+  // Аудиты могут отправлять все авторизованные
   const { error } = await requireAuth();
   if (error) return error;
 
   try {
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const body = await req.json();
+    const data = auditPostSchema.parse(body);
 
-    prisma.audit.deleteMany({
-      where: { date: { lt: sixMonthsAgo } }
-    }).catch(err => console.error("Ошибка фоновой автоочистки:", err));
-
-    const audits = await prisma.audit.findMany({
-      orderBy: { date: 'desc' },
-      include: {
-        user: true,
-        location: true,
-        checklist: true,
-        answers: true 
-      }
+    // 1. ИЩЕМ АКТИВНУЮ ВЕРСИЮ ЧЕК-ЛИСТА
+    const activeVersion = await prisma.checklistVersion.findFirst({
+      where: { checklistId: data.checklistId, isActive: true },
+      include: { items: true } // Сразу подтягиваем вопросы этой версии
     });
-    
-    return NextResponse.json(audits);
-  } catch (err) {
-    return NextResponse.json({ error: 'Ошибка загрузки данных' }, { status: 500 });
-  }
-}
 
-export async function POST(request: Request) {
-  // 1. Проверяем авторизацию и получаем сессию
-  const { error, session } = await requireAuth();
-  if (error) return error;
-
-  try {
-    const body = await request.json();
-    const parsedData = auditPostSchema.parse(body);
-
-    const currentUser = session?.user as any;
-
-    // 2. СПЕЦИАЛЬНАЯ ЗАЩИТА: Блокируем подделку автора аудита
-    // Аудитор может отправлять только СВОИ проверки. Админ может отправлять за других.
-    if (currentUser?.id !== parsedData.userId && currentUser?.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Попытка подделки автора аудита запрещена!' }, { status: 403 });
+    if (!activeVersion) {
+      return NextResponse.json({ error: 'Не найдена активная версия чек-листа' }, { status: 400 });
     }
 
+    // 1.5 ПОЛУЧАЕМ ДАННЫЕ ДЛЯ СНЭПШОТА (Параллельный запрос для скорости)
+    const [user, location] = await Promise.all([
+      prisma.user.findUnique({ where: { id: data.userId }, select: { login: true } }),
+      prisma.location.findUnique({ where: { id: data.locationId }, select: { name: true } })
+    ]);
+
+    // 2. СОХРАНЯЕМ АУДИТ
     const newAudit = await prisma.audit.create({
       data: {
-        userId: parsedData.userId,
-        locationId: parsedData.locationId,
-        checklistId: parsedData.checklistId,
-        score: parsedData.score,
-        maxScore: parsedData.maxScore || null,
-        shiftEmployees: parsedData.shiftEmployees,
-        generalComment: parsedData.generalComment || null,
+        userId: data.userId,
+        locationId: data.locationId,
+        auditorName: user?.login || 'Неизвестный аудитор',   // Впечатываем логин намертво
+        locationName: location?.name || 'Неизвестная точка', // Впечатываем название точки намертво
+        checklistVersionId: activeVersion.id, 
+        score: data.score,
+        maxScore: data.maxScore,
+        shiftEmployees: data.shiftEmployees,
+        generalComment: data.generalComment,
+        
+        // 3. СОХРАНЯЕМ ОТВЕТЫ С ПРИВЯЗКОЙ К ВОПРОСАМ
         answers: {
-          create: parsedData.answers.map(ans => ({
-            zone: ans.zone || 'Основной раздел',
-            question: ans.questionText || 'Без текста',
-            isOk: typeof ans.isOk === 'boolean' ? ans.isOk : false, 
-            penalty: ans.penalty || 0,
-            photos: Array.isArray(ans.photos) ? ans.photos : [], 
-            comment: ans.comment || null
-          }))
+          create: data.answers.map(ans => {
+            // Ищем ID оригинального вопроса в БД по совпадению текста
+            const matchedItem = activeVersion.items.find(i => i.text === ans.questionText);
+            
+            return {
+              itemId: matchedItem?.id, 
+              zone: ans.zone || 'Основной раздел',
+              question: ans.questionText,
+              isOk: ans.isOk,
+              penalty: ans.penalty,
+              photos: ans.photos,
+              comment: ans.comment
+            };
+          })
         }
-      },
-      include: {
-        location: { include: { tu: true } },
-        checklist: true,
-        user: true,
       }
     });
 
-    try {
-      await prisma.visitPlan.updateMany({
-        where: {
-          userId: parsedData.userId,          
-          locationId: parsedData.locationId,  
-          status: 'PLANNED'         
-        },
-        data: { status: 'DONE' }
-      });
-    } catch (planError) {
-      console.error('Ошибка при автоматическом закрытии плана:', planError);
-    }
-
-    sendWebPushNotifications(newAudit).catch(err => console.error("Ошибка Push:", err));
-
-    return NextResponse.json(newAudit);
+    return NextResponse.json({ success: true, audit: newAudit });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Неверные данные аудита', details: err.issues }, { status: 400 });
+      return NextResponse.json({ error: 'Неверные данные формы', details: err.issues }, { status: 400 });
     }
-    return NextResponse.json({ error: 'Ошибка при сохранении' }, { status: 500 });
+    console.error('Ошибка POST /api/audits:', err);
+    return NextResponse.json({ error: 'Ошибка сохранения аудита' }, { status: 500 });
   }
 }
 
-async function sendWebPushNotifications(audit: any) {
-  console.log("Готовим Web Push уведомления...");
-
-  const isPerfect = audit.score === audit.maxScore;
-  const emoji = isPerfect ? '✅' : '⚠️';
-  const locationName = audit.location?.name || 'Неизвестно';
-  const scoreText = audit.maxScore ? `${audit.score}/${audit.maxScore}` : `${audit.score}`;
-
-  const payload = JSON.stringify({
-    title: `${emoji} Новый аудит: ${locationName}`,
-    body: `Оценка: ${scoreText} б. Проверил: ${audit.user?.login || 'Аудитор'}. Комментарий: ${audit.generalComment || 'Нет'}`,
-    url: '/audit/history' 
-  });
-
-  const admins = await prisma.user.findMany({ 
-    where: { role: 'ADMIN', pushSubscription: { not: null } } 
-  });
-
-  const tuSubscription = audit.location?.tu?.pushSubscription;
-
-  const subscriptionsToNotify = new Set<string>();
-  
-  admins.forEach(admin => {
-    if (admin.pushSubscription) subscriptionsToNotify.add(admin.pushSubscription);
-  });
-  
-  if (tuSubscription) subscriptionsToNotify.add(tuSubscription);
-
-  for (const subString of subscriptionsToNotify) {
-    try {
-      const sub = JSON.parse(subString);
-      await webpush.sendNotification(sub, payload);
-    } catch (e) {
-      console.error('Не удалось отправить пуш:', e);
-    }
-  }
-}
-
-export async function DELETE(request: Request) {
-  // 1. ОДНА СТРОЧКА ЗАЩИТЫ: Только АДМИН может удалять аудиты или очищать базу
-  const { error } = await requireAuth(['ADMIN']);
+export async function GET() {
+  const { error } = await requireAuth();
   if (error) return error;
 
   try {
-    const { searchParams } = new URL(request.url);
+    const audits = await prisma.audit.findMany({
+      include: {
+        user: { select: { id: true, login: true } },
+        location: { select: { id: true, name: true } },
+        // Глубокая загрузка: достаем версию и из неё корневой чек-лист
+        checklistVersion: {
+          include: {
+            checklist: { select: { id: true, title: true } }
+          }
+        },
+        answers: true
+      },
+      orderBy: { date: 'desc' }
+    });
+
+    // Адаптируем ответ для фронтенда
+    const formattedAudits = audits.map(audit => ({
+      ...audit,
+      // МАГИЯ СНЭПШОТОВ: Если точка или юзер были удалены (null), подставляем данные из снэпшота
+      location: audit.location ? audit.location : { id: 'deleted', name: audit.locationName || 'Удаленная точка' },
+      user: audit.user ? audit.user : { id: 'deleted', login: audit.auditorName || 'Удаленный аудитор' },
+      
+      // Имитируем старую структуру { checklist: { title: "..." } }
+      checklist: {
+        id: audit.checklistVersion.checklist.id,
+        title: audit.checklistVersion.checklist.title,
+        version: audit.checklistVersion.version
+      }
+    }));
+
+    return NextResponse.json(formattedAudits);
+  } catch (err) {
+    console.error('Ошибка GET /api/audits:', err);
+    return NextResponse.json({ error: 'Ошибка загрузки аудитов' }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  // ИЗМЕНЕНО: Строгая проверка роли через Enum
+  const { error } = await requireAuth([Role.ADMIN]);
+  if (error) return error;
+
+  try {
+    const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
     const clearAll = searchParams.get('clearAll');
-
+    
     if (clearAll === 'true') {
       await prisma.audit.deleteMany({});
-      return NextResponse.json({ success: true, message: 'История полностью очищена' });
-    }
-
-    if (id) {
+    } else if (id) {
       await prisma.audit.delete({ where: { id } });
-      return NextResponse.json({ success: true, message: 'Аудит успешно удален' });
+    } else {
+      return NextResponse.json({ error: 'Нет ID для удаления' }, { status: 400 });
     }
-
-    return NextResponse.json({ error: 'Не указан ID для удаления' }, { status: 400 });
-
+    
+    return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json({ error: 'Внутренняя ошибка сервера при удалении' }, { status: 500 });
+    console.error('Ошибка DELETE /api/audits:', err);
+    return NextResponse.json({ error: 'Ошибка удаления' }, { status: 500 });
   }
 }

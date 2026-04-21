@@ -1,57 +1,23 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useNewAudit } from '@/hooks/useNewAudit';
 
 export default function NewAuditPage() {
   const router = useRouter();
-  const [locations, setLocations] = useState<any[]>([]);
-  const [checklists, setChecklists] = useState<any[]>([]);
-  const [tus, setTus] = useState<any[]>([]);
-  
-  const [selectedTu, setSelectedTu] = useState(''); // Стейт для ТУ
-  const [selectedLocation, setSelectedLocation] = useState('');
-  const [selectedChecklist, setSelectedChecklist] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Загружаем данные
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [locRes, checkRes, userRes] = await Promise.all([
-          fetch('/api/locations'),
-          fetch('/api/checklists'),
-          fetch('/api/users')
-        ]);
-        
-        if (locRes.ok) setLocations(await locRes.json());
-        if (checkRes.ok) setChecklists(await checkRes.json());
-        if (userRes.ok) {
-          const users = await userRes.json();
-          setTus(users.filter((u: any) => u.role === 'TU')); // Берем только ТУ
-        }
-      } catch (err) {
-        console.error('Ошибка загрузки:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
-
-  // Фильтрация точек: по выбранному ТУ + статус Active + проверка Дат
-  const filteredLocations = locations.filter(loc => {
-    const isMyTu = loc.tuId === selectedTu;
-    const isStatusActive = loc.isActive !== false;
-
-    // Проверка дат (если установлены в админке)
-    const now = new Date();
-    const isAfterStart = loc.activeFrom ? new Date(loc.activeFrom) <= now : true;
-    const isBeforeEnd = loc.activeTo ? new Date(loc.activeTo) >= now : true;
-
-    return isMyTu && isStatusActive && isAfterStart && isBeforeEnd;
-  });
+  const {
+    tus,
+    checklists,
+    filteredLocations,
+    selectedTu,
+    selectedLocation,
+    selectedChecklist,
+    isLoading,
+    handleTuSelect,
+    setSelectedLocation,
+    setSelectedChecklist
+  } = useNewAudit();
 
   const handleContinue = () => {
     if (!selectedLocation || !selectedChecklist) return;
@@ -85,7 +51,7 @@ export default function NewAuditPage() {
               {tus.map((tu: any) => (
                 <div 
                   key={tu.id}
-                  onClick={() => { setSelectedTu(tu.id); setSelectedLocation(''); }}
+                  onClick={() => handleTuSelect(tu.id)}
                   className={`p-4 rounded-3xl cursor-pointer border-2 transition-all duration-200 ${
                     selectedTu === tu.id 
                       ? 'border-black bg-black text-white shadow-lg scale-[0.98]' 

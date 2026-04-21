@@ -19,8 +19,8 @@ export async function POST(request: Request) {
     // 1. ВАЛИДАЦИЯ ВХОДЯЩИХ ДАННЫХ
     const parsedData = setupPasswordSchema.parse(body);
 
-    // 2. Ищем пользователя по токену
-    const user = await prisma.user.findFirst({ 
+    // 2. ИЗМЕНЕНО: Ищем пользователя через findUnique (быстрее, т.к. токен @unique в схеме)
+    const user = await prisma.user.findUnique({ 
       where: { inviteToken: parsedData.token } 
     });
     

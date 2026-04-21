@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
-import { requireAuth } from '@/lib/requireAuth'; // <-- Оставляем только наш мощный хелпер
+import { requireAuth } from '@/lib/requireAuth';
+import { Role } from '@prisma/client'; // <-- Импортируем наш строгий Enum
 
 export const dynamic = 'force-dynamic';
 
@@ -9,27 +10,28 @@ export const dynamic = 'force-dynamic';
 const userPostSchema = z.object({
   login: z.string().min(2, 'Логин должен быть длиннее 2 символов'),
   phone: z.string().nullable().optional(),
-  role: z.enum(['ADMIN', 'TU', 'AUDITOR']).default('AUDITOR'),
+  // ИЗМЕНЕНО: Строгая валидация через nativeEnum
+  role: z.nativeEnum(Role).default(Role.AUDITOR),
 });
 
 const userPutSchema = z.object({
   id: z.string(),
   login: z.string().min(2).optional(),
   phone: z.string().nullable().optional(),
-  role: z.enum(['ADMIN', 'TU', 'AUDITOR']).optional(),
+  // ИЗМЕНЕНО: Строгая валидация через nativeEnum
+  role: z.nativeEnum(Role).optional(),
   resetPassword: z.boolean().optional(),
 });
 
 export async function GET() {
-  // 1. ХЕЛПЕР САМ проверяет авторизацию и возвращает готовую сессию
   const { error, session } = await requireAuth();
   if (error) return error;
 
   try {
     const users = await prisma.user.findMany({ orderBy: { login: 'asc' } });
     
-    // 2. Берем сессию, которую любезно вернул хелпер
-    const isAdmin = (session.user as any)?.role === 'ADMIN';
+    // ИЗМЕНЕНО: Сравниваем со строгим Role.ADMIN
+    const isAdmin = (session.user as any)?.role === Role.ADMIN;
 
     const safeUsers = users.map(u => ({
       id: u.id,
@@ -47,11 +49,10 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  // 1. ОДНА СТРОЧКА ЗАЩИТЫ: Хелпер проверяет и сессию, и наличие роли ADMIN
-  const { error } = await requireAuth(['ADMIN']);
-  if (error) return error; // Если что-то не так, хелпер сам отдаст 401 или 403
+  // ИЗМЕНЕНО: Защита через строгий Enum
+  const { error } = await requireAuth([Role.ADMIN]);
+  if (error) return error;
 
-  // 2. Сразу переходим к бизнес-логике
   try {
     const body = await request.json();
     const parsedData = userPostSchema.parse(body);
@@ -76,8 +77,8 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  // ОДНА СТРОЧКА ЗАЩИТЫ
-  const { error } = await requireAuth(['ADMIN']);
+  // ИЗМЕНЕНО: Защита через строгий Enum
+  const { error } = await requireAuth([Role.ADMIN]);
   if (error) return error;
 
   try {
@@ -111,8 +112,8 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  // ОДНА СТРОЧКА ЗАЩИТЫ
-  const { error } = await requireAuth(['ADMIN']);
+  // ИЗМЕНЕНО: Защита через строгий Enum
+  const { error } = await requireAuth([Role.ADMIN]);
   if (error) return error;
 
   try {

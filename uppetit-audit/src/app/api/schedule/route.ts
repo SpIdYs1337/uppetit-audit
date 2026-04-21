@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import { requireAuth } from '@/lib/requireAuth'; // <-- Наш щит безопасности
+import { Role } from '@prisma/client'; // <-- Импортируем Enum ролей
 
 export const dynamic = 'force-dynamic';
 
@@ -37,8 +38,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  // 1. Создавать планы могут только АДМИНЫ и ТУ
-  const { error } = await requireAuth(['ADMIN', 'TU']);
+  // ИЗМЕНЕНО: Создавать планы могут только АДМИНЫ и ТУ (строгий Enum)
+  const { error } = await requireAuth([Role.ADMIN, Role.TU]);
   if (error) return error;
 
   try {
@@ -64,8 +65,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  // 1. Удалять планы могут только АДМИНЫ и ТУ
-  const { error } = await requireAuth(['ADMIN', 'TU']);
+  // ИЗМЕНЕНО: Удалять планы могут только АДМИНЫ и ТУ (строгий Enum)
+  const { error } = await requireAuth([Role.ADMIN, Role.TU]);
   if (error) return error;
 
   try {

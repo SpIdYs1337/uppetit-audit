@@ -1,20 +1,21 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@/lib/auth'; // <-- Подтягиваем нашу новую авторизацию
+import { auth } from '@/lib/auth'; 
+import { Role } from '@prisma/client';
 
-export async function requireAuth(allowedRoles?: string[]) {
+export async function requireAuth(allowedRoles?: Role[]) {
   const session = await auth();
 
-  // 1. Проверка наличия сессии (анонимы отсекаются здесь)
-  if (!session) {
+  if (!session?.user) {
     return { 
       error: NextResponse.json({ error: 'Не авторизован' }, { status: 401 }), 
       session: null 
     };
   }
 
-  // 2. Проверка ролей (если они переданы в функцию)
   if (allowedRoles && allowedRoles.length > 0) {
-    const userRole = (session.user as any)?.role;
+    // ИЗМЕНЕНО: Больше никаких (session.user as any)! 
+    // TypeScript теперь сам видит session.user.role и знает, что это тип Role
+    const userRole = session.user.role;
     
     if (!allowedRoles.includes(userRole)) {
       return { 
@@ -24,6 +25,5 @@ export async function requireAuth(allowedRoles?: string[]) {
     }
   }
 
-  // Если всё ок, возвращаем сессию без ошибок
   return { error: null, session };
 }

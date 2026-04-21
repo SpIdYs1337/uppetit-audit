@@ -1,104 +1,45 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { getSession } from 'next-auth/react';
+import { useState } from 'react';
 import Link from 'next/link';
+import { useSchedule } from '@/hooks/useSchedule';
 
 export default function AuditorSchedulePage() {
-  const [plans, setPlans] = useState<any[]>([]);
-  const [locations, setLocations] = useState<any[]>([]);
-  const [userId, setUserId] = useState('');
+  const { 
+    locations, 
+    groupedPlans, 
+    isLoading, 
+    addPlan, 
+    deletePlan, 
+    formatDayHeader, 
+    getColorTheme 
+  } = useSchedule();
   
   const [selectedLoc, setSelectedLoc] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
 
-  useEffect(() => {
-    const init = async () => {
-      const session = await getSession();
-      const uid = (session?.user as any)?.id;
-      if (uid) {
-        setUserId(uid);
-        fetchPlans(uid);
-      }
-      const locRes = await fetch('/api/locations');
-      setLocations(await locRes.json());
-    };
-    init();
-  }, []);
-
-  const fetchPlans = async (uid: string) => {
-    const res = await fetch(`/api/schedule?userId=${uid}`);
-    setPlans(await res.json());
-  };
-
   const handleAdd = async () => {
     if (!selectedLoc || !selectedDate) return alert('Выберите точку и дату');
-    await fetch('/api/schedule', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, locationId: selectedLoc, date: selectedDate })
-    });
-    fetchPlans(userId);
-    setSelectedLoc('');
+    try {
+      await addPlan(selectedLoc, selectedDate);
+      setSelectedLoc(''); // Сбрасываем только точку после успешного добавления
+    } catch (err) {
+      alert('Ошибка при сохранении плана');
+    }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Отменить эту проверку?')) return;
-    await fetch(`/api/schedule?id=${id}`, { method: 'DELETE' });
-    fetchPlans(userId);
+    try {
+      await deletePlan(id);
+    } catch (err) {
+      alert('Ошибка при удалении плана');
+    }
   };
 
-  // --- ЛОГИКА ГРУППИРОВКИ ПО ДНЯМ И РАСКРАСКИ ---
-
-  // 1. Группируем планы по датам
-  const groupPlansByDate = (plansArray: any[]) => {
-    const groups: Record<string, any[]> = {};
-    
-    plansArray.forEach(plan => {
-      // Приводим дату к формату ГГГГ-ММ-ДД для надежной группировки
-      const dateObj = new Date(plan.date);
-      const dateKey = dateObj.toISOString().split('T')[0]; 
-      
-      if (!groups[dateKey]) groups[dateKey] = [];
-      groups[dateKey].push(plan);
-    });
-
-    // Сортируем даты по возрастанию
-    const sortedKeys = Object.keys(groups).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-
-    return sortedKeys.map(key => ({
-      dateString: key,
-      items: groups[key]
-    }));
-  };
-
-  // 2. Получаем красивое название дня (например, "Понедельник", "13 апреля")
-  const formatDayHeader = (dateString: string) => {
-    const date = new Date(dateString);
-    const weekday = date.toLocaleDateString('ru-RU', { weekday: 'long' });
-    const dayMonth = date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
-    return {
-      weekday: weekday.charAt(0).toUpperCase() + weekday.slice(1), // Делаем с большой буквы
-      dayMonth
-    };
-  };
-
-  // 3. Каждому дню недели — свой цвет!
-  const getColorTheme = (dateString: string) => {
-    const day = new Date(dateString).getDay();
-    const themes: Record<number, any> = {
-      1: { text: 'text-blue-600', border: 'border-blue-200', iconBg: 'bg-blue-500', bgHover: 'hover:border-blue-300' }, // ПН
-      2: { text: 'text-purple-600', border: 'border-purple-200', iconBg: 'bg-purple-500', bgHover: 'hover:border-purple-300' }, // ВТ
-      3: { text: 'text-pink-600', border: 'border-pink-200', iconBg: 'bg-pink-500', bgHover: 'hover:border-pink-300' }, // СР
-      4: { text: 'text-emerald-600', border: 'border-emerald-200', iconBg: 'bg-emerald-500', bgHover: 'hover:border-emerald-300' }, // ЧТ
-      5: { text: 'text-amber-600', border: 'border-amber-200', iconBg: 'bg-amber-500', bgHover: 'hover:border-amber-300' }, // ПТ
-      6: { text: 'text-red-600', border: 'border-red-200', iconBg: 'bg-red-500', bgHover: 'hover:border-red-300' }, // СБ
-      0: { text: 'text-orange-600', border: 'border-orange-200', iconBg: 'bg-orange-500', bgHover: 'hover:border-orange-300' }, // ВС
-    };
-    return themes[day];
-  };
-
-  const groupedPlans = groupPlansByDate(plans);
+  if (isLoading) {
+    return <div className="min-h-screen bg-gray-50 flex items-center justify-center font-bold text-gray-400">Загрузка...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col p-4 md:p-8 max-w-2xl mx-auto">
@@ -118,9 +59,7 @@ export default function AuditorSchedulePage() {
 
       {/* Форма добавления с декоративным фоном */}
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden mb-10">
-        {/* Размытое пятно для красоты */}
         <div className="absolute -right-10 -top-10 w-40 h-40 bg-orange-100 rounded-full blur-3xl opacity-50 pointer-events-none"></div>
-        
         <h2 className="font-black text-gray-900 mb-5 text-lg relative z-10">Запланировать визит</h2>
         
         <div className="space-y-4 relative z-10">
@@ -187,7 +126,6 @@ export default function AuditorSchedulePage() {
                       className={`bg-white p-4 rounded-3xl shadow-sm flex justify-between items-center border-2 border-transparent transition-all hover:-translate-y-1 ${theme.bgHover}`}
                     >
                       <div className="flex items-center gap-4">
-                        {/* Иконка с цветом дня недели */}
                         <div className={`w-12 h-12 rounded-2xl ${theme.iconBg} text-white flex items-center justify-center font-black text-xl shadow-md`}>
                           📍
                         </div>
@@ -201,7 +139,6 @@ export default function AuditorSchedulePage() {
                         </div>
                       </div>
                       
-                      {/* Кнопка удаления */}
                       <button 
                         onClick={() => handleDelete(plan.id)} 
                         className="w-10 h-10 bg-gray-50 text-red-400 rounded-xl flex items-center justify-center active:scale-95 transition-colors hover:bg-red-50 hover:text-red-500 ml-2"

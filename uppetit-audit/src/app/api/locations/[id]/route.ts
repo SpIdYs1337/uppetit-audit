@@ -1,59 +1,40 @@
-import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
 import { z } from 'zod';
-import { requireAuth } from '@/lib/requireAuth'; // <-- Наш хелпер безопасности
+import { requireAuth } from '@/lib/requireAuth';
+import { Role } from '@prisma/client'; // <-- Импортируем Enum
 
-// Описываем тип параметров именно так, как хочет сервер Next.js 15+
-type RouteContext = {
-  params: Promise<{ id: string }>
-}
+export const dynamic = 'force-dynamic';
 
-// --- ZOD СХЕМА ДЛЯ ВАЛИДАЦИИ ---
-const locationPatchSchema = z.object({
-  tuId: z.string().nullable().optional(),
+// Универсальная схема для частичного обновления (PATCH)
+const locationUpdateSchema = z.object({
+  name: z.string().min(1, 'Название обязательно').optional(),
+  address: z.string().optional().nullable(),
+  // Магия: разрешаем null, undefined и пустые строки, превращая их в null для БД
+  tuId: z.string().optional().nullable().transform(val => val === '' ? null : val),
   isActive: z.boolean().optional(),
-  activeFrom: z.string().nullable().optional(),
-  activeTo: z.string().nullable().optional(),
 });
 
-export async function PATCH(
-  request: Request,
-  context: RouteContext
-) {
-  // 1. ЗАЩИТА: Только АДМИН может редактировать параметры точек (назначать ТУ, менять статус)
-  const { error } = await requireAuth(['ADMIN']);
+export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+  // ИЗМЕНЕНО: Строгий Role.ADMIN
+  const { error } = await requireAuth([Role.ADMIN]);
   if (error) return error;
 
   try {
-    // 2. Разворачиваем параметры
-    const { id } = await context.params;
-    
-    // 3. Читаем тело запроса и валидируем через Zod
-    const body = await request.json();
-    const parsedData = locationPatchSchema.parse(body);
-    
-    // 4. Собираем данные
-    const updateData: any = {};
-    if (parsedData.tuId !== undefined) updateData.tuId = parsedData.tuId;
-    if (parsedData.isActive !== undefined) updateData.isActive = parsedData.isActive;
-    if (parsedData.activeFrom !== undefined) updateData.activeFrom = parsedData.activeFrom ? new Date(parsedData.activeFrom) : null;
-    if (parsedData.activeTo !== undefined) updateData.activeTo = parsedData.activeTo ? new Date(parsedData.activeTo) : null;
+    const body = await req.json();
+    const parsedData = locationUpdateSchema.parse(body);
 
-    // 5. Обновляем базу
     const updatedLocation = await prisma.location.update({
-      where: { id: id },
-      data: updateData,
+      where: { id: params.id },
+      data: parsedData,
     });
 
     return NextResponse.json(updatedLocation);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Неверные данные', details: error.issues }, { status: 400 });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return NextResponse.json({ error: 'Неверные данные', details: err.issues }, { status: 400 });
     }
-    console.error("Ошибка обновления точки:", error);
-    return NextResponse.json(
-      { error: "Не удалось обновить точку" }, 
-      { status: 500 }
-    );
+    console.error('Ошибка PATCH /api/locations/[id]:', err);
+    return NextResponse.json({ error: 'Ошибка обновления' }, { status: 500 });
   }
 }

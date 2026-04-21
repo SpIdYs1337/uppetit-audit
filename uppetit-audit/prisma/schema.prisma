@@ -7,98 +7,155 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// 1. ПОЛЬЗОВАТЕЛИ (Сотрудники)
-model User {
-  id           String      @id @default(cuid())
-  login        String      @unique
-  phone        String?     @unique
-  passwordHash String?  
-  inviteToken  String?     @unique 
-  role         String      @default("AUDITOR")
-  pushSubscription  String?
-
-  
-  audits       Audit[]
-  visitPlans   VisitPlan[]
-  
-  // НОВОЕ: Точки, которыми управляет этот пользователь (если он ТУ)
-  managedLocations Location[] @relation("LocationToTU")
+// ДОБАВЛЕНО: Строгий Enum для ролей
+enum Role {
+  ADMIN
+  AUDITOR
+  TU
 }
 
+// ==========================================
+// 1. ПОЛЬЗОВАТЕЛИ (Сотрудники)
+// ==========================================
+model User {
+  id               String      @id @default(cuid())
+  login            String      @unique
+  phone            String?     @unique
+  passwordHash     String?  
+  inviteToken      String?     @unique 
+  // ИЗМЕНЕНО: Тип String заменен на Role
+  role             Role        @default(AUDITOR)
+  pushSubscription String?
+
+  audits           Audit[]
+  visitPlans       VisitPlan[]
+  
+  // Точки, которыми управляет этот пользователь (если он ТУ)
+  managedLocations Location[]  @relation("LocationToTU")
+}
+
+// ==========================================
 // 2. ТОЧКИ (Магазины)
+// ==========================================
 model Location {
   id         String      @id @default(cuid())
   name       String
   address    String?
   
-  // НОВЫЕ ПОЛЯ ДЛЯ АКТИВНОСТИ
-  isActive   Boolean     @default(true) // Включена ли точка
-  activeFrom DateTime?   // Дата начала проведения чек-листов
-  activeTo   DateTime?   // Дата окончания
+  isActive   Boolean     @default(true) 
+  activeFrom DateTime?   
+  activeTo   DateTime?   
   
   // ПРИВЯЗКА К ТЕРРИТОРИАЛЬНОМУ УПРАВЛЯЮЩЕМУ (ТУ)
-  tuId       String?     // Может быть пустым (точка нераспределена)
+  tuId       String?     
   tu         User?       @relation("LocationToTU", fields: [tuId], references: [id], onDelete: SetNull)
   
   audits     Audit[]
   visitPlans VisitPlan[]
 }
 
-// 3. ЧЕК-ЛИСТЫ (Шаблоны)
+// ==========================================
+// 3. ЧЕК-ЛИСТЫ (Корневая сущность)
+// ==========================================
 model Checklist {
-  id              String   @id @default(cuid())
+  id              String             @id @default(cuid())
   title           String
   description     String?
-  items           String?  @db.Text 
-  redThreshold    Int      @default(70) // Порог красной зоны (в процентах)
-  yellowThreshold Int      @default(90) // Порог желтой зоны (в процентах)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  allowedRoles    String?  @default("[\"AUDITOR\", \"TU\"]")
-  
-  audits          Audit[]  
+  redThreshold    Int                @default(70) // Порог красной зоны
+  yellowThreshold Int                @default(90) // Порог желтой зоны
+  // ИЗМЕНЕНО: Храним разрешенные роли в виде массива Enum
+  allowedRoles    Role[]             @default([AUDITOR, TU])
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  versions        ChecklistVersion[] // Связь с версиями
 }
 
-// 4. АУДИТЫ (Результаты проверок)
-model Audit {
-  id          String   @id @default(cuid())
-  date        DateTime @default(now())
-  score       Int
-  maxScore    Int?
-  
-  shiftEmployees String[]  // Массив имен сотрудников на смене
-  generalComment String?   // Необязательный общий комментарий
-
-  // ДОБАВЛЕНО: onDelete: Cascade
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId      String
-  
-  // ДОБАВЛЕНО: onDelete: Cascade
-  location    Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  locationId  String
-  
-  // ДОБАВЛЕНО: onDelete: Cascade
-  checklist   Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+// ==========================================
+// 3.1. ВЕРСИИ ЧЕК-ЛИСТОВ (История структуры)
+// ==========================================
+model ChecklistVersion {
+  id          String          @id @default(cuid())
   checklistId String
-
-  answers     Answer[]
-}
-
-// 5. ОТВЕТЫ С ФОТО
-model Answer {
-  id          String  @id @default(cuid())
-  auditId     String
-  audit       Audit   @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  checklist   Checklist       @relation(fields: [checklistId], references: [id], onDelete: Cascade)
   
-  zone        String? @default("Основной раздел")
-  question    String  
-  isOk        Boolean 
-  penalty     Int     @default(0) 
-  photos      String[] 
-  comment     String? 
+  version     Int             @default(1)     // Номер версии (1, 2, 3...)
+  isActive    Boolean         @default(false) // Активна ли сейчас эта версия
+  createdAt   DateTime        @default(now())
+
+  items       ChecklistItem[] // Вопросы в этой версии
+  audits      Audit[]         // Проверки, проведенные по этой версии
 }
 
+// ==========================================
+// 3.2. ВОПРОСЫ ЧЕК-ЛИСТА (Структура вместо JSON)
+// ==========================================
+model ChecklistItem {
+  id         String           @id @default(cuid())
+  versionId  String
+  version    ChecklistVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  
+  text       String
+  zone       String?          @default("Основной раздел")
+  score      Int              @default(0)
+  isCritical Boolean          @default(false)
+  order      Int              @default(0) // Порядок отображения
+
+  answers    Answer[]         // Связь для аналитики провалов по конкретному вопросу
+}
+
+// ==========================================
+// 4. АУДИТЫ (Результаты проверок)
+// ==========================================
+model Audit {
+  id                 String           @id @default(cuid())
+  date               DateTime         @default(now())
+  score              Int
+  maxScore           Int?
+  
+  shiftEmployees     String[]         // Массив имен сотрудников
+  generalComment     String?          // Общий комментарий
+
+  userId             String?          
+  user               User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  auditorName        String?          
+
+  locationId         String?          
+  location           Location?        @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  locationName       String?          // Снэпшот названия точки на момент проверки
+  
+  // ИЗМЕНЕНО: Аудит теперь привязан строго к версии чек-листа!
+  checklistVersionId String
+  checklistVersion   ChecklistVersion @relation(fields: [checklistVersionId], references: [id], onDelete: Cascade)
+
+  answers            Answer[]
+}
+
+// ==========================================
+// 5. ОТВЕТЫ С ФОТО
+// ==========================================
+model Answer {
+  id        String         @id @default(cuid())
+  auditId   String
+  audit     Audit          @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  
+  // ДОБАВЛЕНО: Прямая ссылка на конкретный вопрос для крутой SQL-аналитики
+  itemId    String?
+  item      ChecklistItem? @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  
+  // Эти поля пока оставляем (как кеш или для обратной совместимости старых данных)
+  zone      String?        @default("Основной раздел")
+  question  String?  
+      
+  isOk      Boolean 
+  penalty   Int            @default(0) 
+  photos    String[] 
+  comment   String? 
+}
+
+// ==========================================
 // 6. ПЛАНЫ ВИЗИТОВ
+// ==========================================
 model VisitPlan {
   id         String   @id @default(cuid())
   userId     String
@@ -106,6 +163,6 @@ model VisitPlan {
   locationId String
   location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
   date       DateTime // Запланированная дата
-  status     String   @default("PLANNED") // PLANNED (запланировано) или DONE (выполнено)
+  status     String   @default("PLANNED") // PLANNED или DONE
   createdAt  DateTime @default(now())
 }
