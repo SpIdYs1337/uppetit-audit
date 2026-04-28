@@ -6,16 +6,20 @@ import { Providers } from "@/components/providers";
 export const metadata: Metadata = {
   title: "UPPETIT Audit",
   description: "Система контроля качества",
-  
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "UPPETIT Audit",
+    title: "UPPETIT Audit", 
   },
   formatDetection: {
     telephone: false,
   },
-  // -------------------------
+  // --- ДОБАВЛЯЕМ СПЕЦИАЛЬНО ДЛЯ APPLE ---
+  icons: {
+    apple: [
+      { url: "/icon-192x192.png" },
+    ],
+  },
 };
 
 export const viewport: Viewport = {
