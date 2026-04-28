@@ -9,16 +9,14 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "UPPETIT Audit", 
+    title: "UPPETIT",
   },
   formatDetection: {
     telephone: false,
   },
-  // --- ДОБАВЛЯЕМ СПЕЦИАЛЬНО ДЛЯ APPLE ---
   icons: {
-    apple: [
-      { url: "/icon-192x192.png" },
-    ],
+    icon: "/icon-192x192.png",
+    apple: "/icon-512x512.png", 
   },
 };
 
