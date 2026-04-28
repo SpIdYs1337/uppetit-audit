@@ -7,8 +7,6 @@ export const metadata: Metadata = {
   title: "UPPETIT Audit",
   description: "Система контроля качества",
   
-  // --- ДОБАВЛЕНО ДЛЯ PWA ---
-  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
