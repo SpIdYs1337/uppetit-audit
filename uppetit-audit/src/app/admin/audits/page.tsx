@@ -13,8 +13,8 @@ export default function AdminAuditsPage() {
 
   const toggleExpand = (id: string) => setExpandedId(expandedId === id ? null : id);
 
-  const formatDate = (dateString: string) => {
-    const d = new Date(dateString);
+  const formatDate = (dateValue: Date | string) => {
+    const d = new Date(dateValue);
     return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
@@ -22,7 +22,7 @@ export default function AdminAuditsPage() {
     e.stopPropagation();
     if (!confirm('Точно удалить этот аудит?')) return;
     try { await deleteAudit(id); } 
-    catch (err) { alert('Ошибка при удалении.'); }
+    catch { alert('Ошибка при удалении.'); } 
   };
 
   const handleClearHistory = async () => {
@@ -31,7 +31,7 @@ export default function AdminAuditsPage() {
     try {
       await clearHistory();
       setExpandedId(null);
-    } catch (err) { alert('Ошибка при очистке истории'); }
+    } catch { alert('Ошибка при очистке истории'); }
   };
 
   if (isLoading) return <div className="p-4 md:p-8 text-center text-gray-500 font-bold">Загрузка данных...</div>;
@@ -76,6 +76,7 @@ export default function AdminAuditsPage() {
               {audits.map((audit) => {
                 const maxScore = audit.maxScore || 0;
                 const isPerfect = audit.score === maxScore && maxScore > 0;
+                const safeChecklist = audit.checklist as any;
 
                 return (
                   <React.Fragment key={audit.id}>
@@ -84,8 +85,8 @@ export default function AdminAuditsPage() {
                       <td className="p-4 text-sm font-bold text-gray-900">{audit.location?.name || 'Удалена'}</td>
                       <td className="p-4 text-sm text-gray-500">
                         <div className="flex items-center gap-2">
-                          <span className="truncate max-w-[200px] block">{audit.checklist?.title || 'Удален'}</span>
-                          {audit.checklist?.version && <span className="bg-gray-100 border border-gray-200 text-gray-400 text-[10px] font-black px-1.5 py-0.5 rounded-md whitespace-nowrap">v.{audit.checklist.version}</span>}
+                          <span className="truncate max-w-[200px] block">{safeChecklist?.title || 'Удален'}</span>
+                          {safeChecklist?.version && <span className="bg-gray-100 border border-gray-200 text-gray-400 text-[10px] font-black px-1.5 py-0.5 rounded-md whitespace-nowrap">v.{safeChecklist.version}</span>}
                         </div>
                       </td>
                       <td className="p-4 text-sm text-gray-500">{audit.user?.login || 'Удален'}</td>
@@ -104,7 +105,8 @@ export default function AdminAuditsPage() {
                     {/* Рендерим вынесенный компонент деталей */}
                     {expandedId === audit.id && (
                       <tr>
-                        <AuditDetails audit={audit} onZoomPhoto={setZoomedPhoto} />
+                        {/* Передаем через any, чтобы обойти разницу в типах между хуком и компонентом */}
+                        <AuditDetails audit={audit as any} onZoomPhoto={setZoomedPhoto} />
                       </tr>
                     )}
                   </React.Fragment>

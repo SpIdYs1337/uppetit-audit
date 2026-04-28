@@ -1,16 +1,17 @@
 import { useState } from 'react';
+import { User, Role } from '@prisma/client';
 
 interface UserEditorProps {
-  initialData: any | null;
+  initialData: User | null;
   onClose: () => void;
-  onSave: (body: any, isUpdate: boolean) => Promise<any>;
+  onSave: (body: Partial<User>, isUpdate: boolean) => Promise<any>;
 }
 
 export function UserEditor({ initialData, onClose, onSave }: UserEditorProps) {
   const isUpdate = !!initialData;
   const [login, setLogin] = useState(initialData?.login || '');
   const [phone, setPhone] = useState(initialData?.phone || '');
-  const [role, setRole] = useState(initialData?.role || 'AUDITOR');
+  const [role, setRole] = useState<Role>(initialData?.role || 'AUDITOR');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
@@ -21,13 +22,13 @@ export function UserEditor({ initialData, onClose, onSave }: UserEditorProps) {
       const data = await onSave({ id: initialData?.id, login, phone, role }, isUpdate);
       
       // Если это создание НОВОГО пользователя, сразу показываем ссылку
-      if (!isUpdate && data.inviteToken) {
+      if (!isUpdate && data?.inviteToken) {
         const link = `${window.location.origin}/setup-password?token=${data.inviteToken}`;
         prompt('СОТРУДНИК СОЗДАН! Скопируйте эту ссылку и отправьте ему для установки пароля:', link);
       }
       
       onClose();
-    } catch (err) {
+    } catch {
       alert('Системная ошибка при сохранении');
     } finally {
       setIsSubmitting(false);
@@ -52,7 +53,7 @@ export function UserEditor({ initialData, onClose, onSave }: UserEditorProps) {
         </div>
         <div>
           <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Роль</label>
-          <select value={role} onChange={e => setRole(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 text-gray-900 font-bold outline-none focus:border-[#F25C05]">
+          <select value={role} onChange={e => setRole(e.target.value as Role)} className="w-full p-3 rounded-xl border border-gray-200 text-gray-900 font-bold outline-none focus:border-[#F25C05]">
             <option value="AUDITOR">Аудитор (Мобильное приложение)</option>
             <option value="TU">Территориальный управляющий (ТУ)</option>
             <option value="ADMIN">Администратор (Веб-панель)</option>

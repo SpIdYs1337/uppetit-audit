@@ -1,23 +1,23 @@
 import React, { useState } from 'react';
+import { Location } from '@prisma/client';
+import { EnrichedAudit } from '@/hooks/useTuLocations';
 
 interface TuLocationCardProps {
-  loc: any;
-  audits: any[];
+  loc: Location;
+  audits: EnrichedAudit[];
 }
 
 export function TuLocationCard({ loc, audits }: TuLocationCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Сортируем аудиты от новых к старым
   const locAudits = audits.filter(a => a.locationId === loc.id).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const lastAudit = locAudits[0];
 
-  const formatDate = (dateString: string) => {
-    const d = new Date(dateString);
+  const formatDate = (dateValue: Date | string) => {
+    const d = new Date(dateValue);
     return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
-  // МАГИЯ: Серверная генерация PDF вместо огромного клиентского скрипта
   const exportToPDF = (e: React.MouseEvent, auditId: string) => {
     e.stopPropagation();
     window.open(`/api/pdf/${auditId}`, '_blank');

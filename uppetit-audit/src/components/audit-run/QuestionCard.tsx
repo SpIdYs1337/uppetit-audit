@@ -1,12 +1,45 @@
 import React, { RefObject } from 'react';
 
+// Строго описываем вопрос, ответ и хук
+interface Question {
+  isCritical?: boolean;
+  zone?: string;
+  text: string;
+  score: number;
+}
+
+interface Answer {
+  isOk?: boolean;
+  comment?: string;
+  photos?: string[];
+}
+
+interface QuestionCardAuditState {
+  handlers: {
+    handleRemovePhoto: (idx: number) => void;
+    handleCommentChange: (val: string) => void;
+    handleAnswer: (isOk: boolean) => void;
+    handlePhotoCapture: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  };
+  fileInputRef: RefObject<HTMLInputElement | null>;
+  isUploadingPhoto: boolean;
+}
+
 interface QuestionCardProps {
-  currentQ: any;
-  currentAnswer: any;
-  audit: any; // Передаем объект audit из хука
+  currentQ: Question;
+  currentAnswer: Answer;
+  audit: QuestionCardAuditState;
 }
 
 export function QuestionCard({ currentQ, currentAnswer, audit }: QuestionCardProps) {
+  
+  // ИСПРАВЛЕНИЕ ОШИБКИ REF: Прячем вызов ref внутри функции
+  const handleImageClick = () => {
+    if (audit.fileInputRef.current) {
+      audit.fileInputRef.current.click();
+    }
+  };
+
   return (
     <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 relative min-h-[300px] flex flex-col">
       {currentQ.isCritical && <div className="absolute top-0 right-0 bg-red-50 text-red-500 text-[10px] font-bold px-3 py-1 rounded-bl-xl rounded-tr-3xl uppercase">Критическое</div>}
@@ -36,7 +69,9 @@ export function QuestionCard({ currentQ, currentAnswer, audit }: QuestionCardPro
         <div className="flex gap-2">
           <button onClick={() => audit.handlers.handleAnswer(false)} className={`flex-1 py-4 rounded-2xl font-bold border-2 ${currentAnswer?.isOk === false ? 'bg-red-50 border-red-500 text-red-700' : 'border-gray-100 text-gray-400'}`}>Есть проблема</button>
           <input type="file" accept="image/*" multiple ref={audit.fileInputRef} onChange={audit.handlers.handlePhotoCapture} className="hidden" />
-          <button onClick={() => audit.fileInputRef.current?.click()} disabled={audit.isUploadingPhoto} className="w-16 flex items-center justify-center bg-gray-100 rounded-2xl">
+          
+          {/* ИСПОЛЬЗУЕМ НОВУЮ ФУНКЦИЮ ЗДЕСЬ */}
+          <button onClick={handleImageClick} disabled={audit.isUploadingPhoto} className="w-16 flex items-center justify-center bg-gray-100 rounded-2xl">
             {audit.isUploadingPhoto ? <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div> : <span>📷</span>}
           </button>
         </div>

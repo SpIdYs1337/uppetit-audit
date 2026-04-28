@@ -1,9 +1,10 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { ChecklistItemType } from './ChecklistEditor';
 
 interface SortableItemProps {
-  item: any;
-  handleUpdateItem: (id: string, field: string, value: any) => void;
+  item: ChecklistItemType;
+  handleUpdateItem: (id: string, field: keyof ChecklistItemType, value: any) => void;
   handleRemoveItem: (id: string) => void;
 }
 

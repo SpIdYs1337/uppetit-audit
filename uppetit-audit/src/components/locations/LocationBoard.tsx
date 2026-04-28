@@ -1,11 +1,20 @@
 import { useDraggable, useDroppable } from '@dnd-kit/core';
-import { Location } from '@/hooks/useLocations';
+import { Location } from '@prisma/client'; // <-- ИЗМЕНИЛИ ИМПОРТ
 
-// КАРТОЧКА
-export function LocationCard({ loc, updateLocation, handleDelete, handleEdit }: any) {
+interface LocationCardProps {
+  loc: Location;
+  updateLocation: (id: string, data: Partial<Location>) => void;
+// ... дальше без изменений
+  handleDelete: (id: string, name: string) => void;
+  handleEdit: (loc: Location) => void;
+}
+
+export function LocationCard({ loc, updateLocation, handleDelete, handleEdit }: LocationCardProps) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: loc.id });
   const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 50 } : undefined;
-  const lastAudit = loc.audits?.[0];
+  
+  // Мы предполагаем, что audits могли прийти вместе с loc
+  const lastAudit = (loc as Location & { audits?: { score: number }[] }).audits?.[0];
 
   return (
     <div ref={setNodeRef} style={style} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-3 flex flex-col gap-3 group hover:shadow-md transition-shadow">
@@ -25,9 +34,19 @@ export function LocationCard({ loc, updateLocation, handleDelete, handleEdit }: 
 
       <div className="flex gap-1 text-[10px] items-center bg-gray-50 p-2 rounded-lg mt-1" onPointerDown={(e) => e.stopPropagation()}>
         <span className="text-gray-400 font-medium">Период:</span>
-        <input type="date" className="border border-gray-200 rounded px-1 py-1 w-full min-w-[90px] outline-none focus:border-[#F25C05]" value={loc.activeFrom ? loc.activeFrom.split('T')[0] : ''} onChange={(e) => updateLocation(loc.id, { activeFrom: e.target.value || null })} />
+        <input 
+          type="date" 
+          className="text-gray-900 bg-white border border-gray-200 rounded px-1 py-1 w-full min-w-[90px] outline-none focus:border-[#F25C05]" 
+          value={loc.activeFrom ? new Date(loc.activeFrom).toISOString().split('T')[0] : ''} 
+          onChange={(e) => updateLocation(loc.id, { activeFrom: e.target.value ? new Date(e.target.value) : null })} 
+        />
         <span className="text-gray-400">—</span>
-        <input type="date" className="border border-gray-200 rounded px-1 py-1 w-full min-w-[90px] outline-none focus:border-[#F25C05]" value={loc.activeTo ? loc.activeTo.split('T')[0] : ''} onChange={(e) => updateLocation(loc.id, { activeTo: e.target.value || null })} />
+        <input 
+          type="date" 
+          className="text-gray-900 bg-white border border-gray-200 rounded px-1 py-1 w-full min-w-[90px] outline-none focus:border-[#F25C05]" 
+          value={loc.activeTo ? new Date(loc.activeTo).toISOString().split('T')[0] : ''} 
+          onChange={(e) => updateLocation(loc.id, { activeTo: e.target.value ? new Date(e.target.value) : null })} 
+        />
       </div>
 
       <div className="flex justify-between items-end mt-1">
@@ -43,8 +62,16 @@ export function LocationCard({ loc, updateLocation, handleDelete, handleEdit }: 
   );
 }
 
-// КОЛОНКА
-export function LocationColumn({ id, title, locations, updateLocation, handleDelete, handleEdit }: any) {
+interface LocationColumnProps {
+  id: string;
+  title: string;
+  locations: Location[];
+  updateLocation: (id: string, data: Partial<Location>) => void;
+  handleDelete: (id: string, name: string) => void;
+  handleEdit: (loc: Location) => void;
+}
+
+export function LocationColumn({ id, title, locations, updateLocation, handleDelete, handleEdit }: LocationColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
     <div ref={setNodeRef} className={`bg-gray-50/80 border border-gray-100 p-3 sm:p-4 rounded-2xl min-w-[85vw] sm:min-w-[340px] w-[85vw] sm:w-[340px] shrink-0 flex flex-col transition-colors ${isOver ? 'bg-orange-50 border-orange-200 shadow-inner' : ''}`}>

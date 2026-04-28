@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import { fetcher } from '@/lib/fetcher';
+import { Location, Checklist, User } from '@prisma/client';
 
 export function useNewAudit() {
-  // SWR сам параллельно отправляет 3 запроса и кэширует ответы
-  const { data: locations, isLoading: locLoading } = useSWR<any[]>('/api/locations', fetcher);
-  const { data: checklists, isLoading: chkLoading } = useSWR<any[]>('/api/checklists', fetcher);
-  const { data: users, isLoading: usersLoading } = useSWR<any[]>('/api/users', fetcher);
+  const { data: locations, isLoading: locLoading } = useSWR<Location[]>('/api/locations', fetcher);
+  const { data: checklists, isLoading: chkLoading } = useSWR<Checklist[]>('/api/checklists', fetcher);
+  const { data: users, isLoading: usersLoading } = useSWR<User[]>('/api/users', fetcher);
 
   const [selectedTu, setSelectedTu] = useState('');
   const [selectedLocation, setSelectedLocation] = useState('');
@@ -14,10 +14,8 @@ export function useNewAudit() {
 
   const isLoading = locLoading || chkLoading || usersLoading;
 
-  // Формируем список ТУ
   const tus = users?.filter(u => u.role === 'TU') || [];
 
-  // Фильтрация точек: по выбранному ТУ + статус Active + проверка Дат
   const filteredLocations = locations?.filter(loc => {
     const isMyTu = loc.tuId === selectedTu;
     const isStatusActive = loc.isActive !== false;
@@ -29,7 +27,6 @@ export function useNewAudit() {
     return isMyTu && isStatusActive && isAfterStart && isBeforeEnd;
   }) || [];
 
-  // Обработчик выбора ТУ со сбросом зависимой точки
   const handleTuSelect = (id: string) => {
     setSelectedTu(id);
     setSelectedLocation(''); 

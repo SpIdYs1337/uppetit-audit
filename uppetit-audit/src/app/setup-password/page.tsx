@@ -10,10 +10,13 @@ function SetupPasswordContent() {
   const [isLoading, setIsLoading] = useState(false);
   
   const searchParams = useSearchParams();
-  const token = searchParams.get('token'); // Достаем токен из ссылки
+  const token = searchParams.get('token');
   const router = useRouter();
 
   const handleSave = async () => {
+    // Сбрасываем ошибку перед новой попыткой
+    setError('');
+
     if (password.length < 4) return setError('Пароль должен быть минимум 4 символа');
     if (!token) return setError('Неверная ссылка');
 
@@ -27,11 +30,15 @@ function SetupPasswordContent() {
 
       if (res.ok) {
         alert('Пароль успешно установлен! Теперь вы можете войти в систему.');
-        router.push('/'); // Отправляем на главную страницу входа
+        router.push('/');
       } else {
-        setError('Ссылка недействительна или пароль слишком короткий');
+        // Пытаемся достать текст конкретной ошибки от сервера
+        const data = await res.json().catch(() => ({}));
+        // Если сервер прислал свою ошибку (например, слаб пароль), покажем её. 
+        // Иначе — стандартное сообщение про ссылку.
+        setError(data.error || 'Ссылка недействительна или уже использована');
       }
-    } catch (err) {
+    } catch {
       setError('Системная ошибка');
     } finally {
       setIsLoading(false);
@@ -58,7 +65,10 @@ function SetupPasswordContent() {
             <input 
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setError(''); // Сбрасываем ошибку при вводе каждого нового символа
+              }}
               className="w-full px-4 py-3.5 rounded-xl border border-zinc-800 bg-zinc-900 text-white outline-none focus:border-[#F25C05] transition-all"
               placeholder="Минимум 4 символа"
             />
@@ -79,7 +89,6 @@ function SetupPasswordContent() {
   );
 }
 
-// ВОТ ТА САМАЯ ОБЕРТКА ДЛЯ NEXT.JS
 export default function SetupPasswordPage() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-black flex items-center justify-center text-zinc-500 text-sm">Загрузка...</div>}>

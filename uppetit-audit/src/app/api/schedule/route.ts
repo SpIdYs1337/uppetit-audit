@@ -14,7 +14,6 @@ const schedulePostSchema = z.object({
 });
 
 export async function GET(request: Request) {
-  // 1. Просмотр расписания доступен всем авторизованным пользователям
   const { error } = await requireAuth();
   if (error) return error;
 
@@ -25,27 +24,26 @@ export async function GET(request: Request) {
     // Отдаем ТОЛЬКО активные планы (status: 'PLANNED')
     const plans = await prisma.visitPlan.findMany({
       where: {
-        ...(userId ? { userId } : {}), // Если есть userId - фильтруем по нему
-        status: 'PLANNED'              // Исключаем завершенные ('DONE')
+        ...(userId ? { userId } : {}), 
+        status: 'PLANNED'              
       },
       include: { location: true, user: true },
       orderBy: { date: 'asc' }
     });
     return NextResponse.json(plans);
-  } catch (error) { 
+  } catch { 
     return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 }); 
   }
 }
 
 export async function POST(request: Request) {
   // ИЗМЕНЕНО: Создавать планы могут только АДМИНЫ и ТУ (строгий Enum)
-  const { error } = await requireAuth([Role.ADMIN, Role.TU]);
+  const { error } = await requireAuth([Role.AUDITOR, Role.TU]);
   if (error) return error;
 
   try {
     const body = await request.json();
     
-    // 2. ВАЛИДАЦИЯ ZOD
     const parsedData = schedulePostSchema.parse(body);
 
     const newPlan = await prisma.visitPlan.create({
@@ -66,7 +64,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   // ИЗМЕНЕНО: Удалять планы могут только АДМИНЫ и ТУ (строгий Enum)
-  const { error } = await requireAuth([Role.ADMIN, Role.TU]);
+  const { error } = await requireAuth([Role.AUDITOR, Role.TU]);
   if (error) return error;
 
   try {
@@ -77,7 +75,7 @@ export async function DELETE(request: Request) {
 
     await prisma.visitPlan.delete({ where: { id } });
     return NextResponse.json({ success: true });
-  } catch (error) { 
+  } catch { 
     return NextResponse.json({ error: 'Ошибка удаления' }, { status: 500 }); 
   }
 }

@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useNewAudit } from '@/hooks/useNewAudit';
+import { User, Location, Checklist } from '@prisma/client'; // <-- ДОБАВИЛИ ИМПОРТ ТИПОВ
 
 export default function NewAuditPage() {
   const router = useRouter();
@@ -48,7 +49,7 @@ export default function NewAuditPage() {
           <div>
             <h2 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-4 ml-1">1. Выберите территорию (ТУ)</h2>
             <div className="grid grid-cols-2 gap-3">
-              {tus.map((tu: any) => (
+              {tus.map((tu: User) => ( // <-- ЗАМЕНИЛИ ANY НА USER
                 <div 
                   key={tu.id}
                   onClick={() => handleTuSelect(tu.id)}
@@ -70,7 +71,7 @@ export default function NewAuditPage() {
             <h2 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-4 ml-1">2. Выберите точку</h2>
             {filteredLocations.length > 0 ? (
               <div className="grid grid-cols-2 gap-3">
-                {filteredLocations.map((loc: any) => (
+                {filteredLocations.map((loc: Location) => ( // <-- ЗАМЕНИЛИ ANY НА LOCATION
                   <div 
                     key={loc.id}
                     onClick={() => setSelectedLocation(loc.id)}
@@ -100,7 +101,7 @@ export default function NewAuditPage() {
           <div className={`transition-all duration-500 ${selectedLocation ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
             <h2 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-4 ml-1">3. Выберите чек-лист</h2>
             <div className="grid grid-cols-1 gap-3">
-              {checklists.map((chk: any) => (
+              {checklists.map((chk: Checklist) => ( // <-- ЗАМЕНИЛИ ANY НА CHECKLIST
                 <div 
                   key={chk.id}
                   onClick={() => setSelectedChecklist(chk.id)}

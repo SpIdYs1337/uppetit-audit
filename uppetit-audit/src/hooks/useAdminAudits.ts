@@ -1,15 +1,20 @@
 import useSWR from 'swr';
 import { fetcher } from '@/lib/fetcher';
+import { Audit, Location, User, Checklist } from '@prisma/client';
+
+export type EnrichedAudit = Audit & {
+  location?: Location | null;
+  user?: User | null;
+  checklist?: Checklist | null;
+};
 
 export function useAdminAudits() {
-  // SWR автоматически кеширует данные и обновляет их при фокусе окна
-  const { data: audits, error, isLoading, mutate } = useSWR<any[]>('/api/audits', fetcher);
+  const { data: audits, error, isLoading, mutate } = useSWR<EnrichedAudit[]>('/api/audits', fetcher);
 
   const deleteAudit = async (id: string) => {
     const res = await fetch(`/api/audits?id=${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Ошибка сервера');
     
-    // Оптимистичное обновление: удаляем локально до ответа сервера
     mutate(audits?.filter(a => a.id !== id), false);
   };
 
@@ -17,7 +22,6 @@ export function useAdminAudits() {
     const res = await fetch(`/api/audits?clearAll=true`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Ошибка сервера');
     
-    // Мгновенно очищаем таблицу на экране
     mutate([], false);
   };
 

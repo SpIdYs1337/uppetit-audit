@@ -1,16 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import { useChecklists } from '@/hooks/useChecklists';
+import { useChecklists, ExtendedChecklist } from '@/hooks/useChecklists';
 import { ChecklistEditor } from '@/components/checklists/ChecklistEditor';
+
+// Описываем структуру распарсенного вопроса
+interface ParsedItem {
+  score?: number | string;
+  zone?: string;
+}
 
 export default function AdminChecklistsPage() {
   const { checklists, isLoading, saveChecklist, deleteChecklist } = useChecklists();
   
-  const [editingChecklist, setEditingChecklist] = useState<any | null>(null);
+  const [editingChecklist, setEditingChecklist] = useState<ExtendedChecklist | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
 
-  const openEditor = (checklist: any = null) => {
+  const openEditor = (checklist: ExtendedChecklist | null = null) => {
     setEditingChecklist(checklist);
     setIsEditorOpen(true);
   };
@@ -19,7 +25,7 @@ export default function AdminChecklistsPage() {
     if (!confirm('Точно удалить этот чек-лист?')) return;
     try {
       await deleteChecklist(id);
-    } catch (err) {
+    } catch {
       alert('Ошибка при удалении');
     }
   };
@@ -34,7 +40,7 @@ export default function AdminChecklistsPage() {
           <p className="text-gray-500 mt-2 text-sm md:text-base">Управление списками проверок и их зонами</p>
         </div>
         {!isEditorOpen && (
-          <button onClick={() => openEditor()} className="w-full md:w-auto bg-black text-white px-6 py-3 rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-lg shadow-black/10">
+          <button onClick={() => openEditor(null)} className="w-full md:w-auto bg-black text-white px-6 py-3 rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-lg shadow-black/10">
             + Создать чек-лист
           </button>
         )}
@@ -49,12 +55,12 @@ export default function AdminChecklistsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {checklists.map(checklist => {
-            const itemsList = typeof checklist.items === 'string' ? JSON.parse(checklist.items) : checklist.items;
-            const maxScore = itemsList.reduce((sum: number, i: any) => sum + (Number(i.score) || 0), 0);
-            const zones = [...new Set(itemsList.map((i: any) => i.zone || 'Основной раздел'))];
+            const itemsList: ParsedItem[] = typeof checklist.items === 'string' ? JSON.parse(checklist.items) : (checklist.items || []);
+            const maxScore = itemsList.reduce((sum: number, i: ParsedItem) => sum + (Number(i.score) || 0), 0);
+            const zones = Array.from(new Set(itemsList.map((i: ParsedItem) => i.zone || 'Основной раздел')));
             
-            let rolesList = ['AUDITOR', 'TU'];
-            try { rolesList = typeof checklist.allowedRoles === 'string' ? JSON.parse(checklist.allowedRoles) : checklist.allowedRoles; } catch(e){}
+            let rolesList: string[] = ['AUDITOR', 'TU'];
+            try { rolesList = typeof checklist.allowedRoles === 'string' ? JSON.parse(checklist.allowedRoles) : (checklist.allowedRoles || []); } catch{}
             const roleLabels: Record<string, string> = { AUDITOR: 'Аудиторы', TU: 'ТУ', ADMIN: 'Админы' };
 
             return (
@@ -78,7 +84,7 @@ export default function AdminChecklistsPage() {
                 </div>
                 
                 <div className="mb-6 flex flex-wrap gap-2">
-                  {zones.map((z: any) => <span key={z} className="text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-600 px-2 py-1 rounded-md">{z}</span>)}
+                  {zones.map((z: string) => <span key={z} className="text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-600 px-2 py-1 rounded-md">{z}</span>)}
                 </div>
 
                 <div className="mt-auto flex gap-2 pt-4 border-t border-gray-50">

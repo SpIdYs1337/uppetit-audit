@@ -1,15 +1,11 @@
 import useSWR from 'swr';
 import { fetcher } from '@/lib/fetcher';
+import { Location, User, Audit } from '@prisma/client';
 
-export interface Audit { id: string; date: string; score: number; maxScore?: number | null; checklist: { title: string } }
-export interface Location {
-  id: string; name: string; address: string | null; isActive: boolean;
-  activeFrom: string | null; activeTo: string | null; tuId: string | null; audits?: Audit[];
-}
-export interface User { id: string; login: string; role: string; }
+export type EnrichedLocation = Location & { audits?: Audit[] };
 
 export function useLocations() {
-  const { data: locations, mutate, isLoading: locLoading } = useSWR<Location[]>('/api/locations', fetcher);
+  const { data: locations, mutate, isLoading: locLoading } = useSWR<EnrichedLocation[]>('/api/locations', fetcher);
   const { data: users, isLoading: usersLoading } = useSWR<User[]>('/api/users', fetcher);
 
   const tus = users?.filter(u => u.role === 'TU') || [];
@@ -21,14 +17,12 @@ export function useLocations() {
       body: JSON.stringify(data)
     });
     if (!res.ok) throw new Error('Ошибка при создании');
-    mutate(); // Обновляем кэш
+    mutate(); 
   };
 
   const updateLocation = async (id: string, data: Partial<Location>) => {
-    // Оптимистичное обновление: сразу меняем UI
-    mutate(locations?.map(loc => loc.id === id ? { ...loc, ...data } : loc), false);
+    mutate(locations?.map(loc => loc.id === id ? { ...loc, ...data } as EnrichedLocation : loc), false);
     
-    // Отправляем на наш новый PATCH-роут
     const res = await fetch(`/api/locations/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -36,7 +30,7 @@ export function useLocations() {
     });
     
     if (!res.ok) {
-      mutate(); // Если ошибка - откатываем UI обратно
+      mutate(); 
       throw new Error('Ошибка обновления');
     }
     mutate(); 

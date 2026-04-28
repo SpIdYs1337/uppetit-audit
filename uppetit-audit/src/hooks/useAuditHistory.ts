@@ -1,6 +1,7 @@
 import useSWR from 'swr';
 import { useSession } from 'next-auth/react';
 import { fetcher } from '@/lib/fetcher';
+import { EnrichedAudit } from '@/components/audits/AuditCard'; // <-- Берем единый тип отсюда!
 
 export function useAuditHistory() {
   const sessionContext = useSession();
@@ -10,7 +11,8 @@ export function useAuditHistory() {
   const status = sessionContext?.status;
   const userId = session?.user?.id;
 
-  const { data: audits, error, isLoading } = useSWR<any[]>(
+  // Передаем наш единый тип в SWR
+  const { data: audits, error, isLoading } = useSWR<EnrichedAudit[]>(
     userId ? '/api/audits' : null, 
     fetcher
   );

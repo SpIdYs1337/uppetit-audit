@@ -30,7 +30,6 @@ export async function GET() {
   try {
     const users = await prisma.user.findMany({ orderBy: { login: 'asc' } });
     
-    // ИЗМЕНЕНО: Сравниваем со строгим Role.ADMIN
     const isAdmin = (session.user as any)?.role === Role.ADMIN;
 
     const safeUsers = users.map(u => ({
@@ -43,13 +42,12 @@ export async function GET() {
     }));
 
     return NextResponse.json(safeUsers);
-  } catch (error) { 
+  } catch { 
     return NextResponse.json({ error: 'Ошибка' }, { status: 500 }); 
   }
 }
 
 export async function POST(request: Request) {
-  // ИЗМЕНЕНО: Защита через строгий Enum
   const { error } = await requireAuth([Role.ADMIN]);
   if (error) return error;
 
@@ -123,7 +121,7 @@ export async function DELETE(request: Request) {
 
     await prisma.user.delete({ where: { id } });
     return NextResponse.json({ success: true });
-  } catch (error) { 
+  } catch { 
     return NextResponse.json({ error: 'Ошибка удаления' }, { status: 500 }); 
   }
 }

@@ -1,12 +1,13 @@
 import useSWR from 'swr';
 import { fetcher } from '@/lib/fetcher';
+import { Checklist } from '@prisma/client';
+
+export type ExtendedChecklist = Checklist & { items?: string | ExtendedChecklist[] };
 
 export function useChecklists() {
-  // SWR автоматически фетчит данные, кэширует их и перехватывает ошибки
-  const { data: checklists, error, isLoading, mutate } = useSWR<any[]>('/api/checklists', fetcher);
+  const { data: checklists, error, isLoading, mutate } = useSWR<ExtendedChecklist[]>('/api/checklists', fetcher);
 
-  // Сохранение (создание или обновление)
-  const saveChecklist = async (body: any, isUpdate: boolean) => {
+  const saveChecklist = async (body: Partial<ExtendedChecklist>, isUpdate: boolean) => {
     const res = await fetch('/api/checklists', {
       method: isUpdate ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -15,17 +16,14 @@ export function useChecklists() {
     
     if (!res.ok) throw new Error('Ошибка при сохранении');
     
-    // Мутируем кэш SWR: данные обновятся на экране мгновенно, без перезагрузки страницы!
     mutate(); 
     return res.json();
   };
 
-  // Удаление
   const deleteChecklist = async (id: string) => {
     const res = await fetch(`/api/checklists?id=${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Ошибка при удалении');
     
-    // Оптимистичное обновление: сразу убираем из списка, не дожидаясь ответа сервера
     mutate(checklists?.filter(c => c.id !== id), false);
   };
 
@@ -35,6 +33,6 @@ export function useChecklists() {
     isError: !!error,
     saveChecklist,
     deleteChecklist,
-    mutate // на всякий случай отдаем наружу
+    mutate
   };
 }

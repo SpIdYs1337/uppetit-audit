@@ -1,7 +1,16 @@
 import React from 'react';
 
+// Описываем, что именно мы ждем от хука
+interface FinalStepAuditState {
+  employees: string[];
+  handleEmployeeChange: (idx: number, value: string) => void;
+  setEmployees: React.Dispatch<React.SetStateAction<string[]>>;
+  generalComment: string;
+  setGeneralComment: (value: string) => void;
+}
+
 interface FinalStepProps {
-  audit: any; // Передаем объект audit из хука
+  audit: FinalStepAuditState;
 }
 
 export function FinalStep({ audit }: FinalStepProps) {

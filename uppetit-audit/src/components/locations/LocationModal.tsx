@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Location } from '@/hooks/useLocations';
+import { Location } from '@prisma/client'; 
 
 interface LocationModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialData: Location | null;
-  onSave: (data: any, isEdit: boolean) => Promise<void>;
+  onSave: (data: Partial<Location>, isEdit: boolean) => Promise<void>;
 }
 
 export function LocationModal({ isOpen, onClose, initialData, onSave }: LocationModalProps) {
@@ -31,8 +31,8 @@ export function LocationModal({ isOpen, onClose, initialData, onSave }: Location
     try {
       await onSave({ name, address: address || null }, !!initialData);
       onClose();
-    } catch (err: any) {
-      setError(err.message);
+    } catch {
+      setError('Ошибка при сохранении');
     } finally {
       setIsLoading(false);
     }
@@ -47,11 +47,24 @@ export function LocationModal({ isOpen, onClose, initialData, onSave }: Location
         <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-4">
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Название</label>
-            <input type="text" required value={name} onChange={(e) => setName(e.target.value)} className="w-full px-4 py-3 rounded-xl border bg-gray-50 focus:bg-white outline-none focus:border-[#F25C05] font-medium" placeholder="Магазин на Ленина" />
+            <input 
+              type="text" 
+              required 
+              value={name} 
+              onChange={(e) => setName(e.target.value)} 
+              className="w-full px-4 py-3 rounded-xl border bg-gray-50 focus:bg-white outline-none focus:border-[#F25C05] font-medium text-gray-900" 
+              placeholder="Магазин на Ленина" 
+            />
           </div>
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Точный адрес (необязательно)</label>
-            <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} className="w-full px-4 py-3 rounded-xl border bg-gray-50 focus:bg-white outline-none focus:border-[#F25C05] font-medium" placeholder="ул. Ленина, д. 15" />
+            <input 
+              type="text" 
+              value={address} 
+              onChange={(e) => setAddress(e.target.value)} 
+              className="w-full px-4 py-3 rounded-xl border bg-gray-50 focus:bg-white outline-none focus:border-[#F25C05] font-medium text-gray-900" 
+              placeholder="ул. Ленина, д. 15" 
+            />
           </div>
           {error && <p className="text-red-500 text-sm font-medium bg-red-50 p-3 rounded-lg">{error}</p>}
           <div className="pt-4 flex gap-3">

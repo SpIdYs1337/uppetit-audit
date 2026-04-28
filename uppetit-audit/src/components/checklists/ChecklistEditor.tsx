@@ -2,9 +2,21 @@ import { useState } from 'react';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { SortableChecklistItem } from './SortableChecklistItem';
+import { Checklist } from '@prisma/client';
+
+export interface ChecklistItemType {
+  id: string;
+  zone: string;
+  text: string;
+  score: number;
+  isCritical: boolean;
+}
+export type ExtendedChecklist = Checklist & {
+  items?: any;
+};
 
 interface ChecklistEditorProps {
-  initialData: any | null;
+  initialData: ExtendedChecklist | null;
   onClose: () => void;
   onSave: (body: any, isUpdate: boolean) => Promise<void>;
 }
@@ -18,15 +30,15 @@ export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEdito
   const [allowedRoles, setAllowedRoles] = useState<string[]>(() => {
     if (!initialData?.allowedRoles) return ['AUDITOR', 'TU'];
     try { return typeof initialData.allowedRoles === 'string' ? JSON.parse(initialData.allowedRoles) : initialData.allowedRoles; } 
-    catch(e) { return ['AUDITOR', 'TU']; }
+    catch { return ['AUDITOR', 'TU']; }
   });
 
-  const [items, setItems] = useState<any[]>(() => {
+  const [items, setItems] = useState<ChecklistItemType[]>(() => {
     if (!initialData?.items) return [{ id: Math.random().toString(36).substring(2, 9), zone: 'Основной раздел', text: '', score: 0, isCritical: false }];
     try {
-      const parsedItems = typeof initialData.items === 'string' ? JSON.parse(initialData.items) : initialData.items;
+      const parsedItems = typeof initialData.items === 'string' ? JSON.parse(initialData.items as string) : initialData.items;
       return parsedItems.map((item: any) => ({ ...item, id: item.id || Math.random().toString(36).substring(2, 9) }));
-    } catch (e) { return []; }
+    } catch { return []; }
   });
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -71,7 +83,7 @@ export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEdito
     try {
       await onSave(body, isUpdate);
       onClose();
-    } catch (err) {
+    } catch {
       alert('Ошибка при сохранении');
     }
   };

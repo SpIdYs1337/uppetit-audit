@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { DndContext, DragEndEvent, MouseSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { useLocations, Location } from '@/hooks/useLocations';
+import { useLocations } from '@/hooks/useLocations';
 import { LocationModal } from '@/components/locations/LocationModal';
 import { LocationColumn } from '@/components/locations/LocationBoard';
+import { Location } from '@prisma/client'; 
 
 export default function LocationsPage() {
   const { locations, tus, isLoading, createLocation, updateLocation, deleteLocation } = useLocations();
@@ -17,9 +18,15 @@ export default function LocationsPage() {
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
   );
 
-  const handleSaveModal = async (data: any, isEdit: boolean) => {
-    if (isEdit && editingLocation) await updateLocation(editingLocation.id, data);
-    else await createLocation(data);
+    const handleSaveModal = async (data: Partial<Location>, isEdit: boolean) => {    if (isEdit && editingLocation) {
+      await updateLocation(editingLocation.id, data);
+    } else {
+      // Гарантируем TypeScript'у, что name точно будет строкой
+      await createLocation({ 
+        name: data.name || 'Новая точка', 
+        address: data.address || null 
+      });
+    }
   };
 
   const handleDelete = async (id: string, name: string) => {

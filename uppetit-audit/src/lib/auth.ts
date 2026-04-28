@@ -46,39 +46,39 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             const isPasswordValid = await compare(password, user.passwordHash);
 
             if (isPasswordValid) {
-              return {
-                id: user.id,
-                name: user.login,
-                role: user.role, 
-              } as any;
-            }
+            return {
+              id: user.id,
+              name: user.login,
+              role: user.role, 
+            }; 
           }
-          
-          return null;
-        } catch (error) {
-          console.error("Ошибка при авторизации:", error);
-          return null;
         }
+        
+        return null;
+      } catch (error) {
+        console.error("Ошибка при авторизации:", error);
+        return null;
       }
-    })
-  ],
-  callbacks: {
-    async jwt({ token, user }: any) {
-      if (user) {
-        token.id = user.id;
-        token.role = user.role;
-      }
-      return token;
-    },
-    async session({ session, token }: any) {
-      if (session.user) {
-        (session.user as any).id = token.id;
-        (session.user as any).role = token.role;
-      }
-      return session;
     }
+  })
+],
+callbacks: {
+  async jwt({ token, user }) { 
+    if (user) {
+      token.id = user.id;
+      token.role = user.role;
+    }
+    return token;
   },
-  session: {
+  async session({ session, token }) { 
+    if (session.user) {
+      session.user.id = token.id;
+      session.user.role = token.role;
+    }
+    return session;
+  }
+},
+session: {
     strategy: "jwt",
   },
   pages: {

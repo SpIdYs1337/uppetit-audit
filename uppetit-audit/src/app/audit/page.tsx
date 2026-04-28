@@ -7,7 +7,10 @@ import Image from 'next/image';
 import PushSubscribe from '@/components/PushSubscribe';
 
 export default function AuditDashboard() {
-  const [hasDraft, setHasDraft] = useState(false);
+  const [hasDraft, setHasDraft] = useState(() => {
+    if (typeof window !== 'undefined') return !!localStorage.getItem('last_active_audit');
+    return false;
+  });
   const [userRole, setUserRole] = useState<string | null>(null); // Состояние для роли
 
   useEffect(() => {

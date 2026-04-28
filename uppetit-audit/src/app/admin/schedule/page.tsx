@@ -1,9 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { VisitPlan, Location, User } from '@prisma/client';
+
+type EnrichedPlan = VisitPlan & { 
+  location?: Location | null; 
+  user?: User | null; 
+};
 
 export default function AdminSchedulePage() {
-  const [plans, setPlans] = useState<any[]>([]);
+  const [plans, setPlans] = useState<EnrichedPlan[]>([]);
 
   useEffect(() => {
     fetch('/api/schedule').then(res => res.json()).then(setPlans);

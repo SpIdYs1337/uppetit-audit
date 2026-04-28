@@ -1,7 +1,8 @@
 import React from 'react';
+import { EnrichedAudit, ParsedAnswer } from './AuditCard';
 
 interface AuditDetailsProps {
-  audit: any;
+  audit: EnrichedAudit;
   onZoomPhoto: (url: string) => void;
 }
 
@@ -45,7 +46,7 @@ export function AuditDetails({ audit, onZoomPhoto }: AuditDetailsProps) {
           <div>
             <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2">Общий комментарий</h4>
             <p className="text-sm text-gray-700 bg-gray-50 p-4 rounded-xl border border-gray-100 italic">
-              "{audit.generalComment}"
+              &quot{audit.generalComment}&quot
             </p>
           </div>
         )}
@@ -57,7 +58,7 @@ export function AuditDetails({ audit, onZoomPhoto }: AuditDetailsProps) {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {audit.answers.map((ans: any) => {
+          {audit.answers.map((ans: ParsedAnswer) => {
             const photosToRender = ans.photos && ans.photos.length > 0 ? ans.photos : (ans.photoBase64 ? [ans.photoBase64] : []);
             
             return (

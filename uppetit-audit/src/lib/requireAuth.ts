@@ -13,8 +13,6 @@ export async function requireAuth(allowedRoles?: Role[]) {
   }
 
   if (allowedRoles && allowedRoles.length > 0) {
-    // ИЗМЕНЕНО: Больше никаких (session.user as any)! 
-    // TypeScript теперь сам видит session.user.role и знает, что это тип Role
     const userRole = session.user.role;
     
     if (!allowedRoles.includes(userRole)) {

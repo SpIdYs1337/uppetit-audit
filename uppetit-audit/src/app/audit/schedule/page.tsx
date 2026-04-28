@@ -23,7 +23,7 @@ export default function AuditorSchedulePage() {
     try {
       await addPlan(selectedLoc, selectedDate);
       setSelectedLoc(''); // Сбрасываем только точку после успешного добавления
-    } catch (err) {
+    } catch {
       alert('Ошибка при сохранении плана');
     }
   };
@@ -32,7 +32,7 @@ export default function AuditorSchedulePage() {
     if (!confirm('Отменить эту проверку?')) return;
     try {
       await deletePlan(id);
-    } catch (err) {
+    } catch {
       alert('Ошибка при удалении плана');
     }
   };

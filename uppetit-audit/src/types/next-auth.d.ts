@@ -1,6 +1,4 @@
 import { Role } from '@prisma/client';
-import NextAuth, { DefaultSession, DefaultUser } from 'next-auth';
-import { JWT } from 'next-auth/jwt';
 
 // Расширяем стандартные типы сессии и пользователя
 declare module 'next-auth' {

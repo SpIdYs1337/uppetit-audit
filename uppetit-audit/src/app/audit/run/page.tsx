@@ -9,12 +9,12 @@ import { FinalStep } from '@/components/audit-run/FinalStep';
 function AuditRunForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [locId, setLocId] = useState<string | null>(null);
-  const [chkId, setChkId] = useState<string | null>(null);
+  const qLoc = searchParams.get('location');
+    const qChk = searchParams.get('checklist');
+  const [locId, setLocId] = useState(qLoc || '');
+  const [chkId, setChkId] = useState(qChk || '');
 
   useEffect(() => {
-    const qLoc = searchParams.get('location');
-    const qChk = searchParams.get('checklist');
     if (qLoc && qChk) {
       setLocId(qLoc); setChkId(qChk);
       localStorage.setItem('last_active_audit', JSON.stringify({ loc: qLoc, chk: qChk }));

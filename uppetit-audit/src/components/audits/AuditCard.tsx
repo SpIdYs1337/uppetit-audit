@@ -1,7 +1,27 @@
 import React, { useState } from 'react';
+import { Audit, Location, Checklist } from '@prisma/client';
+
+// Описываем структуру ответа, которая хранится в JSON (или как отдельная таблица)
+export interface ParsedAnswer {
+  id: string;
+  zone?: string;
+  question: string;
+  isOk: boolean;
+  penalty: number;
+  comment?: string;
+  photos?: string[];
+  photoBase64?: string;
+}
+
+// Описываем аудит со всеми подтянутыми связями
+export interface EnrichedAudit extends Audit {
+  location?: Location | null;
+  checklist?: (Checklist & { version?: number | string }) | null;
+  answers: ParsedAnswer[];
+}
 
 interface AuditCardProps {
-  audit: any;
+  audit: EnrichedAudit;
   onZoomPhoto: (url: string) => void;
 }
 
@@ -10,8 +30,9 @@ export function AuditCard({ audit, onZoomPhoto }: AuditCardProps) {
 
   const maxScore = audit.maxScore || 0;
   
-  const formatDate = (dateString: string) => {
-    const d = new Date(dateString);
+  // Приводим дату к строке, так как из Prisma она может прийти объектом Date
+  const formatDate = (dateValue: Date | string) => {
+    const d = new Date(dateValue);
     return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
@@ -72,7 +93,7 @@ export function AuditCard({ audit, onZoomPhoto }: AuditCardProps) {
               <div>
                 <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2">Общий комментарий</h4>
                 <p className="text-xs sm:text-sm text-gray-700 bg-gray-50 p-3 sm:p-4 rounded-xl border border-gray-100 italic">
-                  "{audit.generalComment}"
+                  &quot{audit.generalComment}&quot
                 </p>
               </div>
             )}
@@ -82,7 +103,7 @@ export function AuditCard({ audit, onZoomPhoto }: AuditCardProps) {
             <div className="text-sm text-orange-600 font-bold bg-orange-50 p-3 rounded-xl border border-orange-100">Детализация не сохранилась.</div>
           ) : (
             <div className="space-y-3 sm:space-y-4">
-              {audit.answers.map((ans: any) => {
+              {audit.answers.map((ans: ParsedAnswer) => {
                 const photosToRender = ans.photos && ans.photos.length > 0 ? ans.photos : (ans.photoBase64 ? [ans.photoBase64] : []);
                 
                 return (

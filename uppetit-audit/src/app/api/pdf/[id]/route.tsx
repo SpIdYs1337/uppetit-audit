@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/requireAuth';
 import { Document, Page, Text, View, StyleSheet, Font, renderToStream, Image } from '@react-pdf/renderer';
+import { Audit, User, Location, ChecklistVersion, Checklist, ChecklistItem, Answer } from '@prisma/client';
+import React from 'react';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,8 +43,19 @@ const styles = StyleSheet.create({
   photo: { width: 120, height: 120, objectFit: 'cover', borderRadius: 4 }
 });
 
+// Составной тип для Аудита со всеми вложенными связями
+type EnrichedAudit = Audit & {
+  user: User | null;
+  location: Location | null;
+  checklistVersion: (ChecklistVersion & {
+    checklist: Checklist;
+    items: ChecklistItem[];
+  }) | null;
+  answers: Answer[];
+};
+
 // REACT-КОМПОНЕНТ ДЛЯ ВЕРСТКИ PDF
-const AuditPDF = ({ audit, maxScore }: { audit: any, maxScore: number }) => {
+const AuditPDF = ({ audit, maxScore }: { audit: EnrichedAudit, maxScore: number }) => {
   const date = new Date(audit.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   const employees = audit.shiftEmployees?.length ? audit.shiftEmployees.join(', ') : 'Не указаны';
 
@@ -60,13 +73,12 @@ const AuditPDF = ({ audit, maxScore }: { audit: any, maxScore: number }) => {
 
         <View style={styles.scoreBlock}>
           <Text style={styles.scoreText}>Итоговая оценка: {audit.score} / {maxScore} баллов</Text>
-          {/* ИСПРАВЛЕНИЕ: Заменили курсив на серый цвет */}
           {audit.generalComment && <Text style={{ marginTop: 10, color: '#555' }}>Комментарий: {audit.generalComment}</Text>}
         </View>
 
         <Text style={styles.sectionTitle}>Детализация ответов</Text>
 
-        {audit.answers.map((ans: any, idx: number) => (
+        {audit.answers.map((ans: Answer, idx: number) => (
           <View key={idx} style={styles.answerItem} wrap={false}>
             <Text style={styles.zone}>{ans.zone || 'ОСНОВНОЙ РАЗДЕЛ'}</Text>
             <Text style={styles.question}>{ans.question}</Text>
@@ -95,7 +107,7 @@ const AuditPDF = ({ audit, maxScore }: { audit: any, maxScore: number }) => {
 };
 
 // API ОБРАБОТЧИК
-export async function GET(req: Request, context: any) {
+export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   const { error } = await requireAuth();
   if (error) return error;
 
@@ -124,12 +136,12 @@ export async function GET(req: Request, context: any) {
 
     if (!audit) return NextResponse.json({ error: 'Аудит не найден' }, { status: 404 });
 
-    const maxScore = audit.checklistVersion?.items.reduce((sum: number, item: any) => sum + item.score, 0) || 0;
+    const maxScore = audit.checklistVersion?.items.reduce((sum: number, item: ChecklistItem) => sum + item.score, 0) || 0;
 
-    const stream = await renderToStream(<AuditPDF audit={audit} maxScore={maxScore} />);
+    const stream = await renderToStream(<AuditPDF audit={audit as EnrichedAudit} maxScore={maxScore} />);
     
     const chunks: Buffer[] = [];
-    for await (const chunk of stream) {
+    for await (const chunk of stream as any) { // ReadableStream из renderToStream сложно типизировать без доп. библиотек
       chunks.push(Buffer.from(chunk));
     }
     const pdfBuffer = Buffer.concat(chunks);
@@ -142,8 +154,8 @@ export async function GET(req: Request, context: any) {
       },
     });
 
-  } catch (err) {
-    console.error('Ошибка генерации PDF:', err);
+  } catch (error: unknown) {
+    console.error('Ошибка генерации PDF:', error);
     return NextResponse.json({ error: 'Ошибка при создании файла' }, { status: 500 });
   }
 }

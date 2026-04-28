@@ -4,25 +4,36 @@ import { getSession } from 'next-auth/react';
 import useSWR from 'swr';
 import { fetcher } from '@/lib/fetcher';
 import { uploadAuditPhoto } from '@/lib/uploadPhoto';
+import { Location, Checklist } from '@prisma/client';
 
 interface AnswerData {
   isOk: boolean;
   photos?: string[];
   comment?: string;
+  photoBase64?: string;
+}
+
+export type ExtendedChecklist = Checklist & { items?: string | ChecklistItemType[] };
+
+export interface ChecklistItemType {
+  id: string;
+  zone?: string;
+  text: string;
+  score: number;
+  isCritical?: boolean;
+  order?: number;
 }
 
 export function useAuditRun(actualLocationId: string | null, actualChecklistId: string | null) {
   const router = useRouter();
 
-  // 1. МАГИЯ SWR: Кэширование, дедупликация и авто-обновление из коробки
-  const { data: locations, isLoading: locLoading } = useSWR('/api/locations', fetcher);
-  const { data: checklists, isLoading: chkLoading } = useSWR('/api/checklists', fetcher);
+  const { data: locations, isLoading: locLoading } = useSWR<Location[]>('/api/locations', fetcher);
+  const { data: checklists, isLoading: chkLoading } = useSWR<ExtendedChecklist[]>('/api/checklists', fetcher);
 
-  const location = locations?.find((l: any) => l.id === actualLocationId);
-  const checklist = checklists?.find((c: any) => c.id === actualChecklistId);
+  const location = locations?.find((l) => l.id === actualLocationId);
+  const checklist = checklists?.find((c) => c.id === actualChecklistId);
 
-  // 2. СТЕЙТЫ
-  const [questions, setQuestions] = useState<any[]>([]);
+  const [questions, setQuestions] = useState<ChecklistItemType[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, AnswerData>>({});
   
@@ -36,12 +47,11 @@ export function useAuditRun(actualLocationId: string | null, actualChecklistId: 
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 3. ПОДГОТОВКА ВОПРОСОВ И ЧЕРНОВИКОВ
   useEffect(() => {
     if (!checklist?.items) return;
 
-    let parsedQuestions = typeof checklist.items === 'string' ? JSON.parse(checklist.items) : checklist.items;
-    parsedQuestions.sort((a: any, b: any) => {
+    const parsedQuestions: ChecklistItemType[] = typeof checklist.items === 'string' ? JSON.parse(checklist.items) : checklist.items;
+    parsedQuestions.sort((a, b) => {
       if (typeof a.order === 'number' && typeof b.order === 'number') return a.order - b.order;
       const zoneA = a.zone || 'Основной раздел';
       const zoneB = b.zone || 'Основной раздел';
@@ -76,13 +86,12 @@ export function useAuditRun(actualLocationId: string | null, actualChecklistId: 
         setAnswers(parsedAnswers);
 
         const answeredKeys = Object.keys(parsedAnswers).filter(k => parsedAnswers[Number(k)]?.isOk !== undefined).map(Number);
-        const firstUnanswered = parsedQuestions.findIndex((_: any, idx: number) => !answeredKeys.includes(idx));
+        const firstUnanswered = parsedQuestions.findIndex((_, idx) => !answeredKeys.includes(idx));
         setCurrentIndex(firstUnanswered !== -1 ? firstUnanswered : parsedQuestions.length - 1);
       }
     }
   }, [checklist, actualLocationId, actualChecklistId]);
 
-  // 4. АВТОСОХРАНЕНИЕ
   useEffect(() => {
     if (actualLocationId && actualChecklistId && Object.keys(answers).length > 0) {
       localStorage.setItem(`audit_draft_${actualLocationId}_${actualChecklistId}`, JSON.stringify(answers));
@@ -94,7 +103,6 @@ export function useAuditRun(actualLocationId: string | null, actualChecklistId: 
     }
   }, [answers, employees, generalComment, actualLocationId, actualChecklistId]);
 
-  // 5. ОБРАБОТЧИКИ
   const handleCancel = () => {
     if (window.confirm('Прервать аудит? Все несохраненные фото будут удалены.')) {
       if (actualLocationId && actualChecklistId) {
@@ -141,7 +149,7 @@ export function useAuditRun(actualLocationId: string | null, actualChecklistId: 
       } else {
         alert('Не удалось загрузить фотографии.');
       }
-    } catch (error) {
+    } catch {
       alert('Произошла ошибка при загрузке фото.');
     } finally {
       setIsUploadingPhoto(false);
@@ -169,7 +177,7 @@ export function useAuditRun(actualLocationId: string | null, actualChecklistId: 
     setIsSubmitting(true);
     try {
       const session = await getSession();
-      const userId = (session?.user as any)?.id;
+      const userId = session?.user?.id;
       if (!userId) throw new Error('Ошибка авторизации');
 
       const maxScore = questions.reduce((sum, q) => sum + (Number(q.score) || 0), 0);
@@ -211,8 +219,8 @@ export function useAuditRun(actualLocationId: string | null, actualChecklistId: 
 
       alert('Аудит успешно завершен!');
       router.push('/audit');
-    } catch (err: any) {
-      alert(`Ошибка: ${err.message}`);
+    } catch (err: unknown) {
+      alert(`Ошибка: ${err instanceof Error ? err.message : 'Неизвестная ошибка'}`);
     } finally {
       setIsSubmitting(false);
     }
