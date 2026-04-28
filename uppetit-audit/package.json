@@ -7,7 +7,6 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "next lint --cache"
-  }
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1031.0",
