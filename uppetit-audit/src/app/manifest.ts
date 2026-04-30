@@ -2,7 +2,7 @@ import { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Uppetit Audit',
+    name: 'UPPETIT — Аудит',
     short_name: 'Audit',
     description: 'Система контроля и аудита точек',
     start_url: '/',
