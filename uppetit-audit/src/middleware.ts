@@ -42,8 +42,8 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // Добавил logo.png в исключения, чтобы он скачивался для PDF без авторизации
+  // Добавили исключения для PWA: manifest.webmanifest, sw.js, workbox, icon-*.png и apple-icon.png
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|logo.jpg|logo.png).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|logo\\.jpg|logo\\.png|manifest\\.webmanifest|sw\\.js|workbox-.*|icon-.*\\.png|apple-icon\\.png).*)',
   ],
 };
