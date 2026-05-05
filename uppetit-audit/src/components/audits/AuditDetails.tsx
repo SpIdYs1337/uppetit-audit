@@ -22,28 +22,7 @@ export function AuditDetails({ audit, onZoomPhoto }: AuditDetailsProps) {
       const blob = await response.blob();
       const filename = `Аудит_${audit.location?.name || audit.id}.pdf`;
 
-      // 1. Проверяем, мобильное ли это устройство (телефоны и планшеты)
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-      // 2. Для PWA на мобилках: открываем системное меню "Поделиться"
-      if (isMobile && navigator.share && navigator.canShare) {
-        const file = new File([blob], filename, { type: 'application/pdf' });
-        if (navigator.canShare({ files: [file] })) {
-          try {
-            await navigator.share({
-              files: [file],
-              title: `Отчет по проверке: ${audit.location?.name || 'Точка'}`,
-            });
-            return; // Успешно поделились, выходим
-          } catch (shareError) {
-            // Пользователь мог просто закрыть шторку, это не ошибка
-            console.log('Шаринг отменен', shareError);
-            return;
-          }
-        }
-      }
-
-      // 3. Для ПК (Windows/Mac) или если шаринг недоступен: Классическое скачивание
+      // Универсальное классическое скачивание для ВСЕХ устройств (ПК, Android, iOS)
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -69,7 +48,7 @@ export function AuditDetails({ audit, onZoomPhoto }: AuditDetailsProps) {
         <h3 className="font-black text-gray-800 uppercase text-sm tracking-wide">
           Подробности проверки
         </h3>
-        <button 
+        <button
           onClick={exportToPDF}
           disabled={isDownloading}
           className={`w-full sm:w-auto text-white px-4 py-3 sm:py-2 rounded-lg font-bold text-xs transition-colors shadow-md shadow-orange-500/20 text-center ${isDownloading ? 'bg-orange-400 cursor-not-allowed' : 'bg-[#F25C05] hover:bg-orange-600'}`}
@@ -140,8 +119,8 @@ export function AuditDetails({ audit, onZoomPhoto }: AuditDetailsProps) {
                 {photosToRender.length > 0 && (
                   <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
                     {photosToRender.map((photo: string, idx: number) => (
-                      <div 
-                        key={idx} 
+                      <div
+                        key={idx}
                         className="overflow-hidden rounded-lg border border-gray-200 flex-shrink-0 w-24 h-24 sm:w-32 sm:h-32 cursor-zoom-in hover:opacity-80 transition-opacity"
                         onClick={(e) => { e.stopPropagation(); onZoomPhoto(photo); }}
                       >

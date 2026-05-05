@@ -8,7 +8,7 @@ export interface ChecklistItemType {
   id: string;
   zone: string;
   text: string;
-  score: number;
+  score: number | string; // ИЗМЕНЕНО: теперь принимает и строку (для пустой ячейки)
   isCritical: boolean;
 }
 export type ExtendedChecklist = Checklist & {
@@ -24,8 +24,10 @@ interface ChecklistEditorProps {
 export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEditorProps) {
   const isUpdate = !!initialData;
   const [title, setTitle] = useState(initialData?.title || '');
-  const [redThreshold, setRedThreshold] = useState(initialData?.redThreshold ?? 70);
-  const [yellowThreshold, setYellowThreshold] = useState(initialData?.yellowThreshold ?? 90);
+  
+  // ИЗМЕНЕНО: Добавлена типизация <number | string>
+  const [redThreshold, setRedThreshold] = useState<number | string>(initialData?.redThreshold ?? 70);
+  const [yellowThreshold, setYellowThreshold] = useState<number | string>(initialData?.yellowThreshold ?? 90);
   
   const [allowedRoles, setAllowedRoles] = useState<string[]>(() => {
     if (!initialData?.allowedRoles) return ['AUDITOR', 'TU'];
@@ -69,14 +71,14 @@ export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEdito
   const handleSubmit = async () => {
     if (!title.trim() || items.length === 0) return alert('Заполните название и добавьте вопросы');
     if (allowedRoles.length === 0) return alert('Выберите хотя бы одну роль');
-    if (redThreshold >= yellowThreshold) return alert('Красная зона должна быть меньше желтой!');
+    if (Number(redThreshold) >= Number(yellowThreshold)) return alert('Красная зона должна быть меньше желтой!');
 
     const body = {
       id: initialData?.id,
       title,
       items: JSON.stringify(items),
-      redThreshold: Number(redThreshold),
-      yellowThreshold: Number(yellowThreshold),
+      redThreshold: Number(redThreshold) || 0, // Принудительно конвертируем перед отправкой
+      yellowThreshold: Number(yellowThreshold) || 0, // Принудительно конвертируем перед отправкой
       allowedRoles: JSON.stringify(allowedRoles)
     };
 
@@ -117,15 +119,17 @@ export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEdito
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm">
             <label className="block text-xs font-bold text-red-500 mb-2">Красная (до)</label>
-            <input type="number" min="0" value={redThreshold} onChange={e => setRedThreshold(Number(e.target.value))} className="w-full p-2 text-xl font-black text-red-600 bg-red-50 rounded-lg outline-none text-center" />
+            {/* ИЗМЕНЕНО: Проверка на пустую строку */}
+            <input type="number" min="0" value={redThreshold} onChange={e => setRedThreshold(e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-2 text-xl font-black text-red-600 bg-red-50 rounded-lg outline-none text-center" />
           </div>
           <div className="bg-white p-4 rounded-xl border border-yellow-100 shadow-sm">
             <label className="block text-xs font-bold text-yellow-600 mb-2">Желтая (до)</label>
-            <input type="number" min="0" value={yellowThreshold} onChange={e => setYellowThreshold(Number(e.target.value))} className="w-full p-2 text-xl font-black text-yellow-600 bg-yellow-50 rounded-lg outline-none text-center" />
+            {/* ИЗМЕНЕНО: Проверка на пустую строку */}
+            <input type="number" min="0" value={yellowThreshold} onChange={e => setYellowThreshold(e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-2 text-xl font-black text-yellow-600 bg-yellow-50 rounded-lg outline-none text-center" />
           </div>
           <div className="bg-white p-4 rounded-xl border border-green-100 shadow-sm flex flex-col justify-center opacity-80">
             <label className="block text-xs font-bold text-green-600 mb-2">Зеленая</label>
-            <div className="w-full p-2 text-xl font-black text-green-600 bg-green-50 rounded-lg text-center">{yellowThreshold} и выше</div>
+            <div className="w-full p-2 text-xl font-black text-green-600 bg-green-50 rounded-lg text-center">{yellowThreshold || 0} и выше</div>
           </div>
         </div>
       </div>

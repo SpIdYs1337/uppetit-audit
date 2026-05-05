@@ -51,28 +51,7 @@ export function AuditCard({ audit, onZoomPhoto }: AuditCardProps) {
       const blob = await response.blob();
       const filename = `Аудит_${audit.location?.name || audit.id}.pdf`;
 
-      // 1. Проверяем, мобильное ли это устройство (телефоны и планшеты)
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-      // 2. Для PWA на мобилках: открываем системное меню "Поделиться"
-      if (isMobile && navigator.share && navigator.canShare) {
-        const file = new File([blob], filename, { type: 'application/pdf' });
-        if (navigator.canShare({ files: [file] })) {
-          try {
-            await navigator.share({
-              files: [file],
-              title: `Отчет по проверке: ${audit.location?.name || 'Точка'}`,
-            });
-            return; // Успешно поделились, выходим
-          } catch (shareError) {
-            // Пользователь мог просто закрыть шторку, это не ошибка
-            console.log('Шаринг отменен', shareError);
-            return;
-          }
-        }
-      }
-
-      // 3. Для ПК (Windows/Mac) или если шаринг недоступен: Классическое скачивание
+      // Универсальное классическое скачивание для ВСЕХ устройств (ПК, Android, iOS)
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -121,8 +100,8 @@ export function AuditCard({ audit, onZoomPhoto }: AuditCardProps) {
         <div className="bg-gray-50 p-4 sm:p-5 border-t border-gray-100">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
             <h3 className="text-xs font-bold text-gray-400 uppercase">Детали проверки</h3>
-            <button 
-              onClick={exportToPDF} 
+            <button
+              onClick={exportToPDF}
               disabled={isDownloading}
               className={`w-full sm:w-auto flex items-center justify-center gap-1.5 text-xs font-bold text-white px-4 py-2.5 rounded-lg transition-colors shadow-md shadow-orange-500/20 ${isDownloading ? 'bg-orange-400 cursor-not-allowed' : 'bg-[#F25C05] hover:bg-orange-600'}`}
             >
@@ -187,8 +166,8 @@ export function AuditCard({ audit, onZoomPhoto }: AuditCardProps) {
                     {photosToRender.length > 0 && (
                       <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
                         {photosToRender.map((photo: string, idx: number) => (
-                          <div 
-                            key={idx} 
+                          <div
+                            key={idx}
                             className="overflow-hidden rounded-lg border border-gray-200 flex-shrink-0 w-20 h-20 sm:w-24 sm:h-24 cursor-zoom-in hover:opacity-80 transition-opacity"
                             onClick={(e) => { e.stopPropagation(); onZoomPhoto(photo); }}
                           >
