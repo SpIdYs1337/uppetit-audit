@@ -5,6 +5,7 @@ import { APP_VERSION } from '@/lib/version';
 
 export default function UpdateChecker() {
   const [hasUpdate, setHasUpdate] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
     const checkVersion = async () => {
@@ -31,9 +32,34 @@ export default function UpdateChecker() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleUpdate = () => {
-    // Жестко перезагружаем страницу с очисткой кэша
-    window.location.reload();
+  const handleUpdate = async () => {
+    setIsUpdating(true);
+    
+    try {
+      // 1. Отменяем регистрацию Service Worker (убиваем кэш PWA)
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const registration of registrations) {
+          await registration.unregister();
+        }
+      }
+
+      // 2. Очищаем локальные хранилища кэша
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        for (const cacheName of cacheNames) {
+          await caches.delete(cacheName);
+        }
+      }
+
+      // 3. Жесткая перезагрузка страницы для скачивания новых файлов
+      window.location.reload();
+      
+    } catch (error) {
+      console.error('Ошибка при очистке кэша:', error);
+      // Если что-то пошло не так, хотя бы просто перезагружаем
+      window.location.reload(); 
+    }
   };
 
   if (!hasUpdate) return null;
@@ -52,9 +78,10 @@ export default function UpdateChecker() {
         </div>
         <button 
           onClick={handleUpdate}
-          className="bg-[#F25C05] hover:bg-orange-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-md transition-all active:scale-95 whitespace-nowrap"
+          disabled={isUpdating}
+          className={`text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-md transition-all whitespace-nowrap ${isUpdating ? 'bg-orange-400 cursor-not-allowed' : 'bg-[#F25C05] hover:bg-orange-600 active:scale-95'}`}
         >
-          Обновить
+          {isUpdating ? 'Обновляем...' : 'Обновить'}
         </button>
       </div>
     </div>
