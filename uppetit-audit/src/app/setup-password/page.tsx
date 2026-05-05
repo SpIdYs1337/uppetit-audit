@@ -3,11 +3,16 @@
 import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
+import { PrivacyModal } from '@/components/PrivacyModal'; // <-- ДОБАВЛЕНО
 
 function SetupPasswordContent() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  
+  // <-- ДОБАВЛЕНЫ НОВЫЕ СОСТОЯНИЯ ДЛЯ ПОЛИТИКИ -->
+  const [isPolicyAccepted, setIsPolicyAccepted] = useState(false);
+  const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
   
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
@@ -19,6 +24,8 @@ function SetupPasswordContent() {
 
     if (password.length < 4) return setError('Пароль должен быть минимум 4 символа');
     if (!token) return setError('Неверная ссылка');
+    // ДОБАВЛЕНО: Проверка согласия
+    if (!isPolicyAccepted) return setError('Необходимо принять Политику конфиденциальности');
 
     setIsLoading(true);
     try {
@@ -32,10 +39,7 @@ function SetupPasswordContent() {
         alert('Пароль успешно установлен! Теперь вы можете войти в систему.');
         router.push('/');
       } else {
-        // Пытаемся достать текст конкретной ошибки от сервера
         const data = await res.json().catch(() => ({}));
-        // Если сервер прислал свою ошибку (например, слаб пароль), покажем её. 
-        // Иначе — стандартное сообщение про ссылку.
         setError(data.error || 'Ссылка недействительна или уже использована');
       }
     } catch {
@@ -67,24 +71,60 @@ function SetupPasswordContent() {
               value={password}
               onChange={(e) => {
                 setPassword(e.target.value);
-                setError(''); // Сбрасываем ошибку при вводе каждого нового символа
+                setError('');
               }}
               className="w-full px-4 py-3.5 rounded-xl border border-zinc-800 bg-zinc-900 text-white outline-none focus:border-[#F25C05] transition-all"
               placeholder="Минимум 4 символа"
             />
           </div>
 
+          {/* ДОБАВЛЕНО: Чекбокс согласия с политикой */}
+          <div className="flex items-start gap-3 mt-4 px-1">
+            <div className="flex items-center h-5 mt-0.5">
+              <input
+                id="policy"
+                type="checkbox"
+                checked={isPolicyAccepted}
+                onChange={(e) => {
+                  setIsPolicyAccepted(e.target.checked);
+                  if (e.target.checked) setError('');
+                }}
+                className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-[#F25C05] focus:ring-[#F25C05] focus:ring-offset-black accent-[#F25C05] cursor-pointer"
+              />
+            </div>
+            <label htmlFor="policy" className="text-[11px] text-zinc-500 leading-relaxed cursor-pointer select-none">
+              Я ознакомлен(а) и принимаю условия{' '}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsPrivacyOpen(true);
+                }}
+                className="text-[#F25C05] hover:underline transition-all outline-none font-bold"
+              >
+                Политики обработки персональных данных
+              </button>
+            </label>
+          </div>
+
           {error && <div className="text-red-500 text-[12px] text-center font-bold">{error}</div>}
 
           <button 
             onClick={handleSave}
-            disabled={isLoading}
-            className="w-full bg-[#F25C05] text-white py-4 rounded-xl font-bold text-sm hover:brightness-110 active:scale-[0.98] transition-all disabled:bg-zinc-700 mt-2"
+            disabled={isLoading || !isPolicyAccepted}
+            className="w-full bg-[#F25C05] text-white py-4 rounded-xl font-bold text-sm hover:brightness-110 active:scale-[0.98] transition-all disabled:bg-zinc-800 disabled:text-zinc-500 mt-2"
           >
             {isLoading ? "Сохранение..." : "Сохранить и войти"}
           </button>
         </div>
       </div>
+
+      {/* ДОБАВЛЕНО: Рендерим модалку */}
+      <PrivacyModal 
+        isOpen={isPrivacyOpen} 
+        onClose={() => setIsPrivacyOpen(false)} 
+      />
     </div>
   );
 }
