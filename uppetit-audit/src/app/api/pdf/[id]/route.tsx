@@ -229,7 +229,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="audit_${audit.location?.name || audit.id}.pdf"`,
+        'Content-Disposition': `attachment; filename="audit_${audit.id}.pdf"`,
       },
     });
 
