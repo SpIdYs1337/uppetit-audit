@@ -21,22 +21,37 @@ export function AuditDetails({ audit, onZoomPhoto }: AuditDetailsProps) {
       
       const blob = await response.blob();
       const filename = `Аудит_${audit.location?.name || audit.id}.pdf`;
-      const file = new File([blob], filename, { type: 'application/pdf' });
 
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: `Отчет по проверке: ${audit.location?.name || 'Точка'}`,
-        });
-        return;
+      // 1. Проверяем, мобильное ли это устройство (телефоны и планшеты)
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+      // 2. Для PWA на мобилках: открываем системное меню "Поделиться"
+      if (isMobile && navigator.share && navigator.canShare) {
+        const file = new File([blob], filename, { type: 'application/pdf' });
+        if (navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: `Отчет по проверке: ${audit.location?.name || 'Точка'}`,
+            });
+            return; // Успешно поделились, выходим
+          } catch (shareError) {
+            // Пользователь мог просто закрыть шторку, это не ошибка
+            console.log('Шаринг отменен', shareError);
+            return;
+          }
+        }
       }
 
+      // 3. Для ПК (Windows/Mac) или если шаринг недоступен: Классическое скачивание
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', filename);
       document.body.appendChild(link);
       link.click();
+      
+      // Убираем за собой мусор
       link.parentNode?.removeChild(link);
       window.URL.revokeObjectURL(url);
 
