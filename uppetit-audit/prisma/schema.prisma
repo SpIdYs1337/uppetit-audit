@@ -19,11 +19,17 @@ enum Role {
 // ==========================================
 model User {
   id               String      @id @default(cuid())
+  
+  // --- НОВЫЕ ПОЛЯ ---
+  name             String?     // Имя и Фамилия
+  email            String?     @unique // E-mail для связи систем
+  // ------------------
+
   login            String      @unique
   phone            String?     @unique
   passwordHash     String?  
   inviteToken      String?     @unique 
-  // ИЗМЕНЕНО: Тип String заменен на Role
+  
   role             Role        @default(AUDITOR)
   pushSubscription String?
 
@@ -63,7 +69,6 @@ model Checklist {
   description     String?
   redThreshold    Int                @default(70) // Порог красной зоны
   yellowThreshold Int                @default(90) // Порог желтой зоны
-  // ИЗМЕНЕНО: Храним разрешенные роли в виде массива Enum
   allowedRoles    Role[]             @default([AUDITOR, TU])
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
@@ -124,7 +129,6 @@ model Audit {
   location           Location?        @relation(fields: [locationId], references: [id], onDelete: SetNull)
   locationName       String?          // Снэпшот названия точки на момент проверки
   
-  // ИЗМЕНЕНО: Аудит теперь привязан строго к версии чек-листа!
   checklistVersionId String
   checklistVersion   ChecklistVersion @relation(fields: [checklistVersionId], references: [id], onDelete: Cascade)
 
@@ -139,7 +143,7 @@ model Answer {
   auditId   String
   audit     Audit          @relation(fields: [auditId], references: [id], onDelete: Cascade)
   
-  // ДОБАВЛЕНО: Прямая ссылка на конкретный вопрос для крутой SQL-аналитики
+  // Прямая ссылка на конкретный вопрос для крутой SQL-аналитики
   itemId    String?
   item      ChecklistItem? @relation(fields: [itemId], references: [id], onDelete: Cascade)
   

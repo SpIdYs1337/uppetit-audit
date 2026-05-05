@@ -46,7 +46,7 @@ export default function AdminUsersPage() {
           <p className="text-gray-500 mt-2">Управление персоналом и доступами</p>
         </div>
         {!isEditorOpen && (
-          <button onClick={() => openEditor()} className="bg-black text-white px-6 py-3 rounded-xl font-bold shadow-lg">
+          <button onClick={() => openEditor()} className="bg-black text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-transform active:scale-95">
             + Добавить сотрудника
           </button>
         )}
@@ -66,13 +66,23 @@ export default function AdminUsersPage() {
             
             return (
               <div key={user.id} className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col">
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="text-xl font-black text-gray-900">{user.login}</h3>
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    {/* Выводим Имя и Фамилию, а логин делаем как юзернейм */}
+                    <h3 className="text-xl font-black text-gray-900 leading-tight">
+                      {user.name || 'Имя не указано'}
+                    </h3>
+                    <p className="text-sm font-bold text-gray-400 mt-1">@{user.login}</p>
+                  </div>
                   <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-md ${user.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
                     {user.role}
                   </span>
                 </div>
-                {user.phone && <div className="text-sm text-gray-500 font-bold mb-4">📞 {user.phone}</div>}
+                
+                <div className="mb-4 space-y-1">
+                  {user.email && <div className="text-sm text-gray-500 font-bold">📧 {user.email}</div>}
+                  {user.phone && <div className="text-sm text-gray-500 font-bold">📞 {user.phone}</div>}
+                </div>
                 
                 {!user.hasPassword ? (
                   <div className="text-xs font-bold text-orange-500 bg-orange-50 p-2 rounded-lg mb-4 text-center border border-orange-100">
@@ -86,8 +96,8 @@ export default function AdminUsersPage() {
 
                 <div className="mt-auto flex flex-col gap-2 pt-4 border-t border-gray-50">
                   <div className="flex gap-2">
-                    <button onClick={() => openEditor(user)} className="flex-1 bg-gray-50 text-gray-700 py-2 rounded-xl font-bold text-xs hover:bg-gray-100">Изменить данные</button>
-                    <button onClick={() => handleDelete(user.id)} className="px-4 bg-red-50 text-red-500 rounded-xl font-bold text-xs hover:bg-red-100">Удалить</button>
+                    <button onClick={() => openEditor(user)} className="flex-1 bg-gray-50 text-gray-700 py-2 rounded-xl font-bold text-xs hover:bg-gray-100 transition-colors">Изменить</button>
+                    <button onClick={() => handleDelete(user.id)} className="px-4 bg-red-50 text-red-500 rounded-xl font-bold text-xs hover:bg-red-100 transition-colors">Удалить</button>
                   </div>
                   
                   <button onClick={() => handleResetPassword(user)} className="w-full bg-blue-50 text-blue-600 py-2 rounded-xl font-bold text-xs hover:bg-blue-100 transition-colors">
