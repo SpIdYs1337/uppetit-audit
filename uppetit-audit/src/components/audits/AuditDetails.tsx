@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { EnrichedAudit, ParsedAnswer } from './AuditCard';
 
 interface AuditDetailsProps {
@@ -7,9 +7,45 @@ interface AuditDetailsProps {
 }
 
 export function AuditDetails({ audit, onZoomPhoto }: AuditDetailsProps) {
-  const exportToPDF = (e: React.MouseEvent) => {
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const exportToPDF = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    window.open(`/api/pdf/${audit.id}`, '_blank');
+    if (isDownloading) return; // Защита от двойного клика
+
+    try {
+      setIsDownloading(true);
+      
+      const response = await fetch(`/api/pdf/${audit.id}`);
+      if (!response.ok) throw new Error('Ошибка генерации PDF');
+      
+      const blob = await response.blob();
+      const filename = `Аудит_${audit.location?.name || audit.id}.pdf`;
+      const file = new File([blob], filename, { type: 'application/pdf' });
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `Отчет по проверке: ${audit.location?.name || 'Точка'}`,
+        });
+        return;
+      }
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+    } catch (error) {
+      console.error('Ошибка экспорта:', error);
+      alert('Не удалось скачать PDF');
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   return (
@@ -20,9 +56,10 @@ export function AuditDetails({ audit, onZoomPhoto }: AuditDetailsProps) {
         </h3>
         <button 
           onClick={exportToPDF}
-          className="w-full sm:w-auto bg-[#F25C05] hover:bg-orange-600 text-white px-4 py-3 sm:py-2 rounded-lg font-bold text-xs transition-colors shadow-md shadow-orange-500/20 text-center"
+          disabled={isDownloading}
+          className={`w-full sm:w-auto text-white px-4 py-3 sm:py-2 rounded-lg font-bold text-xs transition-colors shadow-md shadow-orange-500/20 text-center ${isDownloading ? 'bg-orange-400 cursor-not-allowed' : 'bg-[#F25C05] hover:bg-orange-600'}`}
         >
-          Скачать PDF
+          {isDownloading ? 'Загрузка...' : 'Скачать PDF'}
         </button>
       </div>
 
@@ -46,7 +83,7 @@ export function AuditDetails({ audit, onZoomPhoto }: AuditDetailsProps) {
           <div>
             <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2">Общий комментарий</h4>
             <p className="text-sm text-gray-700 bg-gray-50 p-4 rounded-xl border border-gray-100 italic">
-              &quot{audit.generalComment}&quot
+              "{audit.generalComment}"
             </p>
           </div>
         )}

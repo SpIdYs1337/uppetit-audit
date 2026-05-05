@@ -27,6 +27,7 @@ interface AuditCardProps {
 
 export function AuditCard({ audit, onZoomPhoto }: AuditCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const maxScore = audit.maxScore || 0;
   
@@ -36,9 +37,46 @@ export function AuditCard({ audit, onZoomPhoto }: AuditCardProps) {
     return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
-  const exportToPDF = (e: React.MouseEvent) => {
+  const exportToPDF = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    window.open(`/api/pdf/${audit.id}`, '_blank');
+    if (isDownloading) return; // Защита от двойного клика
+
+    try {
+      setIsDownloading(true);
+      
+      // Скачиваем PDF в фоне
+      const response = await fetch(`/api/pdf/${audit.id}`);
+      if (!response.ok) throw new Error('Ошибка генерации PDF');
+      
+      const blob = await response.blob();
+      const filename = `Аудит_${audit.location?.name || audit.id}.pdf`;
+      const file = new File([blob], filename, { type: 'application/pdf' });
+
+      // PWA iOS: Пытаемся открыть системное меню "Поделиться"
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `Отчет по проверке: ${audit.location?.name || 'Точка'}`,
+        });
+        return;
+      }
+
+      // ПК и Android: Классическое скачивание
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+    } catch (error) {
+      console.error('Ошибка экспорта:', error);
+      alert('Не удалось скачать PDF');
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   return (
@@ -70,8 +108,12 @@ export function AuditCard({ audit, onZoomPhoto }: AuditCardProps) {
         <div className="bg-gray-50 p-4 sm:p-5 border-t border-gray-100">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
             <h3 className="text-xs font-bold text-gray-400 uppercase">Детали проверки</h3>
-            <button onClick={exportToPDF} className="w-full sm:w-auto flex items-center justify-center gap-1.5 text-xs font-bold text-white bg-[#F25C05] hover:bg-orange-600 px-4 py-2.5 rounded-lg transition-colors shadow-md shadow-orange-500/20">
-              Скачать PDF
+            <button 
+              onClick={exportToPDF} 
+              disabled={isDownloading}
+              className={`w-full sm:w-auto flex items-center justify-center gap-1.5 text-xs font-bold text-white px-4 py-2.5 rounded-lg transition-colors shadow-md shadow-orange-500/20 ${isDownloading ? 'bg-orange-400 cursor-not-allowed' : 'bg-[#F25C05] hover:bg-orange-600'}`}
+            >
+              {isDownloading ? 'Формируем...' : 'Скачать PDF'}
             </button>
           </div>
 
@@ -93,7 +135,7 @@ export function AuditCard({ audit, onZoomPhoto }: AuditCardProps) {
               <div>
                 <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2">Общий комментарий</h4>
                 <p className="text-xs sm:text-sm text-gray-700 bg-gray-50 p-3 sm:p-4 rounded-xl border border-gray-100 italic">
-                  &quot{audit.generalComment}&quot
+                  "{audit.generalComment}"
                 </p>
               </div>
             )}

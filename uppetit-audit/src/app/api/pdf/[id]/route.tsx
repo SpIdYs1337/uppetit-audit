@@ -150,7 +150,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename="audit_${audit.id}.pdf"`,
+        'Content-Disposition': `attachment; filename="audit_${audit.id}.pdf"`,
       },
     });
 
