@@ -10,11 +10,9 @@ export default function UpdateChecker() {
   useEffect(() => {
     const checkVersion = async () => {
       try {
-        // Добавляем случайный параметр, чтобы телефон точно не кэшировал этот запрос
         const res = await fetch(`/api/version?t=${new Date().getTime()}`);
         if (res.ok) {
           const data = await res.json();
-          // Если версия сервера отличается от версии в браузере сотрудника
           if (data.version !== APP_VERSION) {
             setHasUpdate(true);
           }
@@ -24,19 +22,32 @@ export default function UpdateChecker() {
       }
     };
 
-    // Проверяем при загрузке
+    // 1. Проверяем при первичной загрузке
     checkVersion();
 
-    // Проверяем каждые 10 минут (600000 мс), если приложение просто висит открытым
+    // 2. Проверяем каждые 10 минут (для тех, кто сидит с ПК)
     const interval = setInterval(checkVersion, 600000);
-    return () => clearInterval(interval);
+
+    // 3. НОВОЕ: Проверяем каждый раз, когда пользователь возвращается в приложение
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkVersion();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Очищаем слушатели при размонтировании
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   const handleUpdate = async () => {
     setIsUpdating(true);
     
     try {
-      // 1. Отменяем регистрацию Service Worker (убиваем кэш PWA)
       if ('serviceWorker' in navigator) {
         const registrations = await navigator.serviceWorker.getRegistrations();
         for (const registration of registrations) {
@@ -44,7 +55,6 @@ export default function UpdateChecker() {
         }
       }
 
-      // 2. Очищаем локальные хранилища кэша
       if ('caches' in window) {
         const cacheNames = await caches.keys();
         for (const cacheName of cacheNames) {
@@ -52,12 +62,10 @@ export default function UpdateChecker() {
         }
       }
 
-      // 3. Жесткая перезагрузка страницы для скачивания новых файлов
       window.location.reload();
       
     } catch (error) {
       console.error('Ошибка при очистке кэша:', error);
-      // Если что-то пошло не так, хотя бы просто перезагружаем
       window.location.reload(); 
     }
   };
