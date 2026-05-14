@@ -53,7 +53,7 @@ export default function LocationsPage() {
     <div className="w-full mx-auto pb-12">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8 mt-4 md:mt-8 px-4 md:px-8">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-black text-gray-900">Точки UPPETIT</h1>
+          <h1 className="text-2xl sm:text-3xl font-black text-gray-900">Точки</h1>
           <p className="text-gray-500 font-medium mt-1 text-sm sm:text-base">Управление локациями и распределение по ТУ</p>
         </div>
         <button onClick={() => { setEditingLocation(null); setIsModalOpen(true); }} className="w-full sm:w-auto bg-[#F25C05] text-white px-6 py-3 rounded-xl font-bold shadow-lg">
