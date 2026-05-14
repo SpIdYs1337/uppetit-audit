@@ -124,7 +124,8 @@ model Audit {
   userId             String?          
   user               User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
   auditorName        String?          
-
+  tuName             String?
+  
   locationId         String?          
   location           Location?        @relation(fields: [locationId], references: [id], onDelete: SetNull)
   locationName       String?          // Снэпшот названия точки на момент проверки

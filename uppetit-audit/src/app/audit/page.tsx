@@ -35,13 +35,13 @@ export default function AuditDashboard() {
       <header className="flex justify-between items-center mb-10 mt-2 md:mt-4 md:bg-white md:p-6 md:rounded-3xl md:shadow-sm md:border border-gray-100">
         <div>
           <Image 
-            src="/logo.jpg" 
+            src="/logo3.png" 
             alt="UPPETIT" 
             width={120} 
             height={30} 
             className="object-contain" 
             priority 
-            unoptimized // На всякий случай для обхода 404
+            unoptimized 
           />
           <div className="text-[9px] uppercase tracking-[0.2em] text-gray-400 font-bold mt-1 md:ml-1">
             Аудит качества

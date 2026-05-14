@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/requireAuth';
 import { z } from 'zod';
-import { Role } from '@prisma/client'; // <-- Импортируем Enum ролей
+import { Role } from '@prisma/client'; 
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +26,6 @@ const auditPostSchema = z.object({
 });
 
 export async function POST(req: Request) {
-  // Аудиты могут отправлять все авторизованные
   const { error } = await requireAuth();
   if (error) return error;
 
@@ -37,26 +36,34 @@ export async function POST(req: Request) {
     // 1. ИЩЕМ АКТИВНУЮ ВЕРСИЮ ЧЕК-ЛИСТА
     const activeVersion = await prisma.checklistVersion.findFirst({
       where: { checklistId: data.checklistId, isActive: true },
-      include: { items: true } // Сразу подтягиваем вопросы этой версии
+      include: { items: true } 
     });
 
     if (!activeVersion) {
       return NextResponse.json({ error: 'Не найдена активная версия чек-листа' }, { status: 400 });
     }
 
-    // 1.5 ПОЛУЧАЕМ ДАННЫЕ ДЛЯ СНЭПШОТА (Параллельный запрос для скорости)
+    // 1.5 ПОЛУЧАЕМ ДАННЫЕ ДЛЯ СНЭПШОТА
     const [user, location] = await Promise.all([
       prisma.user.findUnique({ where: { id: data.userId }, select: { login: true } }),
-      prisma.location.findUnique({ where: { id: data.locationId }, select: { name: true } })
+      prisma.location.findUnique({ 
+        where: { id: data.locationId }, 
+        // ИЗМЕНЕНО: Достаем не только имя точки, но и привязанного к ней ТУ
+        include: { tu: { select: { name: true, login: true } } } 
+      })
     ]);
+
+    // Формируем слепок ТУ (Имя, а если нет имени - логин. Если ТУ вообще нет - пишем, что не было)
+    const actingTuName = location?.tu ? (location.tu.name || location.tu.login) : 'Не был назначен';
 
     // 2. СОХРАНЯЕМ АУДИТ
     const newAudit = await prisma.audit.create({
       data: {
         userId: data.userId,
         locationId: data.locationId,
-        auditorName: user?.login || 'Неизвестный аудитор',   // Впечатываем логин намертво
-        locationName: location?.name || 'Неизвестная точка', // Впечатываем название точки намертво
+        auditorName: user?.login || 'Неизвестный аудитор',   
+        locationName: location?.name || 'Неизвестная точка', 
+        tuName: actingTuName, // <-- ВПЕЧАТЫВАЕМ ТУ НАМЕРТВО
         checklistVersionId: activeVersion.id, 
         score: data.score,
         maxScore: data.maxScore,
@@ -66,7 +73,6 @@ export async function POST(req: Request) {
         // 3. СОХРАНЯЕМ ОТВЕТЫ С ПРИВЯЗКОЙ К ВОПРОСАМ
         answers: {
           create: data.answers.map(ans => {
-            // Ищем ID оригинального вопроса в БД по совпадению текста
             const matchedItem = activeVersion.items.find(i => i.text === ans.questionText);
             
             return {
@@ -102,7 +108,6 @@ export async function GET() {
       include: {
         user: { select: { id: true, login: true } },
         location: { select: { id: true, name: true } },
-        // Глубокая загрузка: достаем версию и из неё корневой чек-лист
         checklistVersion: {
           include: {
             checklist: { select: { id: true, title: true } }
@@ -120,7 +125,7 @@ export async function GET() {
       location: audit.location ? audit.location : { id: 'deleted', name: audit.locationName || 'Удаленная точка' },
       user: audit.user ? audit.user : { id: 'deleted', login: audit.auditorName || 'Удаленный аудитор' },
       
-      // Имитируем старую структуру { checklist: { title: "..." } }
+      // Имитируем старую структуру
       checklist: {
         id: audit.checklistVersion.checklist.id,
         title: audit.checklistVersion.checklist.title,
@@ -136,7 +141,6 @@ export async function GET() {
 }
 
 export async function DELETE(req: Request) {
-  // ИЗМЕНЕНО: Строгая проверка роли через Enum
   const { error } = await requireAuth([Role.ADMIN]);
   if (error) return error;
 

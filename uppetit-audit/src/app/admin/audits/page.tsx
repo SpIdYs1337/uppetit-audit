@@ -63,14 +63,15 @@ export default function AdminAuditsPage() {
       {/* ТАБЛИЦА (Карточки на мобилках, классика на ПК) */}
       <div className="bg-transparent md:bg-white rounded-none md:rounded-3xl shadow-none md:shadow-sm md:border border-gray-100 overflow-hidden">
         <div className="md:overflow-x-auto">
-          <table className="w-full text-left border-collapse md:min-w-[800px] block md:table">
+          <table className="w-full text-left border-collapse md:min-w-[900px] block md:table">
             
             <thead className="hidden md:table-header-group">
               <tr className="border-b border-gray-100 uppercase text-[10px] tracking-wider text-gray-400 bg-gray-50/50">
                 <th className="p-4 font-bold">Дата и время</th>
                 <th className="p-4 font-bold">Точка</th>
                 <th className="p-4 font-bold">Чек-лист</th>
-                <th className="p-4 font-bold">Сотрудник</th>
+                <th className="p-4 font-bold">Аудитор</th>
+                <th className="p-4 font-bold">ТУ (на момент проверки)</th>
                 <th className="p-4 font-bold">Результат</th>
                 <th className="p-4 font-bold text-right">Действия</th>
               </tr>
@@ -82,6 +83,8 @@ export default function AdminAuditsPage() {
                 const isPerfect = audit.score === maxScore && maxScore > 0;
                 const safeChecklist = audit.checklist as any;
                 const isExpanded = expandedId === audit.id;
+                // Читаем наш слепок (если аудит старый и слепка нет, пишем 'Нет данных')
+                const actingTu = (audit as any).tuName || 'Не был назначен';
 
                 return (
                   <React.Fragment key={audit.id}>
@@ -111,15 +114,23 @@ export default function AdminAuditsPage() {
                         </div>
                       </td>
                       
-                      {/* Сотрудник */}
-                      <td className="block md:table-cell p-0 md:p-4 text-sm text-gray-500 mb-4 md:mb-0">
+                      {/* Аудитор */}
+                      <td className="block md:table-cell p-0 md:p-4 text-sm text-gray-500 mb-1 md:mb-0">
                         <div className="flex items-center gap-2">
                           <span className="md:hidden text-[10px] uppercase font-bold text-gray-400">Аудитор:</span>
                           <span className="font-bold md:font-normal text-gray-700 md:text-gray-500">{audit.user?.login || 'Удален'}</span>
                         </div>
                       </td>
+
+                      {/* ТУ ТОЧКИ (Слепок) */}
+                      <td className="block md:table-cell p-0 md:p-4 text-sm text-gray-500 mb-4 md:mb-0">
+                        <div className="flex items-center gap-2">
+                          <span className="md:hidden text-[10px] uppercase font-bold text-gray-400">ТУ:</span>
+                          <span className="font-bold md:font-normal text-gray-700 md:text-gray-500">{actingTu}</span>
+                        </div>
+                      </td>
                       
-                      {/* Результат (На мобилках - абсолютно в правом верхнем углу) */}
+                      {/* Результат */}
                       <td className="block md:table-cell absolute top-4 right-4 md:static p-0 md:p-4">
                         <span className={`px-2 py-1 md:px-3 md:py-1.5 rounded-lg text-xs md:text-xs font-bold inline-flex items-center gap-1 whitespace-nowrap shadow-sm md:shadow-none ${isPerfect ? 'bg-green-50 text-green-700 border border-green-100 md:border-0' : 'bg-red-50 text-red-700 border border-red-100 md:border-0'}`}>
                           <span className="hidden lg:inline">{isPerfect ? 'Отлично' : 'Есть проблемы'}</span>
@@ -142,7 +153,6 @@ export default function AdminAuditsPage() {
                     {/* РАСКРЫТЫЕ ДЕТАЛИ АУДИТА */}
                     {isExpanded && (
                       <tr className="block md:table-row bg-gray-50 md:bg-transparent rounded-b-3xl md:rounded-none mb-4 md:mb-0 border border-gray-100 md:border-0 border-t-0 shadow-sm md:shadow-none overflow-hidden">
-                        {/* Передаем через any, чтобы обойти разницу в типах между хуком и компонентом */}
                         <AuditDetails audit={audit as any} onZoomPhoto={setZoomedPhoto} />
                       </tr>
                     )}
