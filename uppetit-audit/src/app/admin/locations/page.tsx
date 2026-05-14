@@ -18,7 +18,8 @@ export default function LocationsPage() {
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
   );
 
-    const handleSaveModal = async (data: Partial<Location>, isEdit: boolean) => {    if (isEdit && editingLocation) {
+  const handleSaveModal = async (data: Partial<Location>, isEdit: boolean) => {    
+    if (isEdit && editingLocation) {
       await updateLocation(editingLocation.id, data);
     } else {
       // Гарантируем TypeScript'у, что name точно будет строкой
@@ -78,7 +79,8 @@ export default function LocationsPage() {
                   <div key={tu.id} className="snap-start shrink-0 w-80 sm:w-[350px]">
                     <LocationColumn 
                       id={tu.id} 
-                      title={`ТУ: ${tu.login}`} 
+                      // ИЗМЕНЕНО: Теперь выводим Имя, а если его нет — логин
+                      title={`ТУ: ${tu.name || tu.login}`} 
                       locations={locations.filter(l => l.tuId === tu.id)} 
                       updateLocation={updateLocation} 
                       handleDelete={handleDelete} 
