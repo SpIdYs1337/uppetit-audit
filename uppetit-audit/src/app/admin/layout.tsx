@@ -2,10 +2,11 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { signOut } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
 import { APP_VERSION } from '@/lib/version'; 
-import PushSubscribe from '@/components/PushSubscribe'; // <-- ИМПОРТИРОВАЛИ КНОПКУ ПУШЕЙ
+import PushSubscribe from '@/components/PushSubscribe'; 
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname(); 
@@ -22,19 +23,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen bg-[#F5F6F8] flex flex-col md:flex-row">
       
-      {/* --- МОБИЛЬНАЯ ШАПКА (видна только на экранах меньше 768px) --- */}
-      <div className="md:hidden bg-white border-b border-gray-200 p-4 flex justify-between items-center sticky top-0 z-30 shadow-sm">
-        <div className="text-xl font-black text-black tracking-tighter">
-          UPPETIT <span className="text-[10px] text-gray-400 ml-1 uppercase tracking-wider">Админ</span>
+      {/* --- МОБИЛЬНАЯ ШАПКА --- */}
+      <div className="md:hidden bg-[#0a0a0a] p-4 flex justify-between items-center sticky top-0 z-30 shadow-md border-b border-zinc-800">
+        <div className="flex items-center gap-3">
+          <Image 
+            src="/logo.jpg" 
+            alt="UPPETIT" 
+            width={100} 
+            height={24} 
+            className="object-contain" 
+            priority 
+          />
+          <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold mt-0.5 border-l border-zinc-800 pl-3">
+            Админ
+          </span>
         </div>
         <button 
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="p-2 text-gray-500 hover:text-black focus:outline-none bg-gray-50 rounded-lg active:scale-95 transition-all"
+          className="p-2 text-zinc-400 hover:text-white focus:outline-none bg-zinc-900 border border-zinc-800 rounded-lg active:scale-95 transition-all"
         >
           {isMobileMenuOpen ? (
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
           ) : (
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h16" /></svg>
           )}
         </button>
       </div>
@@ -42,12 +53,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Затемнение фона при открытом мобильном меню */}
       {isMobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden transition-opacity"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden transition-opacity"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
-      {/* --- БОКОВОЕ МЕНЮ (САЙДБАР) --- */}
+      {/* --- БОКОВОЕ МЕНЮ (САЙДБАР) ПК --- */}
       <aside className={`
         fixed md:static inset-y-0 left-0 z-50
         w-64 bg-white border-r border-gray-200 flex flex-col shadow-2xl md:shadow-sm
@@ -55,15 +66,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>
         
-        {/* Логотип для ПК */}
-        <div className="p-6 mb-4 hidden md:block">
-          <div className="text-2xl font-black text-black tracking-tighter">UPPETIT</div>
-          <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-bold">
+        {/* --- ШАПКА ДЛЯ ПК --- */}
+        <div className="p-6 mb-2 hidden md:block">
+        
+          <Image 
+            src="/logo3.png" 
+            alt="UPPETIT" 
+            width={130} 
+            height={32} 
+            className="object-contain mb-2" 
+            priority
+            unoptimized 
+          />
+          <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-bold ml-1">
             Админ-панель
           </div>
         </div>
 
-        {/* Отступ на мобилках, чтобы не прилипало к верху */}
+        {/* Отступ на мобилках */}
         <div className="h-4 md:hidden"></div>
 
         <nav className="flex-1 px-4 space-y-2 overflow-y-auto">
@@ -109,7 +129,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
 
       {/* --- ОСНОВНАЯ РАБОЧАЯ ОБЛАСТЬ --- */}
-      <main className="flex-1 p-4 md:p-8 overflow-x-hidden">
+      <main className="flex-1 p-0 md:p-8 overflow-x-hidden">
         {children}
       </main>
       
