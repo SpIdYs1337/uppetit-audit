@@ -1,9 +1,11 @@
 'use client';
 
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { getSession } from 'next-auth/react'; // <-- ДОБАВИЛИ ИМПОРТ СЕССИИ
 import { useNewAudit } from '@/hooks/useNewAudit';
-import { User, Location, Checklist } from '@prisma/client'; // <-- ДОБАВИЛИ ИМПОРТ ТИПОВ
+import { User, Location, Checklist } from '@prisma/client'; 
 
 export default function NewAuditPage() {
   const router = useRouter();
@@ -20,15 +22,51 @@ export default function NewAuditPage() {
     setSelectedChecklist
   } = useNewAudit();
 
+  // Состояние для хранения роли текущего пользователя
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Получаем сессию и вытаскиваем роль при загрузке страницы
+    const fetchSession = async () => {
+      const session = await getSession();
+      setUserRole((session?.user as any)?.role || null);
+    };
+    fetchSession();
+  }, []);
+
+  // Фильтруем чек-листы на основе роли пользователя
+  const filteredChecklists = useMemo(() => {
+    if (!checklists || !userRole) return checklists || [];
+    
+    // Администраторы видят все чек-листы
+    if (userRole === 'ADMIN') return checklists;
+
+    return checklists.filter((chk: Checklist) => {
+      try {
+        // Парсим allowedRoles (в БД он хранится как JSON строка)
+        const allowedRoles = typeof chk.allowedRoles === 'string' 
+          ? JSON.parse(chk.allowedRoles) 
+          : (chk.allowedRoles || []);
+          
+        // Проверяем, есть ли роль пользователя в массиве разрешенных ролей
+        return allowedRoles.includes(userRole);
+      } catch (e) {
+        // Если JSON битый, по умолчанию скрываем, чтобы не было утечки доступов
+        console.error('Ошибка парсинга allowedRoles:', e);
+        return false;
+      }
+    });
+  }, [checklists, userRole]);
+
   const handleContinue = () => {
     if (!selectedLocation || !selectedChecklist) return;
     router.push(`/audit/run?location=${selectedLocation}&checklist=${selectedChecklist}`);
   };
 
   return (
-    <div className="flex-1 flex flex-col p-6 bg-gray-50 min-h-screen">
+    <div className="flex-1 flex flex-col p-6 md:p-8 bg-gray-50 md:bg-white min-h-screen">
       
-      <header className="flex items-center mb-8 mt-4 relative">
+      <header className="flex items-center mb-8 mt-4 relative md:hidden">
         <Link 
           href="/audit" 
           className="absolute left-0 w-10 h-10 bg-white rounded-full flex items-center justify-center text-gray-900 shadow-sm border border-gray-100 active:scale-95 transition-transform"
@@ -40,105 +78,130 @@ export default function NewAuditPage() {
         <h1 className="w-full text-center text-lg font-black text-gray-900">Новая проверка</h1>
       </header>
 
+      {/* Шапка для ПК */}
+      <div className="hidden md:flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-3xl font-black text-gray-900 tracking-tight">Новая проверка</h1>
+          <p className="text-sm text-gray-500 font-medium mt-1">Выберите параметры для старта аудита</p>
+        </div>
+        <Link 
+          href="/audit" 
+          className="bg-gray-100 text-gray-700 px-5 py-2.5 rounded-xl font-bold hover:bg-gray-200 transition-colors"
+        >
+          Назад на главную
+        </Link>
+      </div>
+
       {isLoading ? (
         <div className="flex-1 flex items-center justify-center text-gray-400 font-bold">Загрузка данных...</div>
       ) : (
-        <div className="flex-1 flex flex-col space-y-8">
+        <div className="flex-1 flex flex-col space-y-8 md:space-y-10 md:max-w-4xl">
           
           {/* 1. ВЫБОР ТУ */}
           <div>
-            <h2 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-4 ml-1">1. Выберите территорию (ТУ)</h2>
-            <div className="grid grid-cols-2 gap-3">
-              {tus.map((tu: User) => ( // <-- ЗАМЕНИЛИ ANY НА USER
+            <h2 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-4 ml-1 md:text-sm md:mb-5">1. Выберите территорию (ТУ)</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+              {tus.map((tu: User) => (
                 <div 
                   key={tu.id}
                   onClick={() => handleTuSelect(tu.id)}
-                  className={`p-4 rounded-3xl cursor-pointer border-2 transition-all duration-200 ${
+                  className={`p-4 md:p-5 rounded-3xl md:rounded-2xl cursor-pointer border-2 transition-all duration-200 ${
                     selectedTu === tu.id 
-                      ? 'border-black bg-black text-white shadow-lg scale-[0.98]' 
-                      : 'border-transparent bg-white shadow-sm hover:border-gray-200 text-gray-900'
+                      ? 'border-black bg-black text-white shadow-lg scale-[0.98] md:scale-100 md:-translate-y-1' 
+                      : 'border-transparent bg-white md:bg-gray-50 shadow-sm md:shadow-none hover:border-gray-200 hover:bg-white text-gray-900'
                   }`}
                 >
-                  <div className="text-[10px] uppercase font-bold opacity-60 mb-1">Управляющий</div>
-                  <div className="font-black text-sm truncate">{tu.login}</div>
+                  <div className="text-[10px] md:text-xs uppercase font-bold opacity-60 mb-1">Управляющий</div>
+                  {/* ИЗМЕНЕНО: Выводим Имя, а если нет - логин */}
+                  <div className="font-black text-sm md:text-base truncate">{tu.name || tu.login}</div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* 2. ВЫБОР ТОЧКИ (Появляется только после выбора ТУ) */}
-          <div className={`transition-all duration-500 ${selectedTu ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
-            <h2 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-4 ml-1">2. Выберите точку</h2>
+          {/* 2. ВЫБОР ТОЧКИ */}
+          <div className={`transition-all duration-500 ${selectedTu ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none hidden md:block'}`}>
+            <h2 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-4 ml-1 md:text-sm md:mb-5">2. Выберите точку</h2>
             {filteredLocations.length > 0 ? (
-              <div className="grid grid-cols-2 gap-3">
-                {filteredLocations.map((loc: Location) => ( // <-- ЗАМЕНИЛИ ANY НА LOCATION
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
+                {filteredLocations.map((loc: Location) => (
                   <div 
                     key={loc.id}
                     onClick={() => setSelectedLocation(loc.id)}
-                    className={`relative p-4 rounded-3xl cursor-pointer border-2 transition-all duration-200 overflow-hidden group ${
+                    className={`relative p-4 md:p-5 rounded-3xl md:rounded-2xl cursor-pointer border-2 transition-all duration-200 overflow-hidden group ${
                       selectedLocation === loc.id 
-                        ? 'border-[#F25C05] bg-orange-50 shadow-md scale-[0.98]' 
-                        : 'border-transparent bg-white shadow-sm hover:border-orange-200'
+                        ? 'border-[#F25C05] bg-orange-50 shadow-md scale-[0.98] md:scale-100 md:-translate-y-1' 
+                        : 'border-transparent bg-white md:bg-gray-50 shadow-sm md:shadow-none hover:border-orange-200 hover:bg-white'
                     }`}
                   >
-                    <div className={`w-10 h-10 rounded-full mb-3 flex items-center justify-center text-white font-bold text-lg ${selectedLocation === loc.id ? 'bg-[#F25C05] shadow-lg shadow-orange-500/30' : 'bg-gray-800'}`}>
+                    <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full mb-3 flex items-center justify-center text-white font-bold text-lg md:text-xl transition-colors ${selectedLocation === loc.id ? 'bg-[#F25C05] shadow-lg shadow-orange-500/30' : 'bg-gray-800'}`}>
                       📍
                     </div>
-                    <div className={`font-black text-sm leading-tight ${selectedLocation === loc.id ? 'text-[#F25C05]' : 'text-gray-900'}`}>
+                    <div className={`font-black text-sm md:text-base leading-tight ${selectedLocation === loc.id ? 'text-[#F25C05]' : 'text-gray-900'}`}>
                       {loc.name}
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="p-8 bg-gray-100 rounded-3xl text-center text-gray-400 text-sm font-bold border-2 border-dashed border-gray-200">
+              <div className="p-8 md:p-12 bg-gray-100 md:bg-gray-50 rounded-3xl text-center text-gray-400 text-sm md:text-base font-bold border-2 border-dashed border-gray-200 md:border-gray-300">
                 На этой территории пока нет доступных точек
               </div>
             )}
           </div>
 
-          {/* 3. ВЫБОР ЧЕК-ЛИСТА */}
-          <div className={`transition-all duration-500 ${selectedLocation ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
-            <h2 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-4 ml-1">3. Выберите чек-лист</h2>
-            <div className="grid grid-cols-1 gap-3">
-              {checklists.map((chk: Checklist) => ( // <-- ЗАМЕНИЛИ ANY НА CHECKLIST
-                <div 
-                  key={chk.id}
-                  onClick={() => setSelectedChecklist(chk.id)}
-                  className={`flex items-center p-4 rounded-3xl cursor-pointer border-2 transition-all duration-200 ${
-                    selectedChecklist === chk.id 
-                      ? 'border-blue-500 bg-blue-50 shadow-md scale-[0.99]' 
-                      : 'border-transparent bg-white shadow-sm hover:border-blue-200'
-                  }`}
-                >
-                  <div className={`w-12 h-12 rounded-2xl mr-4 flex items-center justify-center text-xl shadow-inner ${selectedChecklist === chk.id ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-400'}`}>
-                    📋
-                  </div>
-                  <div>
-                    <div className={`font-black text-lg leading-tight ${selectedChecklist === chk.id ? 'text-blue-700' : 'text-gray-900'}`}>
-                      {chk.title}
-                    </div>
-                    <div className="text-xs text-gray-400 font-bold mt-1">Основной чек-лист</div>
-                  </div>
-                  {selectedChecklist === chk.id && (
-                    <div className="ml-auto text-blue-500">
-                      <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+          {/* 3. ВЫБОР ЧЕК-ЛИСТА (С ФИЛЬТРАЦИЕЙ) */}
+          <div className={`transition-all duration-500 ${selectedLocation ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none hidden md:block'}`}>
+            <h2 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-4 ml-1 md:text-sm md:mb-5">3. Выберите чек-лист</h2>
+            
+            {filteredChecklists.length > 0 ? (
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                 {/* ИЗМЕНЕНО: Мапим отфильтрованный массив */}
+                 {filteredChecklists.map((chk: Checklist) => ( 
+                   <div 
+                     key={chk.id}
+                     onClick={() => setSelectedChecklist(chk.id)}
+                     className={`flex items-center p-4 md:p-5 rounded-3xl md:rounded-2xl cursor-pointer border-2 transition-all duration-200 ${
+                       selectedChecklist === chk.id 
+                         ? 'border-blue-500 bg-blue-50 shadow-md scale-[0.99] md:scale-100 md:-translate-y-1' 
+                         : 'border-transparent bg-white md:bg-gray-50 shadow-sm md:shadow-none hover:border-blue-200 hover:bg-white'
+                     }`}
+                   >
+                     <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl mr-4 flex items-center justify-center text-xl md:text-2xl shadow-inner transition-colors ${selectedChecklist === chk.id ? 'bg-blue-500 text-white' : 'bg-gray-100 md:bg-white text-gray-400'}`}>
+                       📋
+                     </div>
+                     <div>
+                       <div className={`font-black text-lg md:text-xl leading-tight ${selectedChecklist === chk.id ? 'text-blue-700' : 'text-gray-900'}`}>
+                         {chk.title}
+                       </div>
+                       <div className="text-xs md:text-sm text-gray-400 font-bold mt-1">Основной чек-лист</div>
+                     </div>
+                     {selectedChecklist === chk.id && (
+                       <div className="ml-auto text-blue-500">
+                         <svg className="w-7 h-7 md:w-8 md:h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                       </div>
+                     )}
+                   </div>
+                 ))}
+               </div>
+            ) : (
+               <div className="p-8 md:p-12 bg-gray-100 md:bg-gray-50 rounded-3xl text-center text-gray-400 text-sm md:text-base font-bold border-2 border-dashed border-gray-200 md:border-gray-300">
+                 Для вашей роли нет доступных чек-листов
+               </div>
+            )}
           </div>
 
-          <div className="flex-1"></div>
+          <div className="flex-1 md:hidden"></div>
 
-          <button 
-            onClick={handleContinue}
-            disabled={!selectedLocation || !selectedChecklist}
-            className="w-full bg-[#F25C05] text-white py-5 rounded-2xl font-bold text-lg active:scale-[0.98] transition-all shadow-lg shadow-orange-500/20 disabled:bg-gray-300 disabled:shadow-none mb-4"
-          >
-            Начать заполнение
-          </button>
+          <div className="md:pt-6">
+            <button 
+              onClick={handleContinue}
+              disabled={!selectedLocation || !selectedChecklist}
+              className="w-full md:w-auto md:min-w-[300px] bg-[#F25C05] text-white py-5 md:py-4 md:px-10 rounded-2xl md:rounded-xl font-bold text-lg md:text-base active:scale-[0.98] transition-all shadow-lg shadow-orange-500/20 hover:bg-orange-600 disabled:bg-gray-300 disabled:shadow-none mb-4 md:mb-0"
+            >
+              Начать заполнение
+            </button>
+          </div>
         </div>
       )}
     </div>
