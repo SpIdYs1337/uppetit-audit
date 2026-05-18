@@ -45,25 +45,26 @@ export async function POST(req: Request) {
 
     // 1.5 ПОЛУЧАЕМ ДАННЫЕ ДЛЯ СНЭПШОТА
     const [user, location] = await Promise.all([
-      prisma.user.findUnique({ where: { id: data.userId }, select: { login: true } }),
+      // ИЗМЕНЕНО: Добавили name: true для аудитора
+      prisma.user.findUnique({ where: { id: data.userId }, select: { login: true, name: true } }),
       prisma.location.findUnique({ 
         where: { id: data.locationId }, 
-        // ИЗМЕНЕНО: Достаем не только имя точки, но и привязанного к ней ТУ
         include: { tu: { select: { name: true, login: true } } } 
       })
     ]);
 
-    // Формируем слепок ТУ (Имя, а если нет имени - логин. Если ТУ вообще нет - пишем, что не было)
+    // Формируем слепки (Имя, а если нет имени - логин)
     const actingTuName = location?.tu ? (location.tu.name || location.tu.login) : 'Не был назначен';
+    const actingAuditorName = user ? (user.name || user.login) : 'Неизвестный аудитор';
 
     // 2. СОХРАНЯЕМ АУДИТ
     const newAudit = await prisma.audit.create({
       data: {
         userId: data.userId,
         locationId: data.locationId,
-        auditorName: user?.login || 'Неизвестный аудитор',   
+        auditorName: actingAuditorName, // <-- ВПЕЧАТЫВАЕМ ИМЯ АУДИТОРА НАМЕРТВО
         locationName: location?.name || 'Неизвестная точка', 
-        tuName: actingTuName, // <-- ВПЕЧАТЫВАЕМ ТУ НАМЕРТВО
+        tuName: actingTuName, 
         checklistVersionId: activeVersion.id, 
         score: data.score,
         maxScore: data.maxScore,
@@ -106,7 +107,8 @@ export async function GET() {
   try {
     const audits = await prisma.audit.findMany({
       include: {
-        user: { select: { id: true, login: true } },
+        // ИЗМЕНЕНО: Достаем name у юзера
+        user: { select: { id: true, login: true, name: true } },
         location: { select: { id: true, name: true } },
         checklistVersion: {
           include: {
@@ -121,9 +123,16 @@ export async function GET() {
     // Адаптируем ответ для фронтенда
     const formattedAudits = audits.map(audit => ({
       ...audit,
-      // МАГИЯ СНЭПШОТОВ: Если точка или юзер были удалены (null), подставляем данные из снэпшота
       location: audit.location ? audit.location : { id: 'deleted', name: audit.locationName || 'Удаленная точка' },
-      user: audit.user ? audit.user : { id: 'deleted', login: audit.auditorName || 'Удаленный аудитор' },
+      
+      // ИЗМЕНЕНО: Отдаем на фронтенд Имя вместо логина (а если юзер удален, отдаем слепок)
+      user: audit.user ? {
+        id: audit.user.id,
+        login: audit.user.name || audit.user.login
+      } : { 
+        id: 'deleted', 
+        login: audit.auditorName || 'Удаленный аудитор' 
+      },
       
       // Имитируем старую структуру
       checklist: {
