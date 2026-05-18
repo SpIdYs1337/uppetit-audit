@@ -109,6 +109,13 @@ export default function AuditDashboard() {
           <h2 className="text-xl md:text-2xl font-bold mb-1">История проверок</h2>
           <p className="text-gray-500 text-sm font-medium">Посмотреть прошлые аудиты</p>
         </Link>
+        {/* --- НОВАЯ КНОПКА ИНСТРУКЦИИ --- */}
+        <Link href="/audit/guide" className="block w-full bg-blue-50/50 md:bg-white border border-blue-100 md:border-gray-100 p-6 md:p-8 rounded-3xl active:scale-[0.98] hover:-translate-y-1 hover:shadow-md transition-all group">
+          <h2 className="text-xl md:text-2xl font-black text-blue-600 md:text-gray-900 mb-1 flex items-center gap-2">
+            <span>📖</span> Инструкция
+          </h2>
+          <p className="text-blue-500/80 md:text-gray-500 text-sm font-medium group-hover:text-blue-500 transition-colors">Как правильно проводить аудит</p>
+        </Link>
 
       </div>
 

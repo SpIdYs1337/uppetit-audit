@@ -45,25 +45,26 @@ export async function POST(req: Request) {
 
     // 1.5 ПОЛУЧАЕМ ДАННЫЕ ДЛЯ СНЭПШОТА
     const [user, location] = await Promise.all([
-      prisma.user.findUnique({ where: { id: data.userId }, select: { login: true } }),
+      // Добавили name: true, чтобы сохранять нормальное имя аудитора
+      prisma.user.findUnique({ where: { id: data.userId }, select: { login: true, name: true } }),
       prisma.location.findUnique({ 
         where: { id: data.locationId }, 
-        // ИЗМЕНЕНО: Достаем не только имя точки, но и привязанного к ней ТУ
         include: { tu: { select: { name: true, login: true } } } 
       })
     ]);
 
-    // Формируем слепок ТУ (Имя, а если нет имени - логин. Если ТУ вообще нет - пишем, что не было)
+    // Формируем слепки (Имя, а если нет имени - логин)
     const actingTuName = location?.tu ? (location.tu.name || location.tu.login) : 'Не был назначен';
+    const actingAuditorName = user ? (user.name || user.login) : 'Неизвестный аудитор';
 
     // 2. СОХРАНЯЕМ АУДИТ
     const newAudit = await prisma.audit.create({
       data: {
         userId: data.userId,
         locationId: data.locationId,
-        auditorName: user?.login || 'Неизвестный аудитор',   
+        auditorName: actingAuditorName, // Впечатываем имя аудитора
         locationName: location?.name || 'Неизвестная точка', 
-        tuName: actingTuName, // <-- ВПЕЧАТЫВАЕМ ТУ НАМЕРТВО
+        tuName: actingTuName, // Впечатываем ТУ
         checklistVersionId: activeVersion.id, 
         score: data.score,
         maxScore: data.maxScore,
@@ -89,6 +90,37 @@ export async function POST(req: Request) {
       }
     });
 
+    // =================================================================
+    // 4. АВТОМАТИЧЕСКОЕ ЗАКРЫТИЕ ПЛАНА ВИЗИТОВ В КАЛЕНДАРЕ
+    // =================================================================
+    try {
+      // Устанавливаем границы сегодняшнего дня (от 00:00 до 23:59)
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+
+      // Ищем запланированный визит и меняем статус
+      await prisma.visitPlan.updateMany({
+        where: {
+          userId: data.userId,
+          locationId: data.locationId,
+          status: 'PLANNED', // Ищем только незакрытые
+          date: {
+            gte: todayStart,
+            lte: todayEnd
+          }
+        },
+        data: {
+          status: 'DONE' // Закрываем задачу!
+        }
+      });
+    } catch (planError) {
+      console.error('Не удалось автоматически закрыть план визита:', planError);
+    }
+    // =================================================================
+
     return NextResponse.json({ success: true, audit: newAudit });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -106,7 +138,8 @@ export async function GET() {
   try {
     const audits = await prisma.audit.findMany({
       include: {
-        user: { select: { id: true, login: true } },
+        // Подтягиваем имя юзера
+        user: { select: { id: true, login: true, name: true } },
         location: { select: { id: true, name: true } },
         checklistVersion: {
           include: {
@@ -121,11 +154,17 @@ export async function GET() {
     // Адаптируем ответ для фронтенда
     const formattedAudits = audits.map(audit => ({
       ...audit,
-      // МАГИЯ СНЭПШОТОВ: Если точка или юзер были удалены (null), подставляем данные из снэпшота
       location: audit.location ? audit.location : { id: 'deleted', name: audit.locationName || 'Удаленная точка' },
-      user: audit.user ? audit.user : { id: 'deleted', login: audit.auditorName || 'Удаленный аудитор' },
       
-      // Имитируем старую структуру
+      // Отдаем на фронтенд Имя вместо логина (если юзер удален, отдаем слепок)
+      user: audit.user ? {
+        id: audit.user.id,
+        login: audit.user.name || audit.user.login
+      } : { 
+        id: 'deleted', 
+        login: audit.auditorName || 'Удаленный аудитор' 
+      },
+      
       checklist: {
         id: audit.checklistVersion.checklist.id,
         title: audit.checklistVersion.checklist.title,

@@ -1,57 +1,81 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
-import { requireAuth } from '@/lib/requireAuth'; // <-- Наш щит безопасности
-import { Role } from '@prisma/client'; // <-- Импортируем Enum ролей
+import { requireAuth } from '@/lib/requireAuth'; 
+import { Role } from '@prisma/client'; 
 
 export const dynamic = 'force-dynamic';
 
-// --- ZOD СХЕМА ДЛЯ ВАЛИДАЦИИ ---
+// --- ZOD СХЕМА ДЛЯ ВАЛИДАЦИИ POST ---
 const schedulePostSchema = z.object({
   userId: z.string().min(1, 'Укажите сотрудника'),
   locationId: z.string().min(1, 'Укажите точку'),
   date: z.string().min(1, 'Укажите дату'),
 });
 
+
 export async function GET(request: Request) {
-  const { error } = await requireAuth();
-  if (error) return error;
+  // 1. ЩИТ БЕЗОПАСНОСТИ: Проверяем, авторизован ли пользователь в принципе
+  const { error, session } = await requireAuth();
+  if (error || !session?.user) {
+    return error || NextResponse.json({ error: 'Необходима авторизация' }, { status: 401 });
+  }
+
+  const currentUserId = (session.user as any).id;
+  const currentUserRole = (session.user as any).role;
 
   const { searchParams } = new URL(request.url);
-  const userId = searchParams.get('userId');
+  let targetUserId = searchParams.get('userId');
+
+  // 2. ОГРАНИЧЕНИЕ ДОСТУПА НА УРОВНЕ СТРОКИ (DATA-LEVEL SECURITY):
+  // Если пользователь НЕ является администратором, он имеет право смотреть ТОЛЬКО свои планы.
+  // Если он пытается передать чужой userId в параметрах, мы принудительно переписываем его на его собственный ID.
+  if (currentUserRole !== Role.ADMIN) {
+    targetUserId = currentUserId;
+  }
 
   try {
-    // Отдаем ТОЛЬКО активные планы (status: 'PLANNED')
     const plans = await prisma.visitPlan.findMany({
       where: {
-        ...(userId ? { userId } : {}), 
-        status: 'PLANNED'              
+        // Если это админ и он не передал конкретный userId, выгружаем планы всех сотрудников компании.
+        // Если это обычный сотрудник, тут всегда будет строго его личный targetUserId.
+        ...(targetUserId ? { userId: targetUserId } : {}), 
       },
-      include: { location: true, user: true },
+      include: { 
+        location: true, 
+        user: true,
+        assigner: true 
+      },
       orderBy: { date: 'asc' }
     });
+    
     return NextResponse.json(plans);
-  } catch { 
-    return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 }); 
+  } catch (err) { 
+    console.error('Ошибка при получении расписания:', err);
+    return NextResponse.json({ error: 'Внутренняя ошибка сервера при чтении данных' }, { status: 500 }); 
   }
 }
 
+
 export async function POST(request: Request) {
-  // ИЗМЕНЕНО: Создавать планы могут только АДМИНЫ и ТУ (строгий Enum)
-  const { error } = await requireAuth([Role.AUDITOR, Role.TU]);
+  const { error, session } = await requireAuth([Role.ADMIN, Role.AUDITOR, Role.TU]);
   if (error) return error;
 
   try {
     const body = await request.json();
-    
     const parsedData = schedulePostSchema.parse(body);
+
+    const currentUserId = (session.user as any).id;
+    const isPersonalPlan = currentUserId === parsedData.userId;
+    const assignerId = isPersonalPlan ? null : currentUserId;
 
     const newPlan = await prisma.visitPlan.create({
       data: { 
         userId: parsedData.userId, 
         locationId: parsedData.locationId, 
-        date: new Date(parsedData.date) 
-      } // status по умолчанию будет 'PLANNED'
+        date: new Date(parsedData.date),
+        assignerId: assignerId 
+      } 
     });
     return NextResponse.json(newPlan);
   } catch (error) { 
@@ -62,9 +86,9 @@ export async function POST(request: Request) {
   }
 }
 
+
 export async function DELETE(request: Request) {
-  // ИЗМЕНЕНО: Удалять планы могут только АДМИНЫ и ТУ (строгий Enum)
-  const { error } = await requireAuth([Role.AUDITOR, Role.TU]);
+  const { error } = await requireAuth([Role.ADMIN, Role.AUDITOR, Role.TU]);
   if (error) return error;
 
   try {

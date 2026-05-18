@@ -34,7 +34,8 @@ model User {
   pushSubscription String?
 
   audits           Audit[]
-  visitPlans       VisitPlan[]
+  visitPlans       VisitPlan[] @relation("PlanAssignee") // 
+  assignedTasks    VisitPlan[] @relation("PlanAssigner") // 
   
   // Точки, которыми управляет этот пользователь (если он ТУ)
   managedLocations Location[]  @relation("LocationToTU")
@@ -163,11 +164,17 @@ model Answer {
 // ==========================================
 model VisitPlan {
   id         String   @id @default(cuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  userId     String   
+  user       User     @relation("PlanAssignee", fields: [userId], references: [id], onDelete: Cascade)
+  
+  assignerId String?  
+  assigner   User?    @relation("PlanAssigner", fields: [assignerId], references: [id], onDelete: SetNull)
+
   locationId String
   location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  date       DateTime // Запланированная дата
-  status     String   @default("PLANNED") // PLANNED или DONE
+  
+  date       DateTime 
+  status     String   @default("PLANNED") 
   createdAt  DateTime @default(now())
 }

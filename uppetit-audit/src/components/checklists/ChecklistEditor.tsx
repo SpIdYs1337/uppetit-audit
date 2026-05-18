@@ -8,9 +8,10 @@ export interface ChecklistItemType {
   id: string;
   zone: string;
   text: string;
-  score: number | string; // ИЗМЕНЕНО: теперь принимает и строку (для пустой ячейки)
+  score: number | string;
   isCritical: boolean;
 }
+
 export type ExtendedChecklist = Checklist & {
   items?: any;
 };
@@ -25,7 +26,6 @@ export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEdito
   const isUpdate = !!initialData;
   const [title, setTitle] = useState(initialData?.title || '');
   
-  // ИЗМЕНЕНО: Добавлена типизация <number | string>
   const [redThreshold, setRedThreshold] = useState<number | string>(initialData?.redThreshold ?? 70);
   const [yellowThreshold, setYellowThreshold] = useState<number | string>(initialData?.yellowThreshold ?? 90);
   
@@ -77,8 +77,8 @@ export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEdito
       id: initialData?.id,
       title,
       items: JSON.stringify(items),
-      redThreshold: Number(redThreshold) || 0, // Принудительно конвертируем перед отправкой
-      yellowThreshold: Number(yellowThreshold) || 0, // Принудительно конвертируем перед отправкой
+      redThreshold: Number(redThreshold) || 0,
+      yellowThreshold: Number(yellowThreshold) || 0,
       allowedRoles: JSON.stringify(allowedRoles)
     };
 
@@ -89,6 +89,10 @@ export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEdito
       alert('Ошибка при сохранении');
     }
   };
+
+  // Высчитываем значения для показа точных диапазонов
+  const rVal = Number(redThreshold) || 0;
+  const yVal = Number(yellowThreshold) || 0;
 
   return (
     <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-100 mb-8">
@@ -114,25 +118,62 @@ export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEdito
         </div>
       </div>
 
+      {/* --- ИЗМЕНЕННЫЙ БЛОК НАСТРОЙКИ ОЦЕНКИ --- */}
       <div className="mb-8 p-4 md:p-6 bg-gray-50 rounded-2xl border border-gray-100">
-        <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wide">Настройка оценки (в баллах)</h3>
+        <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
+          <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Настройка оценки (в баллах)</h3>
+          <span className="text-[10px] font-bold bg-blue-50 text-blue-500 px-2 py-1 rounded-md uppercase tracking-wider w-fit">
+            Границы считаются автоматически
+          </span>
+        </div>
+        
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm">
-            <label className="block text-xs font-bold text-red-500 mb-2">Красная (до)</label>
-            {/* ИЗМЕНЕНО: Проверка на пустую строку */}
-            <input type="number" min="0" value={redThreshold} onChange={e => setRedThreshold(e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-2 text-xl font-black text-red-600 bg-red-50 rounded-lg outline-none text-center" />
+          {/* КРАСНАЯ ЗОНА */}
+          <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm flex flex-col">
+            <label className="block text-xs font-bold text-red-500 mb-1">Красная (строго меньше)</label>
+            <div className="text-[10px] text-gray-400 mb-3 leading-tight">Баллы ниже этого числа</div>
+            <input 
+              type="number" 
+              min="0" 
+              value={redThreshold} 
+              onChange={e => setRedThreshold(e.target.value === '' ? '' : Number(e.target.value))} 
+              className="w-full p-2 text-xl font-black text-red-600 bg-red-50 rounded-lg outline-none text-center mb-auto" 
+            />
+            <div className="mt-3 text-[11px] text-center font-bold text-red-500 bg-red-50/80 py-1.5 rounded-lg border border-red-100/50">
+              Попадают: 0 — {rVal > 0 ? rVal - 1 : 0} б.
+            </div>
           </div>
-          <div className="bg-white p-4 rounded-xl border border-yellow-100 shadow-sm">
-            <label className="block text-xs font-bold text-yellow-600 mb-2">Желтая (до)</label>
-            {/* ИЗМЕНЕНО: Проверка на пустую строку */}
-            <input type="number" min="0" value={yellowThreshold} onChange={e => setYellowThreshold(e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-2 text-xl font-black text-yellow-600 bg-yellow-50 rounded-lg outline-none text-center" />
+
+          {/* ЖЕЛТАЯ ЗОНА */}
+          <div className="bg-white p-4 rounded-xl border border-yellow-100 shadow-sm flex flex-col">
+            <label className="block text-xs font-bold text-yellow-600 mb-1">Желтая (строго меньше)</label>
+            <div className="text-[10px] text-gray-400 mb-3 leading-tight">Баллы от красной до этого числа</div>
+            <input 
+              type="number" 
+              min="0" 
+              value={yellowThreshold} 
+              onChange={e => setYellowThreshold(e.target.value === '' ? '' : Number(e.target.value))} 
+              className="w-full p-2 text-xl font-black text-yellow-600 bg-yellow-50 rounded-lg outline-none text-center mb-auto" 
+            />
+            <div className="mt-3 text-[11px] text-center font-bold text-yellow-600 bg-yellow-50/80 py-1.5 rounded-lg border border-yellow-100/50">
+              Попадают: {rVal} — {yVal > 0 ? yVal - 1 : 0} б.
+            </div>
           </div>
-          <div className="bg-white p-4 rounded-xl border border-green-100 shadow-sm flex flex-col justify-center opacity-80">
-            <label className="block text-xs font-bold text-green-600 mb-2">Зеленая</label>
-            <div className="w-full p-2 text-xl font-black text-green-600 bg-green-50 rounded-lg text-center">{yellowThreshold || 0} и выше</div>
+
+          {/* ЗЕЛЕНАЯ ЗОНА */}
+          <div className="bg-white p-4 rounded-xl border border-green-100 shadow-sm flex flex-col opacity-90">
+            <label className="block text-xs font-bold text-green-600 mb-1">Зеленая (включительно)</label>
+            <div className="text-[10px] text-gray-400 mb-3 leading-tight">Все баллы начиная с этого числа</div>
+            <div className="w-full p-2 text-xl font-black text-green-600 bg-green-50 rounded-lg text-center mb-auto flex items-center justify-center min-h-[44px]">
+              {yVal} и выше
+            </div>
+            <div className="mt-3 text-[11px] text-center font-bold text-green-600 bg-green-50/80 py-1.5 rounded-lg border border-green-100/50">
+              Попадают: От {yVal} б. до максимума
+            </div>
           </div>
         </div>
       </div>
+      {/* ------------------------------------------- */}
 
       <div className="space-y-4 mb-6">
         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Вопросы и зоны</label>

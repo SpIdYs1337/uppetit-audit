@@ -113,7 +113,15 @@ const AuditPDF = ({ audit, maxScore, logoBase64 }: { audit: EnrichedAudit, maxSc
         <View style={styles.infoContainer}>
           <View style={styles.infoColumn}>
             <View style={styles.row}><Text style={styles.label}>Чек-лист:</Text><Text style={styles.value}>{audit.checklistVersion?.checklist?.title} (v.{audit.checklistVersion?.version})</Text></View>
-            <View style={styles.row}><Text style={styles.label}>Аудитор:</Text><Text style={styles.value}>{audit.user?.login || 'Неизвестно'}</Text></View>
+            
+            {/* ИЗМЕНЕНО: Берем Имя, потом Логин, потом слепок auditorName */}
+            <View style={styles.row}>
+              <Text style={styles.label}>Аудитор:</Text>
+              <Text style={styles.value}>
+                {audit.user?.name || audit.user?.login || audit.auditorName || 'Неизвестно'}
+              </Text>
+            </View>
+            
           </View>
           <View style={styles.infoColumn}>
             <View style={styles.row}><Text style={styles.label}>Дата:</Text><Text style={styles.value}>{dateStr} в {timeStr}</Text></View>
