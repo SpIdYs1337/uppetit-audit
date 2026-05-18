@@ -22,7 +22,6 @@ export default function LocationsPage() {
     if (isEdit && editingLocation) {
       await updateLocation(editingLocation.id, data);
     } else {
-      // Гарантируем TypeScript'у, что name точно будет строкой
       await createLocation({ 
         name: data.name || 'Новая точка', 
         address: data.address || null 
@@ -50,13 +49,16 @@ export default function LocationsPage() {
   };
 
   return (
-    <div className="w-full mx-auto pb-12">
+    /* ИЗМЕНЕНО: Добавлено ограничение по максимальной ширине (max-w-[1600px]) и центрирование (mx-auto), чтобы на больших мониторах верстка не ломалась */
+    <div className="w-full max-w-[1600px] mx-auto pb-12 overflow-hidden">
+      
+      {/* Шапка */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8 mt-4 md:mt-8 px-4 md:px-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-gray-900">Точки</h1>
           <p className="text-gray-500 font-medium mt-1 text-sm sm:text-base">Управление локациями и распределение по ТУ</p>
         </div>
-        <button onClick={() => { setEditingLocation(null); setIsModalOpen(true); }} className="w-full sm:w-auto bg-[#F25C05] text-white px-6 py-3 rounded-xl font-bold shadow-lg">
+        <button onClick={() => { setEditingLocation(null); setIsModalOpen(true); }} className="w-full sm:w-auto bg-[#F25C05] text-white px-6 py-3 rounded-xl font-bold shadow-lg shrink-0">
           + Добавить точку
         </button>
       </div>
@@ -68,18 +70,16 @@ export default function LocationsPage() {
           
           {/* Зона ТУ с правильным горизонтальным скроллом */}
           <div className="w-full pl-4 md:pl-8">
-            <div className="flex overflow-x-auto gap-4 sm:gap-6 pb-6 mb-2 snap-x items-start">
+            <div className="flex overflow-x-auto gap-4 sm:gap-6 pb-6 mb-2 snap-x items-start custom-scrollbar">
               {tus.length === 0 ? (
                 <div className="w-full bg-blue-50 text-blue-600 p-4 rounded-xl text-sm font-medium mr-4 md:mr-8">
                   Создайте сотрудника с ролью "TU", чтобы здесь появилась колонка.
                 </div>
               ) : (
                 tus.map(tu => (
-                  // shrink-0 запрещает колонке сжиматься, заставляя контейнер скроллиться
                   <div key={tu.id} className="snap-start shrink-0 w-80 sm:w-[350px]">
                     <LocationColumn 
                       id={tu.id} 
-                      // ИЗМЕНЕНО: Теперь выводим Имя, а если его нет — логин
                       title={`ТУ: ${tu.name || tu.login}`} 
                       locations={locations.filter(l => l.tuId === tu.id)} 
                       updateLocation={updateLocation} 
@@ -89,25 +89,29 @@ export default function LocationsPage() {
                   </div>
                 ))
               )}
-              {/* Пустой блок в конце для красивого отступа при максимальном скролле вправо */}
-              <div className="shrink-0 w-2 md:w-4"></div>
+              <div className="shrink-0 w-4 md:w-8"></div>
             </div>
           </div>
 
-          {/* Корзина */}
-          <div className="border-t border-gray-200 pt-6 sm:pt-8 w-full mt-2 pl-4 md:pl-8">
+          {/* ======================================================== */}
+          {/* ИЗМЕНЕНО: Обновленная зона корзины (Многострочная сетка) */}
+          {/* ======================================================== */}
+          <div className="border-t border-gray-200 pt-6 sm:pt-8 w-full mt-4 px-4 md:px-8">
             <h2 className="text-lg sm:text-xl font-black text-gray-800 mb-4 px-1">Корзина (Нераспределенные)</h2>
-            <div className="flex overflow-x-auto pb-4 snap-x">
-              <div className="snap-start shrink-0 w-80 sm:w-[350px]">
-                <LocationColumn 
-                  id="unassigned" 
-                  title="Отвязанные точки" 
-                  locations={locations.filter(l => !l.tuId)} 
-                  updateLocation={updateLocation} 
-                  handleDelete={handleDelete} 
-                  handleEdit={(loc: Location) => { setEditingLocation(loc); setIsModalOpen(true); }} 
-                />
-              </div>
+            
+            {/* Класс "unassigned-basket-override" убирает фиксированную ширину, 
+              которая была зашита внутри LocationColumn, и заставляет контент 
+              внутри "unassigned" раскладываться в адаптивную сетку grid.
+            */}
+            <div className="w-full unassigned-basket-override">
+              <LocationColumn 
+                id="unassigned" 
+                title="Отвязанные точки" 
+                locations={locations.filter(l => !l.tuId)} 
+                updateLocation={updateLocation} 
+                handleDelete={handleDelete} 
+                handleEdit={(loc: Location) => { setEditingLocation(loc); setIsModalOpen(true); }} 
+              />
             </div>
           </div>
           
@@ -115,6 +119,45 @@ export default function LocationsPage() {
       )}
 
       <LocationModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} initialData={editingLocation} onSave={handleSaveModal} />
+
+      {/* Инжектим временные CSS-стили прямо на страницу, чтобы гарантированно переопределить внутренности доски dnd */}
+      <style jsx global>{`
+        /* Стилизуем конкретно колонку с ID "unassigned" */
+        .unassigned-basket-override div[data-droppable-id="unassigned"] {
+          max-width: 100% !important;
+          width: 100% !important;
+        }
+        
+        /* Находим контейнер, где рендерятся сами карточки точек, 
+          и превращаем его из вертикального флекса в многострочный грид!
+        */
+        .unassigned-basket-override div[data-droppable-id="unassigned"] > div:nth-child(2) {
+          display: grid !important;
+          grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+          gap: 16px !important;
+          width: 100% !important;
+          padding: 4px !important;
+        }
+
+        @media (min-width: 640px) {
+          .unassigned-basket-override div[data-droppable-id="unassigned"] > div:nth-child(2) {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+        }
+
+        @media (min-width: 1024px) {
+          .unassigned-basket-override div[data-droppable-id="unassigned"] > div:nth-child(2) {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          }
+        }
+
+        @media (min-width: 1400px) {
+          .unassigned-basket-override div[data-droppable-id="unassigned"] > div:nth-child(2) {
+            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+          }
+        }
+      `}</style>
+
     </div>
   );
 }
