@@ -15,7 +15,6 @@ export default function AdminAuditsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10; 
 
-  // ИЗМЕНЕНО: Добавили dateFrom и dateTo для выбора ПЕРИОДА
   const [filters, setFilters] = useState({
     dateFrom: '',
     dateTo: '',
@@ -62,7 +61,6 @@ export default function AdminAuditsPage() {
       const locName = audit.location?.name || 'Удалена';
       const auditorName = audit.user?.login || 'Удален';
 
-      // Логика фильтрации по ПЕРИОДУ
       const matchDateFrom = filters.dateFrom ? auditDateStr >= filters.dateFrom : true;
       const matchDateTo = filters.dateTo ? auditDateStr <= filters.dateTo : true;
       
@@ -105,14 +103,13 @@ export default function AdminAuditsPage() {
 
   const isAnyFilterActive = filters.dateFrom || filters.dateTo || filters.locations.length > 0 || filters.auditors.length > 0 || filters.tus.length > 0;
 
-  // Компонент-помощник для отрисовки мультиселекта (ИЗМЕНЕНЫ СЛОИ)
-  const MultiSelect = ({ label, options, filterKey }: { label: string, options: string[], filterKey: 'locations' | 'auditors' | 'tus' }) => {
+  // ИЗМЕНЕНО: Обычная функция рендера (чтобы React не перерисовывал меню при каждом клике)
+  const renderMultiSelect = (label: string, options: string[], filterKey: 'locations' | 'auditors' | 'tus') => {
     const selectedCount = filters[filterKey].length;
     const isOpen = openDropdown === filterKey;
 
     return (
-      // Если меню открыто, поднимаем ВЕСЬ блок выше всех остальных (z-50)
-      <div className={`relative ${isOpen ? 'z-50' : 'z-10'}`}>
+      <div key={filterKey} className={`relative ${isOpen ? 'z-50' : 'z-10'}`}>
         <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider">{label}</label>
         
         <div 
@@ -129,19 +126,19 @@ export default function AdminAuditsPage() {
 
         {isOpen && (
           <>
-            {/* Невидимый слой-защитник конкретно для этого меню (лежит ПОД меню, но НАД сайтом) */}
-            <div className="fixed inset-0 z-40" onClick={() => setOpenDropdown(null)}></div>
+            {/* Слой для закрытия по клику вне меню */}
+            <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpenDropdown(null); }}></div>
             
-            {/* Само выпадающее меню (лежит НАД защитником) */}
-            <div className="absolute z-50 top-full left-0 mt-2 w-full min-w-[200px] bg-white border border-gray-100 rounded-xl shadow-xl max-h-60 overflow-y-auto p-1.5 custom-scrollbar">
+            {/* Меню выбора (ИЗМЕНЕНО: увеличен z-index и добавлена высота max-h-[300px]) */}
+            <div className="absolute z-50 top-full left-0 mt-2 w-full min-w-[240px] bg-white border border-gray-100 rounded-xl shadow-xl max-h-[300px] overflow-y-auto p-1.5 custom-scrollbar">
               {options.map(option => {
                 const isChecked = filters[filterKey].includes(option);
                 return (
-                  // Добавлен onClick с preventDefault
-                  <label 
+                  // ИЗМЕНЕНО: div вместо label + e.stopPropagation() для предотвращения багов
+                  <div 
                     key={option} 
                     onClick={(e) => {
-                      e.preventDefault(); 
+                      e.stopPropagation(); 
                       toggleFilterItem(filterKey, option);
                     }}
                     className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors group"
@@ -150,7 +147,7 @@ export default function AdminAuditsPage() {
                       {isChecked && <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                     </div>
                     <span className={`text-sm truncate select-none ${isChecked ? 'font-bold text-gray-900' : 'font-medium text-gray-700'}`}>{option}</span>
-                  </label>
+                  </div>
                 );
               })}
               {options.length === 0 && (
@@ -167,7 +164,7 @@ export default function AdminAuditsPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto relative pb-20">
-      
+
       {zoomedPhoto && (
         <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 cursor-zoom-out transition-opacity" onClick={() => setZoomedPhoto(null)}>
           <img src={zoomedPhoto} alt="Увеличенное фото" className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" />
@@ -176,7 +173,7 @@ export default function AdminAuditsPage() {
       )}
 
       {/* ШАПКА */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6 md:mb-8 relative z-0">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6 md:mb-8 relative z-10">
         <div>
           <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">История проверок</h1>
           <p className="text-gray-500 mt-1 md:mt-2 text-sm md:text-base">
@@ -190,8 +187,8 @@ export default function AdminAuditsPage() {
         )}
       </div>
 
-      {/* ПАНЕЛЬ ФИЛЬТРОВ */}
-      <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-100 mb-6 relative z-0">
+      {/* ПАНЕЛЬ ФИЛЬТРОВ (ИЗМЕНЕНО: z-30 чтобы перекрывать таблицу) */}
+      <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-100 mb-6 relative z-30">
         <div className="flex justify-between items-center mb-4">
           <h2 className="font-black text-gray-900">Фильтры поиска</h2>
           {isAnyFilterActive && (
@@ -224,21 +221,21 @@ export default function AdminAuditsPage() {
             </div>
           </div>
 
-          <MultiSelect label="Точки" options={uniqueLocations} filterKey="locations" />
-          <MultiSelect label="Аудиторы" options={uniqueAuditors} filterKey="auditors" />
-          <MultiSelect label="ТУ (Террит. упр.)" options={uniqueTUs} filterKey="tus" />
+          {renderMultiSelect('Точки', uniqueLocations, 'locations')}
+          {renderMultiSelect('Аудиторы', uniqueAuditors, 'auditors')}
+          {renderMultiSelect('ТУ (Террит. упр.)', uniqueTUs, 'tus')}
 
         </div>
       </div>
 
-      {/* ТАБЛИЦА */}
+      {/* ТАБЛИЦА (ИЗМЕНЕНО: понижен z-index) */}
       {paginatedAudits.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-3xl border border-gray-100 border-dashed relative z-0">
+        <div className="text-center py-12 bg-white rounded-3xl border border-gray-100 border-dashed relative z-10">
           <div className="text-4xl mb-3">📭</div>
           <p className="text-gray-500 font-bold">Аудиты по вашему запросу не найдены.</p>
         </div>
       ) : (
-        <div className="bg-transparent md:bg-white rounded-none md:rounded-3xl shadow-none md:shadow-sm md:border border-gray-100 overflow-hidden mb-6 relative z-0">
+        <div className="bg-transparent md:bg-white rounded-none md:rounded-3xl shadow-none md:shadow-sm md:border border-gray-100 overflow-hidden mb-6 relative z-10">
           <div className="md:overflow-x-auto">
             <table className="w-full text-left border-collapse md:min-w-[900px] block md:table">
               
@@ -328,7 +325,7 @@ export default function AdminAuditsPage() {
 
       {/* ПАГИНАЦИЯ */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-gray-100 relative z-0">
+        <div className="flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-gray-100 relative z-10">
           <button 
             onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
             disabled={currentPage === 1}
