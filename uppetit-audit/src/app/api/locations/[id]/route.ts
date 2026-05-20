@@ -1,44 +1,56 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { z } from 'zod';
 import { requireAuth } from '@/lib/requireAuth';
-import { Role } from '@prisma/client'; // <-- Импортируем Enum
+import { Role } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 
-// Универсальная схема для частичного обновления (PATCH)
-const locationUpdateSchema = z.object({
-  name: z.string().min(1, 'Название обязательно').optional(),
-  address: z.string().optional().nullable(),
-  // Магия: разрешаем null, undefined и пустые строки, превращая их в null для БД
-  tuId: z.string().optional().nullable().transform(val => val === '' ? null : val),
-  isActive: z.boolean().optional(),
-});
-
-// ИЗМЕНЕНО: Типизируем params как Promise, как того требует новый Next.js
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  // ИЗМЕНЕНО: Строгий Role.ADMIN
+export async function PATCH(req: Request, context: { params: Promise<{ id: string }> }) {
+  // 1. ЩИТ БЕЗОПАСНОСТИ: Только Админы могут редактировать точки
   const { error } = await requireAuth([Role.ADMIN]);
   if (error) return error;
 
   try {
-    // ИЗМЕНЕНО: Достаем id через await
-    const { id } = await params;
+    const params = await context.params;
+    const locationId = params.id;
+    
+    if (!locationId) {
+      return NextResponse.json({ error: 'ID локации не указан' }, { status: 400 });
+    }
 
     const body = await req.json();
-    const parsedData = locationUpdateSchema.parse(body);
+    const { name, address, tuIds, isActive, activeFrom, activeTo } = body;
 
+    // 2. ФОРМИРУЕМ ДАННЫЕ ДЛЯ ОБНОВЛЕНИЯ
+    const updateData: any = {};
+    
+    if (name !== undefined) updateData.name = name;
+    if (address !== undefined) updateData.address = address;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (activeFrom !== undefined) updateData.activeFrom = activeFrom;
+    if (activeTo !== undefined) updateData.activeTo = activeTo;
+
+    // 3. МАГИЯ PRISMA ДЛЯ МАССИВА ТУ
+    // Если фронтенд прислал массив tuIds, мы говорим базе: 
+    // "Забудь все старые связи и установи строго вот эти"
+    if (tuIds && Array.isArray(tuIds)) {
+      updateData.tus = {
+        set: tuIds.map((id: string) => ({ id }))
+      };
+    }
+
+    // 4. СОХРАНЯЕМ В БАЗУ
     const updatedLocation = await prisma.location.update({
-      where: { id }, // Используем извлеченный id
-      data: parsedData,
+      where: { id: locationId },
+      data: updateData,
+      include: {
+        tus: { select: { id: true, name: true, login: true } } // Возвращаем обновленных ТУ на фронт
+      }
     });
 
     return NextResponse.json(updatedLocation);
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Неверные данные', details: err.issues }, { status: 400 });
-    }
     console.error('Ошибка PATCH /api/locations/[id]:', err);
-    return NextResponse.json({ error: 'Ошибка обновления' }, { status: 500 });
+    return NextResponse.json({ error: 'Внутренняя ошибка сервера при обновлении точки' }, { status: 500 });
   }
 }
