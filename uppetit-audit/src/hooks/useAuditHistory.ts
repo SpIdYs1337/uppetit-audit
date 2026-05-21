@@ -1,6 +1,7 @@
 import useSWR from 'swr';
 import { useSession } from 'next-auth/react';
 import { fetcher } from '@/lib/fetcher';
+// ИЗМЕНЕНО: Берем единый, строгий тип из нашего главного файла
 import { EnrichedAudit } from '@/hooks/useAdminAudits'; 
 
 export function useAuditHistory() {
@@ -17,6 +18,7 @@ export function useAuditHistory() {
     fetcher
   );
 
+  // Оставляем только те аудиты, которые провел текущий пользователь
   const myAudits = audits?.filter(a => a.userId === userId) || [];
 
   return {
