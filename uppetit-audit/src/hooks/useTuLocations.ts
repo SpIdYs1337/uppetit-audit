@@ -1,29 +1,23 @@
 import useSWR from 'swr';
 import { useSession } from 'next-auth/react';
 import { fetcher } from '@/lib/fetcher';
-
-// ИЗМЕНЕНО: Импортируем правильные типы из соседних хуков
-import { EnrichedLocation } from '@/hooks/useNewAudit';
-import { EnrichedAudit } from '@/hooks/useAdminAudits';
+import { Location, Audit, User, Checklist } from '@prisma/client';
+export type EnrichedAudit = Audit & { 
+  location?: Location | null; 
+  user?: User | null; 
+  checklist?: Checklist | null; 
+};
 
 export function useTuLocations() {
   const { data: session, status } = useSession();
   const userId = session?.user?.id;
 
-  // ИЗМЕНЕНО: Передаем строгий тип EnrichedLocation
-  const { data: allLocations, isLoading: locLoading } = useSWR<EnrichedLocation[]>('/api/locations', fetcher);
+  const { data: allLocations, isLoading: locLoading } = useSWR<Location[]>('/api/locations', fetcher);
   const { data: allAudits, isLoading: audLoading } = useSWR<EnrichedAudit[]>('/api/audits', fetcher);
 
-  // ИЗМЕНЕНО: Ищем ТУ и в старом поле, и в новом массиве (чтобы поддерживать точки с двумя и более ТУ)
-  const myLocations = allLocations?.filter(loc => {
-    const hasLegacyTu = loc.tuId === userId;
-    const hasNewTu = Array.isArray(loc.tus) && loc.tus.some(tu => tu.id === userId);
-    return hasLegacyTu || hasNewTu;
-  }) || [];
-  
+  const myLocations = allLocations?.filter(loc => loc.tuId === userId) || [];
   const myLocationIds = myLocations.map(l => l.id);
 
-  // Отбираем аудиты, которые были проведены на точках этого ТУ
   const myAudits = allAudits?.filter(aud => aud.locationId && myLocationIds.includes(aud.locationId)) || [];
 
   return {
