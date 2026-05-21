@@ -3,9 +3,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getSession } from 'next-auth/react'; // <-- ДОБАВИЛИ ИМПОРТ СЕССИИ
-import { useNewAudit } from '@/hooks/useNewAudit';
-import { User, Location, Checklist } from '@prisma/client'; 
+import { getSession } from 'next-auth/react';
+import { useNewAudit, EnrichedLocation } from '@/hooks/useNewAudit';
+import { User, Checklist } from '@prisma/client'; 
 
 export default function NewAuditPage() {
   const router = useRouter();
@@ -22,11 +22,9 @@ export default function NewAuditPage() {
     setSelectedChecklist
   } = useNewAudit();
 
-  // Состояние для хранения роли текущего пользователя
   const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
-    // Получаем сессию и вытаскиваем роль при загрузке страницы
     const fetchSession = async () => {
       const session = await getSession();
       setUserRole((session?.user as any)?.role || null);
@@ -34,24 +32,19 @@ export default function NewAuditPage() {
     fetchSession();
   }, []);
 
-  // Фильтруем чек-листы на основе роли пользователя
   const filteredChecklists = useMemo(() => {
     if (!checklists || !userRole) return checklists || [];
     
-    // Администраторы видят все чек-листы
     if (userRole === 'ADMIN') return checklists;
 
     return checklists.filter((chk: Checklist) => {
       try {
-        // Парсим allowedRoles (в БД он хранится как JSON строка)
         const allowedRoles = typeof chk.allowedRoles === 'string' 
           ? JSON.parse(chk.allowedRoles) 
           : (chk.allowedRoles || []);
           
-        // Проверяем, есть ли роль пользователя в массиве разрешенных ролей
         return allowedRoles.includes(userRole);
       } catch (e) {
-        // Если JSON битый, по умолчанию скрываем, чтобы не было утечки доступов
         console.error('Ошибка парсинга allowedRoles:', e);
         return false;
       }
@@ -112,7 +105,6 @@ export default function NewAuditPage() {
                   }`}
                 >
                   <div className="text-[10px] md:text-xs uppercase font-bold opacity-60 mb-1">Управляющий</div>
-                  {/* ИЗМЕНЕНО: Выводим Имя, а если нет - логин */}
                   <div className="font-black text-sm md:text-base truncate">{tu.name || tu.login}</div>
                 </div>
               ))}
@@ -123,22 +115,30 @@ export default function NewAuditPage() {
           <div className={`transition-all duration-500 ${selectedTu ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none hidden md:block'}`}>
             <h2 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-4 ml-1 md:text-sm md:mb-5">2. Выберите точку</h2>
             {filteredLocations.length > 0 ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
-                {filteredLocations.map((loc: Location) => (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
+                {filteredLocations.map((loc: EnrichedLocation) => (
                   <div 
                     key={loc.id}
                     onClick={() => setSelectedLocation(loc.id)}
-                    className={`relative p-4 md:p-5 rounded-3xl md:rounded-2xl cursor-pointer border-2 transition-all duration-200 overflow-hidden group ${
+                    className={`relative p-4 md:p-5 rounded-3xl md:rounded-2xl cursor-pointer border-2 transition-all duration-200 overflow-hidden group flex items-start gap-4 ${
                       selectedLocation === loc.id 
                         ? 'border-[#F25C05] bg-orange-50 shadow-md scale-[0.98] md:scale-100 md:-translate-y-1' 
                         : 'border-transparent bg-white md:bg-gray-50 shadow-sm md:shadow-none hover:border-orange-200 hover:bg-white'
                     }`}
                   >
-                    <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full mb-3 flex items-center justify-center text-white font-bold text-lg md:text-xl transition-colors ${selectedLocation === loc.id ? 'bg-[#F25C05] shadow-lg shadow-orange-500/30' : 'bg-gray-800'}`}>
+                    <div className={`w-10 h-10 md:w-12 md:h-12 shrink-0 rounded-full flex items-center justify-center text-white font-bold text-lg md:text-xl transition-colors ${selectedLocation === loc.id ? 'bg-[#F25C05] shadow-lg shadow-orange-500/30' : 'bg-gray-800'}`}>
                       📍
                     </div>
-                    <div className={`font-black text-sm md:text-base leading-tight ${selectedLocation === loc.id ? 'text-[#F25C05]' : 'text-gray-900'}`}>
-                      {loc.name}
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <div className={`font-black text-sm md:text-base leading-tight truncate ${selectedLocation === loc.id ? 'text-[#F25C05]' : 'text-gray-900'}`}>
+                        {loc.name}
+                      </div>
+                      {/* Адрес для дополнительной информативности */}
+                      {loc.address && (
+                        <div className={`text-xs mt-1 truncate ${selectedLocation === loc.id ? 'text-orange-600/80 font-medium' : 'text-gray-400 font-bold'}`}>
+                          {loc.address}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -156,7 +156,6 @@ export default function NewAuditPage() {
             
             {filteredChecklists.length > 0 ? (
                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                 {/* ИЗМЕНЕНО: Мапим отфильтрованный массив */}
                  {filteredChecklists.map((chk: Checklist) => ( 
                    <div 
                      key={chk.id}
@@ -167,17 +166,17 @@ export default function NewAuditPage() {
                          : 'border-transparent bg-white md:bg-gray-50 shadow-sm md:shadow-none hover:border-blue-200 hover:bg-white'
                      }`}
                    >
-                     <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl mr-4 flex items-center justify-center text-xl md:text-2xl shadow-inner transition-colors ${selectedChecklist === chk.id ? 'bg-blue-500 text-white' : 'bg-gray-100 md:bg-white text-gray-400'}`}>
+                     <div className={`w-12 h-12 md:w-14 md:h-14 shrink-0 rounded-2xl mr-4 flex items-center justify-center text-xl md:text-2xl shadow-inner transition-colors ${selectedChecklist === chk.id ? 'bg-blue-500 text-white' : 'bg-gray-100 md:bg-white text-gray-400'}`}>
                        📋
                      </div>
-                     <div>
-                       <div className={`font-black text-lg md:text-xl leading-tight ${selectedChecklist === chk.id ? 'text-blue-700' : 'text-gray-900'}`}>
+                     <div className="flex-1 min-w-0">
+                       <div className={`font-black text-lg md:text-xl leading-tight truncate ${selectedChecklist === chk.id ? 'text-blue-700' : 'text-gray-900'}`}>
                          {chk.title}
                        </div>
                        <div className="text-xs md:text-sm text-gray-400 font-bold mt-1">Основной чек-лист</div>
                      </div>
                      {selectedChecklist === chk.id && (
-                       <div className="ml-auto text-blue-500">
+                       <div className="ml-auto text-blue-500 shrink-0">
                          <svg className="w-7 h-7 md:w-8 md:h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
                        </div>
                      )}

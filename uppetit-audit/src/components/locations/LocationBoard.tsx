@@ -10,12 +10,11 @@ interface LocationCardProps {
 
 export function LocationCard({ loc, updateLocation, handleDelete, handleEdit }: LocationCardProps) {
   const lastAudit = loc.audits?.[0];
-
-  // Подхватываем и старую одиночную привязку, и новый массив ТУ
   const assignedTus = loc.tus?.length ? loc.tus : (loc.tu ? [loc.tu] : []);
 
   return (
-    <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex flex-col gap-3 group hover:shadow-md hover:border-orange-100 transition-all">
+    <div className="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-gray-100 flex flex-col gap-3 group hover:shadow-md hover:border-orange-100 transition-all h-full">
+      
       <div className="flex justify-between items-start gap-2">
         <div className="flex-1 min-w-0">
           <h4 className="font-black text-gray-900 truncate text-lg leading-tight">{loc.name}</h4>
@@ -41,36 +40,44 @@ export function LocationCard({ loc, updateLocation, handleDelete, handleEdit }: 
         )}
       </div>
 
-      <div className="flex gap-2 text-[10px] items-center bg-gray-50 p-2.5 rounded-xl mt-1">
-        <span className="text-gray-400 font-bold uppercase tracking-wider">Период:</span>
-        <input 
-          type="date" 
-          className="text-gray-900 bg-white border border-gray-200 rounded-lg px-2 py-1 w-full min-w-[90px] outline-none font-bold focus:border-[#F25C05] transition-colors" 
-          value={loc.activeFrom ? new Date(loc.activeFrom).toISOString().split('T')[0] : ''} 
-          onChange={(e) => updateLocation(loc.id, { activeFrom: e.target.value ? new Date(e.target.value) : null })} 
-        />
-        <span className="text-gray-300 font-black">—</span>
-        <input 
-          type="date" 
-          className="text-gray-900 bg-white border border-gray-200 rounded-lg px-2 py-1 w-full min-w-[90px] outline-none font-bold focus:border-[#F25C05] transition-colors" 
-          value={loc.activeTo ? new Date(loc.activeTo).toISOString().split('T')[0] : ''} 
-          onChange={(e) => updateLocation(loc.id, { activeTo: e.target.value ? new Date(e.target.value) : null })} 
-        />
+      {/* Компактный вертикальный блок дат (никогда не вылезает) */}
+      <div className="bg-gray-50 p-2.5 rounded-xl mt-auto flex flex-col gap-1.5">
+        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">
+          Период:
+        </span>
+        <div className="flex items-center justify-between gap-1 sm:gap-2 w-full">
+          <input 
+            type="date" 
+            className="flex-1 w-full min-w-0 text-gray-900 bg-white border border-gray-200 rounded-md px-1.5 py-1 text-[10px] outline-none font-bold focus:border-[#F25C05] transition-colors" 
+            value={loc.activeFrom ? new Date(loc.activeFrom).toISOString().split('T')[0] : ''} 
+            onChange={(e) => updateLocation(loc.id, { activeFrom: e.target.value ? new Date(e.target.value) : null })} 
+          />
+          <span className="text-gray-300 font-bold shrink-0">-</span>
+          <input 
+            type="date" 
+            className="flex-1 w-full min-w-0 text-gray-900 bg-white border border-gray-200 rounded-md px-1.5 py-1 text-[10px] outline-none font-bold focus:border-[#F25C05] transition-colors" 
+            value={loc.activeTo ? new Date(loc.activeTo).toISOString().split('T')[0] : ''} 
+            onChange={(e) => updateLocation(loc.id, { activeTo: e.target.value ? new Date(e.target.value) : null })} 
+          />
+        </div>
       </div>
 
-      <div className="flex justify-between items-end mt-2 pt-3 border-t border-gray-50">
-        <div className="text-xs flex-1">
+      <div className="flex justify-between items-end mt-1 pt-3 border-t border-gray-50">
+        <div className="text-xs flex-1 min-w-0 pr-2">
           {lastAudit ? (
-            <p className="text-gray-600 font-bold"><span className="text-gray-400">Последний аудит:</span> <span className="text-[#F25C05]">{lastAudit.score} б.</span></p>
+            <p className="text-gray-600 font-bold truncate">
+              <span className="text-gray-400">Крайний:</span> <span className="text-[#F25C05]">{lastAudit.score} б.</span>
+            </p>
           ) : (
-            <p className="text-gray-400 font-bold italic">Проверок нет</p>
+            <p className="text-gray-400 font-bold italic truncate">Проверок нет</p>
           )}
         </div>
-        <div className="flex gap-1 ml-2">
+        <div className="flex gap-1 shrink-0">
           <button onClick={() => handleEdit(loc)} className="text-gray-400 hover:text-[#F25C05] bg-gray-50 hover:bg-orange-50 w-8 h-8 rounded-xl flex items-center justify-center transition-colors">✏️</button>
           <button onClick={() => handleDelete(loc.id, loc.name)} className="text-gray-400 hover:text-red-500 bg-gray-50 hover:bg-red-50 w-8 h-8 rounded-xl flex items-center justify-center transition-colors">🗑️</button>
         </div>
       </div>
+      
     </div>
   );
 }

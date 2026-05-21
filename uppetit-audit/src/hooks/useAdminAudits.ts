@@ -1,11 +1,27 @@
 import useSWR from 'swr';
 import { fetcher } from '@/lib/fetcher';
-import { Audit, Location, User, Checklist } from '@prisma/client';
+import { Audit } from '@prisma/client';
+
+export interface ParsedAnswer {
+  id: string;
+  zone?: string;
+  question: string;
+  isOk: boolean;
+  penalty: number;
+  comment?: string;
+  photos?: string[];
+  photoBase64?: string;
+}
 
 export type EnrichedAudit = Audit & {
-  location?: Location | null;
-  user?: User | null;
-  checklist?: Checklist | null;
+  location?: { 
+    id: string; 
+    name: string;
+    tus?: { id: string; name: string | null; login: string }[]; // <-- ДОБАВЛЕНО
+  } | null;
+  user?: { id: string; login: string } | null;
+  checklist?: { id: string; title: string; version: number } | null;
+  answers: ParsedAnswer[];
 };
 
 export function useAdminAudits() {

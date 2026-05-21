@@ -11,7 +11,6 @@ export default function AdminAuditsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
 
-  // --- СОСТОЯНИЯ ДЛЯ ФИЛЬТРОВ И ПАГИНАЦИИ ---
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10; 
 
@@ -48,35 +47,57 @@ export default function AdminAuditsPage() {
     } catch { alert('Ошибка при очистке истории'); }
   };
 
-  // Собираем уникальные значения
-  const uniqueLocations = Array.from(new Set(audits.map(a => a.location?.name || 'Удалена'))).filter(Boolean).sort();
-  const uniqueAuditors = Array.from(new Set(audits.map(a => a.user?.login || 'Удален'))).filter(Boolean).sort();
-  const uniqueTUs = Array.from(new Set(audits.map(a => (a as any).tuName || 'Не был назначен'))).filter(Boolean).sort();
+  // =====================================================================
+  // ИЗМЕНЕНО: Строгий приоритет ИСТОРИИ (слепков) над живыми данными!
+  // =====================================================================
+  const uniqueLocations = Array.from(new Set(audits.map(a => a.locationName || a.location?.name || 'Удалена'))).filter(Boolean).sort();
+  const uniqueAuditors = Array.from(new Set(audits.map(a => a.auditorName || a.user?.login || 'Удален'))).filter(Boolean).sort();
+  
+  // Умный сбор ТУ: разбиваем слепок "TEST, TEST2" на отдельных ТУ для фильтра
+  const allTus = audits.flatMap(a => {
+    if (a.tuName) {
+      if (a.tuName === 'Не был назначен') return ['Не был назначен'];
+      return a.tuName.split(',').map(s => s.trim()); // Разбиваем строку по запятой
+    }
+    // Фоллбэк только для древних аудитов, где tuName == null
+    if (a.location?.tus && a.location.tus.length > 0) {
+      return a.location.tus.map(tu => tu.name || tu.login);
+    }
+    return ['Не был назначен'];
+  });
+  const uniqueTUs = Array.from(new Set(allTus)).filter(Boolean).sort();
 
-  // Применяем фильтры
   const filteredAudits = useMemo(() => {
     return audits.filter(audit => {
       const auditDateStr = new Date(audit.date).toISOString().split('T')[0];
-      const actingTu = (audit as any).tuName || 'Не был назначен';
-      const locName = audit.location?.name || 'Удалена';
-      const auditorName = audit.user?.login || 'Удален';
+      
+      const locName = audit.locationName || audit.location?.name || 'Удалена';
+      const auditorName = audit.auditorName || audit.user?.login || 'Удален';
+      
+      let auditTus: string[] = ['Не был назначен'];
+      if (audit.tuName) {
+        if (audit.tuName !== 'Не был назначен') {
+          auditTus = audit.tuName.split(',').map(s => s.trim());
+        }
+      } else if (audit.location?.tus && audit.location.tus.length > 0) {
+        auditTus = audit.location.tus.map(tu => tu.name || tu.login);
+      }
 
       const matchDateFrom = filters.dateFrom ? auditDateStr >= filters.dateFrom : true;
       const matchDateTo = filters.dateTo ? auditDateStr <= filters.dateTo : true;
       
       const matchLocation = filters.locations.length === 0 || filters.locations.includes(locName);
       const matchAuditor = filters.auditors.length === 0 || filters.auditors.includes(auditorName);
-      const matchTu = filters.tus.length === 0 || filters.tus.includes(actingTu);
+      // Если выбран хотя бы один ТУ из списка фильтров, который есть в этом аудите — показываем аудит
+      const matchTu = filters.tus.length === 0 || filters.tus.some(tu => auditTus.includes(tu));
 
       return matchDateFrom && matchDateTo && matchLocation && matchAuditor && matchTu;
     });
   }, [audits, filters]);
 
-  // Пагинация
   const totalPages = Math.ceil(filteredAudits.length / itemsPerPage) || 1;
   const paginatedAudits = filteredAudits.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  // Хелпер для переключения чекбоксов
   const toggleFilterItem = (key: 'locations' | 'auditors' | 'tus', value: string) => {
     setFilters(prev => {
       const currentList = prev[key];
@@ -103,7 +124,6 @@ export default function AdminAuditsPage() {
 
   const isAnyFilterActive = filters.dateFrom || filters.dateTo || filters.locations.length > 0 || filters.auditors.length > 0 || filters.tus.length > 0;
 
-  // ИЗМЕНЕНО: Обычная функция рендера (чтобы React не перерисовывал меню при каждом клике)
   const renderMultiSelect = (label: string, options: string[], filterKey: 'locations' | 'auditors' | 'tus') => {
     const selectedCount = filters[filterKey].length;
     const isOpen = openDropdown === filterKey;
@@ -126,15 +146,11 @@ export default function AdminAuditsPage() {
 
         {isOpen && (
           <>
-            {/* Слой для закрытия по клику вне меню */}
             <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpenDropdown(null); }}></div>
-            
-            {/* Меню выбора (ИЗМЕНЕНО: увеличен z-index и добавлена высота max-h-[300px]) */}
             <div className="absolute z-50 top-full left-0 mt-2 w-full min-w-[240px] bg-white border border-gray-100 rounded-xl shadow-xl max-h-[300px] overflow-y-auto p-1.5 custom-scrollbar">
               {options.map(option => {
                 const isChecked = filters[filterKey].includes(option);
                 return (
-                  // ИЗМЕНЕНО: div вместо label + e.stopPropagation() для предотвращения багов
                   <div 
                     key={option} 
                     onClick={(e) => {
@@ -187,7 +203,7 @@ export default function AdminAuditsPage() {
         )}
       </div>
 
-      {/* ПАНЕЛЬ ФИЛЬТРОВ (ИЗМЕНЕНО: z-30 чтобы перекрывать таблицу) */}
+      {/* ПАНЕЛЬ ФИЛЬТРОВ */}
       <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-100 mb-6 relative z-30">
         <div className="flex justify-between items-center mb-4">
           <h2 className="font-black text-gray-900">Фильтры поиска</h2>
@@ -199,7 +215,6 @@ export default function AdminAuditsPage() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
           
-          {/* ФИЛЬТР: ПЕРИОД ДАТ */}
           <div className="relative z-10">
             <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider">Период (От и До)</label>
             <div className="flex items-center gap-2">
@@ -208,7 +223,6 @@ export default function AdminAuditsPage() {
                 value={filters.dateFrom}
                 onChange={(e) => handleDateChange('dateFrom', e.target.value)}
                 className="w-full p-2.5 rounded-xl bg-gray-50 border border-gray-100 outline-none focus:bg-white focus:border-[#F25C05] font-bold text-gray-700 text-xs sm:text-sm transition-colors"
-                title="Начало периода"
               />
               <span className="text-gray-300 font-bold">-</span>
               <input 
@@ -216,7 +230,6 @@ export default function AdminAuditsPage() {
                 value={filters.dateTo}
                 onChange={(e) => handleDateChange('dateTo', e.target.value)}
                 className="w-full p-2.5 rounded-xl bg-gray-50 border border-gray-100 outline-none focus:bg-white focus:border-[#F25C05] font-bold text-gray-700 text-xs sm:text-sm transition-colors"
-                title="Конец периода"
               />
             </div>
           </div>
@@ -228,7 +241,7 @@ export default function AdminAuditsPage() {
         </div>
       </div>
 
-      {/* ТАБЛИЦА (ИЗМЕНЕНО: понижен z-index) */}
+      {/* ТАБЛИЦА */}
       {paginatedAudits.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-3xl border border-gray-100 border-dashed relative z-10">
           <div className="text-4xl mb-3">📭</div>
@@ -255,9 +268,18 @@ export default function AdminAuditsPage() {
                 {paginatedAudits.map((audit) => {
                   const maxScore = audit.maxScore || 0;
                   const isPerfect = audit.score === maxScore && maxScore > 0;
-                  const safeChecklist = audit.checklist as any;
                   const isExpanded = expandedId === audit.id;
-                  const actingTu = (audit as any).tuName || 'Не был назначен';
+
+                  const locName = audit.locationName || audit.location?.name || 'Удалена';
+                  const auditorName = audit.auditorName || audit.user?.login || 'Удален';
+                  
+                  // СТРОКА ТУ: Читаем строго слепок. Если его нет (древние аудиты) - читаем живую связь
+                  let auditTusStr = 'Не был назначен';
+                  if (audit.tuName) {
+                    auditTusStr = audit.tuName;
+                  } else if (audit.location?.tus && audit.location.tus.length > 0) {
+                    auditTusStr = audit.location.tus.map(tu => tu.name || tu.login).join(', ');
+                  }
 
                   return (
                     <React.Fragment key={audit.id}>
@@ -271,25 +293,25 @@ export default function AdminAuditsPage() {
                           {formatDate(audit.date)}
                         </td>
                         <td className="block md:table-cell p-0 md:p-4 text-lg md:text-sm font-black md:font-bold text-gray-900 mb-3 md:mb-0 pr-24 md:pr-0 leading-tight">
-                          {audit.location?.name || 'Удалена'}
+                          {locName}
                         </td>
                         <td className="block md:table-cell p-0 md:p-4 text-sm text-gray-500 mb-1 md:mb-0">
                           <div className="flex items-center gap-2">
                             <span className="md:hidden text-[10px] uppercase font-bold text-gray-400">Чек-лист:</span>
-                            <span className="truncate max-w-[200px] block">{safeChecklist?.title || 'Удален'}</span>
-                            {safeChecklist?.version && <span className="bg-gray-100 border border-gray-200 text-gray-400 text-[10px] font-black px-1.5 py-0.5 rounded-md whitespace-nowrap">v.{safeChecklist.version}</span>}
+                            <span className="truncate max-w-[200px] block">{audit.checklist?.title || 'Удален'}</span>
+                            {audit.checklist?.version && <span className="bg-gray-100 border border-gray-200 text-gray-400 text-[10px] font-black px-1.5 py-0.5 rounded-md whitespace-nowrap">v.{audit.checklist.version}</span>}
                           </div>
                         </td>
                         <td className="block md:table-cell p-0 md:p-4 text-sm text-gray-500 mb-1 md:mb-0">
                           <div className="flex items-center gap-2">
                             <span className="md:hidden text-[10px] uppercase font-bold text-gray-400">Аудитор:</span>
-                            <span className="font-bold md:font-normal text-gray-700 md:text-gray-500">{audit.user?.login || 'Удален'}</span>
+                            <span className="font-bold md:font-normal text-gray-700 md:text-gray-500">{auditorName}</span>
                           </div>
                         </td>
                         <td className="block md:table-cell p-0 md:p-4 text-sm text-gray-500 mb-4 md:mb-0">
                           <div className="flex items-center gap-2">
                             <span className="md:hidden text-[10px] uppercase font-bold text-gray-400">ТУ:</span>
-                            <span className="font-bold md:font-normal text-gray-700 md:text-gray-500">{actingTu}</span>
+                            <span className="font-bold md:font-normal text-gray-700 md:text-gray-500">{auditTusStr}</span>
                           </div>
                         </td>
                         <td className="block md:table-cell absolute top-4 right-4 md:static p-0 md:p-4">

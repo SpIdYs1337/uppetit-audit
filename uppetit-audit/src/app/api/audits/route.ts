@@ -6,7 +6,6 @@ import { Role } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 
-// --- СХЕМА ВАЛИДАЦИИ ---
 const auditPostSchema = z.object({
   userId: z.string().min(1, "Требуется ID пользователя"),
   locationId: z.string().min(1, "Требуется ID точки"),
@@ -33,7 +32,6 @@ export async function POST(req: Request) {
     const body = await req.json();
     const data = auditPostSchema.parse(body);
 
-    // 1. ИЩЕМ АКТИВНУЮ ВЕРСИЮ ЧЕК-ЛИСТА
     const activeVersion = await prisma.checklistVersion.findFirst({
       where: { checklistId: data.checklistId, isActive: true },
       include: { items: true } 
@@ -43,39 +41,43 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Не найдена активная версия чек-листа' }, { status: 400 });
     }
 
-    // 1.5 ПОЛУЧАЕМ ДАННЫЕ ДЛЯ СНЭПШОТА
     const [user, location] = await Promise.all([
-      // Добавили name: true, чтобы сохранять нормальное имя аудитора
       prisma.user.findUnique({ where: { id: data.userId }, select: { login: true, name: true } }),
       prisma.location.findUnique({ 
         where: { id: data.locationId }, 
-        include: { tu: { select: { name: true, login: true } } } 
+        include: { 
+          tu: { select: { name: true, login: true } },
+          tus: { select: { name: true, login: true } } // <-- ДОБАВЛЕНО: Подтягиваем массив ТУ
+        } 
       })
     ]);
 
-    // Формируем слепки (Имя, а если нет имени - логин)
-    const actingTuName = location?.tu ? (location.tu.name || location.tu.login) : 'Не был назначен';
+    // ИЗМЕНЕНО: Формируем слепок ТУ (склеиваем массив или берем старого ТУ)
+    let actingTuName = 'Не был назначен';
+    if (location?.tus && location.tus.length > 0) {
+      actingTuName = location.tus.map(t => t.name || t.login).join(', ');
+    } else if (location?.tu) {
+      actingTuName = location.tu.name || location.tu.login;
+    }
+
     const actingAuditorName = user ? (user.name || user.login) : 'Неизвестный аудитор';
 
-    // 2. СОХРАНЯЕМ АУДИТ
     const newAudit = await prisma.audit.create({
       data: {
         userId: data.userId,
         locationId: data.locationId,
-        auditorName: actingAuditorName, // Впечатываем имя аудитора
+        auditorName: actingAuditorName,
         locationName: location?.name || 'Неизвестная точка', 
-        tuName: actingTuName, // Впечатываем ТУ
+        tuName: actingTuName, // <-- Сохраняем склеенную строку
         checklistVersionId: activeVersion.id, 
         score: data.score,
         maxScore: data.maxScore,
         shiftEmployees: data.shiftEmployees,
         generalComment: data.generalComment,
         
-        // 3. СОХРАНЯЕМ ОТВЕТЫ С ПРИВЯЗКОЙ К ВОПРОСАМ
         answers: {
           create: data.answers.map(ans => {
             const matchedItem = activeVersion.items.find(i => i.text === ans.questionText);
-            
             return {
               itemId: matchedItem?.id, 
               zone: ans.zone || 'Основной раздел',
@@ -90,36 +92,24 @@ export async function POST(req: Request) {
       }
     });
 
-    // =================================================================
-    // 4. АВТОМАТИЧЕСКОЕ ЗАКРЫТИЕ ПЛАНА ВИЗИТОВ В КАЛЕНДАРЕ
-    // =================================================================
     try {
-      // Устанавливаем границы сегодняшнего дня (от 00:00 до 23:59)
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
-      
       const todayEnd = new Date();
       todayEnd.setHours(23, 59, 59, 999);
 
-      // Ищем запланированный визит и меняем статус
       await prisma.visitPlan.updateMany({
         where: {
           userId: data.userId,
           locationId: data.locationId,
-          status: 'PLANNED', // Ищем только незакрытые
-          date: {
-            gte: todayStart,
-            lte: todayEnd
-          }
+          status: 'PLANNED',
+          date: { gte: todayStart, lte: todayEnd }
         },
-        data: {
-          status: 'DONE' // Закрываем задачу!
-        }
+        data: { status: 'DONE' }
       });
     } catch (planError) {
       console.error('Не удалось автоматически закрыть план визита:', planError);
     }
-    // =================================================================
 
     return NextResponse.json({ success: true, audit: newAudit });
   } catch (err) {
@@ -138,9 +128,14 @@ export async function GET() {
   try {
     const audits = await prisma.audit.findMany({
       include: {
-        // Подтягиваем имя юзера
         user: { select: { id: true, login: true, name: true } },
-        location: { select: { id: true, name: true } },
+        location: { 
+          select: { 
+            id: true, 
+            name: true,
+            tus: { select: { id: true, name: true, login: true } } // <-- ДОБАВЛЕНО: Отдаем массив ТУ на фронт
+          } 
+        },
         checklistVersion: {
           include: {
             checklist: { select: { id: true, title: true } }
@@ -151,12 +146,10 @@ export async function GET() {
       orderBy: { date: 'desc' }
     });
 
-    // Адаптируем ответ для фронтенда
     const formattedAudits = audits.map(audit => ({
       ...audit,
-      location: audit.location ? audit.location : { id: 'deleted', name: audit.locationName || 'Удаленная точка' },
+      location: audit.location ? audit.location : { id: 'deleted', name: audit.locationName || 'Удаленная точка', tus: [] },
       
-      // Отдаем на фронтенд Имя вместо логина (если юзер удален, отдаем слепок)
       user: audit.user ? {
         id: audit.user.id,
         login: audit.user.name || audit.user.login

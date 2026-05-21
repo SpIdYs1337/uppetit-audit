@@ -1,10 +1,14 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import useSWR from 'swr';
 import { fetcher } from '@/lib/fetcher';
 import { Location, Checklist, User } from '@prisma/client';
 
+// ДОБАВЛЕНО: Экспортируем тип, чтобы page.tsx перестал ругаться
+export type EnrichedLocation = Location & { tus?: User[] };
+
 export function useNewAudit() {
-  const { data: locations, isLoading: locLoading } = useSWR<Location[]>('/api/locations', fetcher);
+  // ИЗМЕНЕНО: Сообщаем SWR, что нам приходят обогащенные локации
+  const { data: locations, isLoading: locLoading } = useSWR<EnrichedLocation[]>('/api/locations', fetcher);
   const { data: checklists, isLoading: chkLoading } = useSWR<Checklist[]>('/api/checklists', fetcher);
   const { data: users, isLoading: usersLoading } = useSWR<User[]>('/api/users', fetcher);
 
@@ -16,16 +20,40 @@ export function useNewAudit() {
 
   const tus = users?.filter(u => u.role === 'TU') || [];
 
-  const filteredLocations = locations?.filter(loc => {
-    const isMyTu = loc.tuId === selectedTu;
-    const isStatusActive = loc.isActive !== false;
+  // ИЗМЕНЕНО: Обернули в useMemo и добавили правильную фильтрацию
+  const filteredLocations = useMemo(() => {
+    if (!locations || !selectedTu) return [];
 
-    const now = new Date();
-    const isAfterStart = loc.activeFrom ? new Date(loc.activeFrom) <= now : true;
-    const isBeforeEnd = loc.activeTo ? new Date(loc.activeTo) >= now : true;
+    return locations.filter(loc => {
+      // 1. ПРОВЕРКА ТУ (Ищем и в новом массиве, и в старом поле)
+      const hasNewTu = Array.isArray(loc.tus) && loc.tus.some(tu => tu.id === selectedTu);
+      const hasLegacyTu = loc.tuId === selectedTu;
+      const isMyTu = hasNewTu || hasLegacyTu;
 
-    return isMyTu && isStatusActive && isAfterStart && isBeforeEnd;
-  }) || [];
+      // 2. ПРОВЕРКА СТАТУСА
+      const isStatusActive = loc.isActive !== false;
+
+      // 3. ПРОВЕРКА ДАТ (Обнуляем часы, чтобы не зависеть от времени суток)
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+
+      let isAfterStart = true;
+      if (loc.activeFrom) {
+        const startDate = new Date(loc.activeFrom);
+        startDate.setHours(0, 0, 0, 0);
+        isAfterStart = startDate <= now;
+      }
+
+      let isBeforeEnd = true;
+      if (loc.activeTo) {
+        const endDate = new Date(loc.activeTo);
+        endDate.setHours(23, 59, 59, 999);
+        isBeforeEnd = endDate >= now;
+      }
+
+      return isMyTu && isStatusActive && isAfterStart && isBeforeEnd;
+    });
+  }, [locations, selectedTu]);
 
   const handleTuSelect = (id: string) => {
     setSelectedTu(id);

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { EnrichedAudit, ParsedAnswer } from './AuditCard';
+import { EnrichedAudit, ParsedAnswer } from '@/hooks/useAdminAudits';
 
 interface AuditDetailsProps {
   audit: EnrichedAudit;
@@ -11,7 +11,7 @@ export function AuditDetails({ audit, onZoomPhoto }: AuditDetailsProps) {
 
   const exportToPDF = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isDownloading) return; // Защита от двойного клика
+    if (isDownloading) return; 
 
     try {
       setIsDownloading(true);
@@ -20,9 +20,9 @@ export function AuditDetails({ audit, onZoomPhoto }: AuditDetailsProps) {
       if (!response.ok) throw new Error('Ошибка генерации PDF');
       
       const blob = await response.blob();
-      const filename = `Аудит_${audit.location?.name || audit.id}.pdf`;
+      const locName = audit.location?.name || audit.locationName || audit.id;
+      const filename = `Аудит_${locName}.pdf`;
 
-      // Универсальное классическое скачивание для ВСЕХ устройств (ПК, Android, iOS)
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -30,7 +30,6 @@ export function AuditDetails({ audit, onZoomPhoto }: AuditDetailsProps) {
       document.body.appendChild(link);
       link.click();
       
-      // Убираем за собой мусор
       link.parentNode?.removeChild(link);
       window.URL.revokeObjectURL(url);
 

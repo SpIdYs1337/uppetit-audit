@@ -30,15 +30,12 @@ export default function LocationsPage() {
     }
   };
 
-  // Простой и быстрый поиск по названию точки
   const filteredLocations = useMemo(() => {
     return locations.filter(loc => loc.name.toLowerCase().includes(searchQuery.toLowerCase()));
   }, [locations, searchQuery]);
 
   return (
     <div className="w-full max-w-7xl mx-auto pb-12 px-4 md:px-8">
-      
-      {/* Шапка */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8 mt-4 md:mt-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-gray-900">Управление точками</h1>
@@ -49,7 +46,6 @@ export default function LocationsPage() {
         </button>
       </div>
 
-      {/* Поиск */}
       <div className="mb-6">
         <input 
           type="text" 
@@ -71,7 +67,7 @@ export default function LocationsPage() {
                 loc={loc} 
                 updateLocation={updateLocation} 
                 handleDelete={handleDelete} 
-                handleEdit={(loc) => { setEditingLocation(loc); setIsModalOpen(true); }} 
+                handleEdit={(locToEdit) => { setEditingLocation(locToEdit); setIsModalOpen(true); }} 
               />
             ))
           ) : (

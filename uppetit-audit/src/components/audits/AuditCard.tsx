@@ -1,24 +1,5 @@
 import React, { useState } from 'react';
-import { Audit, Location, Checklist } from '@prisma/client';
-
-// Описываем структуру ответа, которая хранится в JSON (или как отдельная таблица)
-export interface ParsedAnswer {
-  id: string;
-  zone?: string;
-  question: string;
-  isOk: boolean;
-  penalty: number;
-  comment?: string;
-  photos?: string[];
-  photoBase64?: string;
-}
-
-// Описываем аудит со всеми подтянутыми связями
-export interface EnrichedAudit extends Audit {
-  location?: Location | null;
-  checklist?: (Checklist & { version?: number | string }) | null;
-  answers: ParsedAnswer[];
-}
+import { EnrichedAudit, ParsedAnswer } from '@/hooks/useAdminAudits';
 
 interface AuditCardProps {
   audit: EnrichedAudit;
@@ -31,7 +12,6 @@ export function AuditCard({ audit, onZoomPhoto }: AuditCardProps) {
 
   const maxScore = audit.maxScore || 0;
   
-  // Приводим дату к строке, так как из Prisma она может прийти объектом Date
   const formatDate = (dateValue: Date | string) => {
     const d = new Date(dateValue);
     return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -39,19 +19,18 @@ export function AuditCard({ audit, onZoomPhoto }: AuditCardProps) {
 
   const exportToPDF = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isDownloading) return; // Защита от двойного клика
+    if (isDownloading) return; 
 
     try {
       setIsDownloading(true);
       
-      // Скачиваем PDF в фоне
       const response = await fetch(`/api/pdf/${audit.id}`);
       if (!response.ok) throw new Error('Ошибка генерации PDF');
       
       const blob = await response.blob();
-      const filename = `Аудит_${audit.location?.name || audit.id}.pdf`;
+      const locName = audit.location?.name || audit.locationName || audit.id;
+      const filename = `Аудит_${locName}.pdf`;
 
-      // Универсальное классическое скачивание для ВСЕХ устройств (ПК, Android, iOS)
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -59,7 +38,6 @@ export function AuditCard({ audit, onZoomPhoto }: AuditCardProps) {
       document.body.appendChild(link);
       link.click();
       
-      // Убираем за собой мусор
       link.parentNode?.removeChild(link);
       window.URL.revokeObjectURL(url);
 
@@ -71,13 +49,14 @@ export function AuditCard({ audit, onZoomPhoto }: AuditCardProps) {
     }
   };
 
+  const locName = audit.location?.name || audit.locationName || 'Неизвестная точка';
+
   return (
     <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden transition-all">
-      {/* ШАПКА КАРТОЧКИ */}
       <div onClick={() => setIsExpanded(!isExpanded)} className="p-4 sm:p-5 cursor-pointer active:bg-gray-50 flex justify-between items-center gap-3">
         <div className="flex-1 min-w-0">
           <div className="text-[10px] uppercase font-bold text-gray-400 mb-1">{formatDate(audit.date)}</div>
-          <h2 className="text-base sm:text-lg font-black text-gray-900 leading-tight truncate">{audit.location?.name || 'Неизвестная точка'}</h2>
+          <h2 className="text-base sm:text-lg font-black text-gray-900 leading-tight truncate">{locName}</h2>
           
           <div className="flex items-center gap-2 mt-1">
             <div className="text-xs text-gray-500 font-medium truncate">{audit.checklist?.title || 'Чек-лист удален'}</div>
@@ -95,7 +74,6 @@ export function AuditCard({ audit, onZoomPhoto }: AuditCardProps) {
         </div>
       </div>
 
-      {/* РАСКРЫВАЮЩАЯСЯ ДЕТАЛИЗАЦИЯ */}
       {isExpanded && (
         <div className="bg-gray-50 p-4 sm:p-5 border-t border-gray-100">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">

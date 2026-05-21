@@ -1,7 +1,7 @@
 import useSWR from 'swr';
 import { useSession } from 'next-auth/react';
 import { fetcher } from '@/lib/fetcher';
-import { EnrichedAudit } from '@/components/audits/AuditCard'; // <-- Берем единый тип отсюда!
+import { EnrichedAudit } from '@/hooks/useAdminAudits'; 
 
 export function useAuditHistory() {
   const sessionContext = useSession();
