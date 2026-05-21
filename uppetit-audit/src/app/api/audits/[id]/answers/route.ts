@@ -1,34 +1,41 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/requireAuth';
+import { z } from 'zod';
+import { Role } from '@prisma/client';
+
+export const dynamic = 'force-dynamic';
+
+const auditPatchSchema = z.object({
+  answerId: z.string().min(1, 'ID ответа обязателен'),
+  // ИСПРАВЛЕНО: Заменили required_error на универсальный message, который просит компилятор
+  isOk: z.boolean({ message: 'Статус ответа обязателен (true/false)' }),
+});
 
 export async function PATCH(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  // 1. Проверяем авторизацию через ваш хелпер
-  const authResult = await requireAuth();
-  
-  // Если requireAuth вернул ошибку ответа (NextResponse), отдаем её
-  if (authResult.error) return authResult.error;
-  
-  // Вытаскиваем сессию и проверяем строго роль ADMIN
-  const session = authResult.session;
-  if (!session || !session.user || (session.user as any).role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Доступ запрещен. Только для администраторов.' }, { status: 403 });
-  }
+  // ИСПРАВЛЕНО: Стандартизированный щит безопасности. Пропускает ТОЛЬКО Администраторов.
+  const { error: authError } = await requireAuth([Role.ADMIN]);
+  if (authError) return authError;
 
   try {
-    const { id: auditId } = await context.params;
-    const { answerId, isOk } = await req.json();
+    const params = await context.params;
+    const auditId = params.id;
 
-    if (!answerId || typeof isOk !== 'boolean') {
-      return NextResponse.json({ error: 'Неверные параметры запроса' }, { status: 400 });
+    if (!auditId) {
+      return NextResponse.json({ error: 'ID аудита не указан в URL' }, { status: 400 });
     }
+
+    const body = await req.json();
+    
+    // ИСПРАВЛЕНО: Строгая валидация входящих данных через Zod
+    const parsedData = auditPatchSchema.parse(body);
 
     // 2. Ищем текущий ответ в базе данных
     const currentAnswer = await prisma.answer.findUnique({
-      where: { id: answerId },
+      where: { id: parsedData.answerId },
       include: {
         audit: {
           include: {
@@ -44,7 +51,6 @@ export async function PATCH(
       return NextResponse.json({ error: 'Ответ не найден в данном аудите' }, { status: 404 });
     }
 
-    // ИСПРАВЛЕНО: В schema.prisma поле вопроса в ChecklistItem называется text, а не question
     const checklistItem = currentAnswer.audit.checklistVersion?.items.find(
       (item) => item.text === currentAnswer.question
     );
@@ -54,10 +60,10 @@ export async function PATCH(
 
     // 3. Обновляем статус ответа в базе
     await prisma.answer.update({
-      where: { id: answerId },
+      where: { id: parsedData.answerId },
       data: {
-        isOk: isOk,
-        penalty: isOk ? 0 : penaltyValue // Если "Да" (isOk: true) -> штраф обнуляется
+        isOk: parsedData.isOk,
+        penalty: parsedData.isOk ? 0 : penaltyValue // Если "Да" (isOk: true) -> штраф обнуляется
       }
     });
 
@@ -66,7 +72,7 @@ export async function PATCH(
       where: { auditId: auditId }
     });
 
-    // Вычисляем максимальный балл на основе пунктов этой версии чек-листы
+    // Вычисляем максимальный балл на основе пунктов этой версии чек-листа
     const maxScore = currentAnswer.audit.checklistVersion?.items.reduce((sum, item) => sum + item.score, 0) || 0;
 
     // Считаем сумму штрафов по неотмеченным пунктам
@@ -89,6 +95,9 @@ export async function PATCH(
     });
 
   } catch (err) {
+    if (err instanceof z.ZodError) {
+      return NextResponse.json({ error: 'Неверные параметры запроса', details: err.issues }, { status: 400 });
+    }
     console.error('Ошибка при редактировании баллов аудита:', err);
     return NextResponse.json({ error: 'Внутренняя ошибка сервера' }, { status: 500 });
   }

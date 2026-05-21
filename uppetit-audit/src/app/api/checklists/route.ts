@@ -6,19 +6,40 @@ import { Role } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 
-// --- ИНТЕРФЕЙС ДЛЯ ВОПРОСОВ С ФРОНТЕНДА ---
-interface IncomingChecklistItem {
-  text?: string;
-  question?: string;
-  zone?: string;
-  score?: number | string;
-  isCritical?: boolean | string | number;
-}
-
 // --- ZOD СХЕМЫ ДЛЯ ВАЛИДАЦИИ ---
+
+// 1. Строгая схема для отдельного пункта (вопроса) чек-листа
+const checklistItemSchema = z.object({
+  text: z.string().optional(),
+  question: z.string().optional(),
+  zone: z.string().nullable().optional().default('Основной раздел'),
+  score: z.coerce.number().default(0), 
+  isCritical: z.coerce.boolean().default(false),
+});
+
+// Вытягиваем тип пункта из Zod-схемы, чтобы TS не ругался на 'any' в мапах
+type ChecklistItemInput = z.infer<typeof checklistItemSchema>;
+
+// 2. Препроцессор: парсит строку в массив для обновления (без жесткого требования к длине)
+const itemsArraySchema = z.preprocess((val) => {
+  if (typeof val === 'string') {
+    try { return JSON.parse(val); } catch { return []; }
+  }
+  return val;
+}, z.array(checklistItemSchema));
+
+// 3. Препроцессор для создания: парсит строку и ТРЕБУЕТ минимум 1 вопрос (исправление ошибки .min)
+const itemsArraySchemaPost = z.preprocess((val) => {
+  if (typeof val === 'string') {
+    try { return JSON.parse(val); } catch { return []; }
+  }
+  return val;
+}, z.array(checklistItemSchema).min(1, 'Чек-лист должен содержать хотя бы один вопрос'));
+
+
 const checklistPostSchema = z.object({
   title: z.string().min(1, 'Название чек-листа обязательно'),
-  items: z.unknown(), // Заменили any на unknown
+  items: itemsArraySchemaPost, // Используем схему с .min() внутри
   redThreshold: z.coerce.number().optional().default(70),
   yellowThreshold: z.coerce.number().optional().default(90),
   allowedRoles: z.union([z.array(z.nativeEnum(Role)), z.string()]).optional().default([Role.AUDITOR, Role.TU]),
@@ -27,25 +48,28 @@ const checklistPostSchema = z.object({
 const checklistPutSchema = z.object({
   id: z.string().min(1, 'ID обязателен'),
   title: z.string().min(1, 'Название чек-листа обязательно'),
-  items: z.unknown(), // Заменили any на unknown
+  items: itemsArraySchema.optional(),
   redThreshold: z.coerce.number().optional().default(70),
   yellowThreshold: z.coerce.number().optional().default(90),
   allowedRoles: z.union([z.array(z.nativeEnum(Role)), z.string()]).optional(),
 });
 
+const checklistDeleteSchema = z.object({
+  id: z.string().min(1, 'ID обязателен'),
+});
+
 // Вспомогательная функция для парсинга ролей с фронтенда
-function parseRoles(rolesRaw: unknown): Role[] { // Заменили any на unknown
+function parseRoles(rolesRaw: unknown): Role[] {
   if (Array.isArray(rolesRaw)) return rolesRaw as Role[];
   if (typeof rolesRaw === 'string') {
     try {
       const parsed = JSON.parse(rolesRaw);
       if (Array.isArray(parsed)) return parsed as Role[];
     } catch { 
-      // Если это не JSON, а просто строка с одной ролью
       return [rolesRaw as Role];
     }
   }
-  return [Role.AUDITOR, Role.TU]; // Значение по умолчанию
+  return [Role.AUDITOR, Role.TU]; 
 }
 
 export async function GET() {
@@ -67,24 +91,21 @@ export async function GET() {
 
     const formattedChecklists = checklists.map(cl => {
       const activeVersion = cl.versions[0];
-      
       return {
         id: cl.id,
         title: cl.title,
         redThreshold: cl.redThreshold,
         yellowThreshold: cl.yellowThreshold,
         allowedRoles: cl.allowedRoles,
-        
         activeVersionId: activeVersion?.id,
         version: activeVersion?.version || 1, 
-        
         items: activeVersion?.items || [] 
       };
     });
 
     return NextResponse.json(formattedChecklists);
   } catch (error: unknown) {
-    console.error(error);
+    console.error('Ошибка GET /api/checklists:', error);
     return NextResponse.json({ error: 'Ошибка загрузки' }, { status: 500 });
   }
 }
@@ -95,11 +116,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    
     const parsedData = checklistPostSchema.parse(body);
-    
-    const itemsArray = typeof parsedData.items === 'string' ? JSON.parse(parsedData.items) : parsedData.items;
-
     const cleanRoles = parseRoles(parsedData.allowedRoles);
 
     const newChecklist = await prisma.checklist.create({
@@ -108,18 +125,17 @@ export async function POST(request: Request) {
         redThreshold: parsedData.redThreshold,
         yellowThreshold: parsedData.yellowThreshold,
         allowedRoles: cleanRoles, 
-        
         versions: {
           create: {
             version: 1,
             isActive: true,
             items: {
-              // Добавили строгий тип IncomingChecklistItem вместо any
-              create: itemsArray.map((item: IncomingChecklistItem, index: number) => ({
+              // ИСПРАВЛЕНО: Явно типизировали item и index
+              create: parsedData.items.map((item: ChecklistItemInput, index: number) => ({
                 text: item.text || item.question || 'Новый вопрос',
                 zone: item.zone || 'Основной раздел',
-                score: Number(item.score) || 0,
-                isCritical: Boolean(item.isCritical),
+                score: item.score,
+                isCritical: item.isCritical,
                 order: index
               }))
             }
@@ -129,11 +145,11 @@ export async function POST(request: Request) {
     });
     
     return NextResponse.json(newChecklist);
-  } catch (error: unknown) { // Типизировали error
+  } catch (error: unknown) { 
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Неверные данные', details: error.issues }, { status: 400 });
     }
-    console.error(error);
+    console.error('Ошибка POST /api/checklists:', error);
     return NextResponse.json({ error: 'Ошибка сохранения' }, { status: 500 });
   }
 }
@@ -144,10 +160,7 @@ export async function PUT(request: Request) {
 
   try {
     const body = await request.json();
-    
     const parsedData = checklistPutSchema.parse(body);
-    const itemsArray = typeof parsedData.items === 'string' ? JSON.parse(parsedData.items) : parsedData.items;
-
     const cleanRoles = parsedData.allowedRoles ? parseRoles(parsedData.allowedRoles) : undefined;
 
     const updated = await prisma.$transaction(async (tx) => {
@@ -161,7 +174,7 @@ export async function PUT(request: Request) {
         }
       });
 
-      if (itemsArray && Array.isArray(itemsArray)) {
+      if (parsedData.items && parsedData.items.length > 0) {
         const currentActive = await tx.checklistVersion.findFirst({
           where: { checklistId: parsedData.id, isActive: true },
           orderBy: { version: 'desc' }
@@ -180,28 +193,27 @@ export async function PUT(request: Request) {
             version: nextVersionNum,
             isActive: true,
             items: {
-              // Добавили строгий тип IncomingChecklistItem вместо any
-              create: itemsArray.map((item: IncomingChecklistItem, index: number) => ({
+              // ИСПРАВЛЕНО: Явно типизировали item и index
+              create: parsedData.items.map((item: ChecklistItemInput, index: number) => ({
                 text: item.text || item.question || 'Новый вопрос',
                 zone: item.zone || 'Основной раздел',
-                score: Number(item.score) || 0,
-                isCritical: Boolean(item.isCritical),
+                score: item.score,
+                isCritical: item.isCritical,
                 order: index
               }))
             }
           }
         });
       }
-
       return cl;
     });
 
     return NextResponse.json(updated);
-  } catch (error: unknown) { // Типизировали error
+  } catch (error: unknown) { 
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Неверные данные', details: error.issues }, { status: 400 });
     }
-    console.error(error);
+    console.error('Ошибка PUT /api/checklists:', error);
     return NextResponse.json({ error: 'Ошибка обновления' }, { status: 500 });
   }
 }
@@ -212,15 +224,16 @@ export async function DELETE(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-    
-    if (!id) return NextResponse.json({ error: 'Нет ID' }, { status: 400 });
+    const { id } = checklistDeleteSchema.parse({ id: searchParams.get('id') || '' });
 
     await prisma.checklist.delete({ where: { id } });
     
     return NextResponse.json({ success: true });
-  } catch (error: unknown) { // Типизировали error
-    console.error(error);
+  } catch (error: unknown) { 
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: 'Неверные данные', details: error.issues }, { status: 400 });
+    }
+    console.error('Ошибка DELETE /api/checklists:', error);
     return NextResponse.json({ error: 'Ошибка удаления' }, { status: 500 });
   }
 }

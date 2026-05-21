@@ -9,7 +9,6 @@ export const dynamic = 'force-dynamic';
 // --- ZOD СХЕМЫ ДЛЯ ВАЛИДАЦИИ ---
 const userPostSchema = z.object({
   name: z.string().nullable().optional(),
-  // Разрешаем либо валидный email, либо пустую строку (для случаев, когда email не указан)
   email: z.string().email('Неверный формат email').optional().or(z.literal('')),
   login: z.string().min(2, 'Логин должен быть длиннее 2 символов'),
   phone: z.string().nullable().optional(),
@@ -17,13 +16,18 @@ const userPostSchema = z.object({
 });
 
 const userPutSchema = z.object({
-  id: z.string(),
+  id: z.string().min(1, 'ID обязателен'),
   name: z.string().nullable().optional(),
   email: z.string().email('Неверный формат email').optional().or(z.literal('')),
   login: z.string().min(2).optional(),
   phone: z.string().nullable().optional(),
   role: z.nativeEnum(Role).optional(),
   resetPassword: z.boolean().optional(),
+});
+
+// ДОБАВЛЕНО: Схема для валидации удаления
+const userDeleteSchema = z.object({
+  id: z.string().min(1, 'ID обязателен'),
 });
 
 export async function GET() {
@@ -33,12 +37,12 @@ export async function GET() {
   try {
     const users = await prisma.user.findMany({ orderBy: { login: 'asc' } });
     
-    const isAdmin = (session.user as any)?.role === Role.ADMIN;
+    const isAdmin = (session?.user as any)?.role === Role.ADMIN;
 
     const safeUsers = users.map(u => ({
       id: u.id,
-      name: u.name,      // <-- Добавили имя
-      email: u.email,    // <-- Добавили email
+      name: u.name,      
+      email: u.email,    
       login: u.login,
       phone: u.phone,
       role: u.role,
@@ -64,7 +68,6 @@ export async function POST(request: Request) {
     const newUser = await prisma.user.create({
       data: {
         name: parsedData.name || null,
-        // Защита от конфликта @unique: пустую строку превращаем в null
         email: parsedData.email?.trim() || null, 
         login: parsedData.login,
         phone: parsedData.phone || null,
@@ -78,7 +81,6 @@ export async function POST(request: Request) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Неверные данные', details: error.issues }, { status: 400 });
     }
-    // Prisma вернет ошибку P2002, если логин или email уже существуют
     if ((error as any).code === 'P2002') {
       return NextResponse.json({ error: 'Пользователь с таким логином или email уже существует' }, { status: 400 });
     }
@@ -87,12 +89,19 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const { error } = await requireAuth([Role.ADMIN]);
+  // ИЗМЕНЕНО: Извлекаем session, чтобы знать, кто делает запрос
+  const { error, session } = await requireAuth([Role.ADMIN]);
   if (error) return error;
 
   try {
     const body = await request.json();
     const parsedData = userPutSchema.parse(body);
+    const currentUserId = session?.user?.id;
+
+    // ЗАЩИТА: Запрещаем администратору понижать свою собственную роль
+    if (parsedData.id === currentUserId && parsedData.role && parsedData.role !== Role.ADMIN) {
+      return NextResponse.json({ error: 'Вы не можете лишить себя прав администратора' }, { status: 403 });
+    }
 
     if (parsedData.resetPassword) {
       const token = crypto.randomUUID();
@@ -126,17 +135,29 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const { error } = await requireAuth([Role.ADMIN]);
+  // ИЗМЕНЕНО: Извлекаем session
+  const { error, session } = await requireAuth([Role.ADMIN]);
   if (error) return error;
 
   try {
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-    if (!id) return NextResponse.json({ error: 'ID не указан' }, { status: 400 });
+    const idParam = searchParams.get('id');
+    
+    // ИЗМЕНЕНО: Прогоняем ID через Zod-схему
+    const { id } = userDeleteSchema.parse({ id: idParam || '' });
+    const currentUserId = session?.user?.id;
+
+    // ЗАЩИТА: Запрещаем администратору удалять самого себя
+    if (id === currentUserId) {
+      return NextResponse.json({ error: 'Невозможно удалить собственную учетную запись' }, { status: 403 });
+    }
 
     await prisma.user.delete({ where: { id } });
     return NextResponse.json({ success: true });
-  } catch { 
+  } catch (error) { 
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: 'Неверные данные', details: error.issues }, { status: 400 });
+    }
     return NextResponse.json({ error: 'Ошибка удаления' }, { status: 500 }); 
   }
 }

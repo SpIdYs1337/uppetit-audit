@@ -1,9 +1,21 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { z } from 'zod';
 import { requireAuth } from '@/lib/requireAuth';
 import { Role } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
+
+// --- ZOD СХЕМА ДЛЯ ВАЛИДАЦИИ ОБНОВЛЕНИЯ ТОЧКИ ---
+const locationPatchSchema = z.object({
+  name: z.string().min(1, 'Название обязательно').optional(),
+  address: z.string().nullable().optional(),
+  tuIds: z.array(z.string()).optional(),
+  isActive: z.boolean().optional(),
+  // Разрешаем строку, дату или null
+  activeFrom: z.union([z.string(), z.date()]).nullable().optional(),
+  activeTo: z.union([z.string(), z.date()]).nullable().optional(),
+});
 
 export async function PATCH(req: Request, context: { params: Promise<{ id: string }> }) {
   // 1. ЩИТ БЕЗОПАСНОСТИ: Только Админы могут редактировать точки
@@ -19,37 +31,46 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
     }
 
     const body = await req.json();
-    const { name, address, tuIds, isActive, activeFrom, activeTo } = body;
-
-    // 2. ФОРМИРУЕМ ДАННЫЕ ДЛЯ ОБНОВЛЕНИЯ
-    const updateData: any = {};
     
-    if (name !== undefined) updateData.name = name;
-    if (address !== undefined) updateData.address = address;
-    if (isActive !== undefined) updateData.isActive = isActive;
-    if (activeFrom !== undefined) updateData.activeFrom = activeFrom;
-    if (activeTo !== undefined) updateData.activeTo = activeTo;
+    // 2. ВАЛИДАЦИЯ ЧЕРЕЗ ZOD
+    const parsedData = locationPatchSchema.parse(body);
 
-    // 3. МАГИЯ PRISMA ДЛЯ МАССИВА ТУ
-    // Если фронтенд прислал массив tuIds, мы говорим базе: 
-    // "Забудь все старые связи и установи строго вот эти"
-    if (tuIds && Array.isArray(tuIds)) {
+    // 3. ФОРМИРУЕМ ДАННЫЕ ДЛЯ ОБНОВЛЕНИЯ (Без использования any)
+    const updateData: Record<string, any> = {};
+    
+    if (parsedData.name !== undefined) updateData.name = parsedData.name;
+    if (parsedData.address !== undefined) updateData.address = parsedData.address;
+    if (parsedData.isActive !== undefined) updateData.isActive = parsedData.isActive;
+    
+    // Безопасное приведение дат для Prisma
+    if (parsedData.activeFrom !== undefined) {
+      updateData.activeFrom = parsedData.activeFrom ? new Date(parsedData.activeFrom) : null;
+    }
+    if (parsedData.activeTo !== undefined) {
+      updateData.activeTo = parsedData.activeTo ? new Date(parsedData.activeTo) : null;
+    }
+
+    // 4. МАГИЯ PRISMA ДЛЯ МАССИВА ТУ
+    if (parsedData.tuIds) {
       updateData.tus = {
-        set: tuIds.map((id: string) => ({ id }))
+        set: parsedData.tuIds.map((id) => ({ id }))
       };
     }
 
-    // 4. СОХРАНЯЕМ В БАЗУ
+    // 5. СОХРАНЯЕМ В БАЗУ
     const updatedLocation = await prisma.location.update({
       where: { id: locationId },
       data: updateData,
       include: {
-        tus: { select: { id: true, name: true, login: true } } // Возвращаем обновленных ТУ на фронт
+        tus: { select: { id: true, name: true, login: true } }
       }
     });
 
     return NextResponse.json(updatedLocation);
   } catch (err) {
+    if (err instanceof z.ZodError) {
+      return NextResponse.json({ error: 'Неверные данные', details: err.issues }, { status: 400 });
+    }
     console.error('Ошибка PATCH /api/locations/[id]:', err);
     return NextResponse.json({ error: 'Внутренняя ошибка сервера при обновлении точки' }, { status: 500 });
   }
