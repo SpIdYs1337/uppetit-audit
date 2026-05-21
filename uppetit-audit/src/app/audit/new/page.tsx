@@ -1,14 +1,20 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation'; // Добавлен useSearchParams
 import Link from 'next/link';
 import { getSession } from 'next-auth/react';
-import { useNewAudit, EnrichedLocation } from '@/hooks/useNewAudit';
+import { useNewAudit } from '@/hooks/useNewAudit';
+import { EnrichedLocation } from '@/hooks/useAdminAudits';
 import { User, Checklist } from '@prisma/client'; 
 
 export default function NewAuditPage() {
   const router = useRouter();
+  const searchParams = useSearchParams(); // Инициализация
+  
+  // ИСПРАВЛЕНО: Считываем динамический параметр возврата или шлем на базовую страницу ТУ
+  const backToUrl = searchParams.get('backTo') || '/audit';
+
   const {
     tus,
     checklists,
@@ -34,7 +40,6 @@ export default function NewAuditPage() {
 
   const filteredChecklists = useMemo(() => {
     if (!checklists || !userRole) return checklists || [];
-    
     if (userRole === 'ADMIN') return checklists;
 
     return checklists.filter((chk: Checklist) => {
@@ -51,17 +56,19 @@ export default function NewAuditPage() {
     });
   }, [checklists, userRole]);
 
+  // ИСПРАВЛЕНО: Прокидываем параметр backTo дальше в рабочую область заполнения
   const handleContinue = () => {
     if (!selectedLocation || !selectedChecklist) return;
-    router.push(`/audit/run?location=${selectedLocation}&checklist=${selectedChecklist}`);
+    router.push(`/audit/run?location=${selectedLocation}&checklist=${selectedChecklist}&backTo=${encodeURIComponent(backToUrl)}`);
   };
 
   return (
     <div className="flex-1 flex flex-col p-6 md:p-8 bg-gray-50 md:bg-white min-h-screen">
       
       <header className="flex items-center mb-8 mt-4 relative md:hidden">
+        {/* ИСПРАВЛЕНО: Динамический роут возврата */}
         <Link 
-          href="/audit" 
+          href={backToUrl} 
           className="absolute left-0 w-10 h-10 bg-white rounded-full flex items-center justify-center text-gray-900 shadow-sm border border-gray-100 active:scale-95 transition-transform"
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
@@ -77,11 +84,12 @@ export default function NewAuditPage() {
           <h1 className="text-3xl font-black text-gray-900 tracking-tight">Новая проверка</h1>
           <p className="text-sm text-gray-500 font-medium mt-1">Выберите параметры для старта аудита</p>
         </div>
+        {/* ИСПРАВЛЕНО: Динамический роут возврата */}
         <Link 
-          href="/audit" 
+          href={backToUrl} 
           className="bg-gray-100 text-gray-700 px-5 py-2.5 rounded-xl font-bold hover:bg-gray-200 transition-colors"
         >
-          Назад на главную
+          {backToUrl.includes('admin') ? 'Назад в админку' : 'Назад на главную'}
         </Link>
       </div>
 
@@ -92,28 +100,41 @@ export default function NewAuditPage() {
           
           {/* 1. ВЫБОР ТУ */}
           <div>
-            <h2 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-4 ml-1 md:text-sm md:mb-5">1. Выберите территорию (ТУ)</h2>
+            <h2 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-4 ml-1 md:text-sm md:mb-5">
+              {userRole === 'TU' ? '1. Ваша учетная запись (ТУ)' : '1. Выберите территорию (ТУ)'}
+            </h2>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-              {tus.map((tu: User) => (
-                <div 
-                  key={tu.id}
-                  onClick={() => handleTuSelect(tu.id)}
-                  className={`p-4 md:p-5 rounded-3xl md:rounded-2xl cursor-pointer border-2 transition-all duration-200 ${
-                    selectedTu === tu.id 
-                      ? 'border-black bg-black text-white shadow-lg scale-[0.98] md:scale-100 md:-translate-y-1' 
-                      : 'border-transparent bg-white md:bg-gray-50 shadow-sm md:shadow-none hover:border-gray-200 hover:bg-white text-gray-900'
-                  }`}
-                >
-                  <div className="text-[10px] md:text-xs uppercase font-bold opacity-60 mb-1">Управляющий</div>
-                  <div className="font-black text-sm md:text-base truncate">{tu.name || tu.login}</div>
-                </div>
-              ))}
+              {tus.map((tu: User) => {
+                const isAllAdminMode = tu.id === 'all_admin_locations';
+                const isSelected = selectedTu === tu.id;
+
+                return (
+                  <div 
+                    key={tu.id}
+                    onClick={() => handleTuSelect(tu.id)}
+                    className={`p-4 md:p-5 rounded-3xl md:rounded-2xl cursor-pointer border-2 transition-all duration-200 ${
+                      isSelected 
+                        ? isAllAdminMode
+                          ? 'border-[#F25C05] bg-[#F25C05] text-white shadow-lg scale-[0.98] md:scale-100 md:-translate-y-1'
+                          : 'border-black bg-black text-white shadow-lg scale-[0.98] md:scale-100 md:-translate-y-1' 
+                        : 'border-transparent bg-white md:bg-gray-50 shadow-sm md:shadow-none hover:border-gray-200 hover:bg-white text-gray-900'
+                    }`}
+                  >
+                    <div className="text-[10px] md:text-xs uppercase font-bold opacity-60 mb-1">
+                      {isAllAdminMode ? 'Режим superficial-пользователя' : 'Управляющий'}
+                    </div>
+                    <div className="font-black text-sm md:text-base truncate">{tu.name || tu.login}</div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
           {/* 2. ВЫБОР ТОЧКИ */}
           <div className={`transition-all duration-500 ${selectedTu ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none hidden md:block'}`}>
-            <h2 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-4 ml-1 md:text-sm md:mb-5">2. Выберите точку</h2>
+            <h2 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-4 ml-1 md:text-sm md:mb-5">
+              {selectedTu === 'all_admin_locations' ? '2. Выберите любую точку всей сети' : '2. Выберите точку'}
+            </h2>
             {filteredLocations.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
                 {filteredLocations.map((loc: EnrichedLocation) => (
@@ -133,7 +154,6 @@ export default function NewAuditPage() {
                       <div className={`font-black text-sm md:text-base leading-tight truncate ${selectedLocation === loc.id ? 'text-[#F25C05]' : 'text-gray-900'}`}>
                         {loc.name}
                       </div>
-                      {/* Адрес для дополнительной информативности */}
                       {loc.address && (
                         <div className={`text-xs mt-1 truncate ${selectedLocation === loc.id ? 'text-orange-600/80 font-medium' : 'text-gray-400 font-bold'}`}>
                           {loc.address}
@@ -150,7 +170,7 @@ export default function NewAuditPage() {
             )}
           </div>
 
-          {/* 3. ВЫБОР ЧЕК-ЛИСТА (С ФИЛЬТРАЦИЕЙ) */}
+          {/* 3. ВЫБОР ЧЕК-ЛИСТА */}
           <div className={`transition-all duration-500 ${selectedLocation ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none hidden md:block'}`}>
             <h2 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-4 ml-1 md:text-sm md:mb-5">3. Выберите чек-лист</h2>
             

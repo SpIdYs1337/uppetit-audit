@@ -12,37 +12,35 @@ export async function middleware(req: NextRequest) {
   const isAuthPage = url.pathname === '/';
   const isSetupPasswordPage = url.pathname.startsWith('/setup-password');
 
+  // 1. Если нет токена и это не открытые страницы — на авторизацию
   if (!token && !isAuthPage && !isSetupPasswordPage) {
     url.pathname = '/';
     return NextResponse.redirect(url);
   }
 
+  // 2. Если авторизован и пытается зайти на логин — раскидываем по домашним страницам
   if (token && (isAuthPage || isSetupPasswordPage)) {
-    // И ТУ, и Аудиторы идут на /audit
     url.pathname = token.role === 'ADMIN' ? '/admin/users' : '/audit';
     return NextResponse.redirect(url);
   }
 
+  // 3. Защита маршрутов по ролям
   if (token) {
-    const isAdminRoute = url.pathname.startsWith('/admin/users');
-    const isAuditRoute = url.pathname.startsWith('/audit');
-
+    const isAdminRoute = url.pathname.startsWith('/admin');
+    
     if (isAdminRoute && token.role !== 'ADMIN') {
       url.pathname = '/audit';
       return NextResponse.redirect(url);
     }
 
-    if (isAuditRoute && token.role === 'ADMIN') {
-      url.pathname = '/admin/users';
-      return NextResponse.redirect(url);
-    }
+
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  // Добавили исключения для PWA: manifest.webmanifest, sw.js, workbox, icon-*.png и apple-icon.png
+  // Исключения для PWA: manifest.webmanifest, sw.js, workbox, icon-*.png и apple-icon.png
   matcher: [
     '/((?!api|_next/static|_next/image|favicon.ico|logo\\.jpg|logo\\.png|manifest\\.webmanifest|sw\\.js|workbox-.*|icon-.*\\.png|apple-icon\\.png).*)',
   ],

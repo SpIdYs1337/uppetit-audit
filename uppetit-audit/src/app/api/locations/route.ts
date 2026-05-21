@@ -6,11 +6,10 @@ import { Role } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 
-// --- ZOD СХЕМЫ ---
+// --- ZOD СХЕМЫ ВАЛИДАЦИИ ---
 const locationPostSchema = z.object({
   name: z.string().min(1, 'Название обязательно'),
   address: z.string().optional().nullable(),
-  // ИЗМЕНЕНО: Теперь ждем массив строк (ID сотрудников) вместо одного ID
   tuIds: z.array(z.string()).optional().default([]),
   isActive: z.boolean().optional().default(true),
 });
@@ -20,6 +19,7 @@ const locationDeleteSchema = z.object({
 });
 
 export async function GET() {
+  // Строгая аутентификация: только авторизованные пользователи
   const { error } = await requireAuth();
   if (error) return error;
 
@@ -27,11 +27,9 @@ export async function GET() {
     const locations = await prisma.location.findMany({
       orderBy: { name: 'asc' },
       include: { 
-        // Читаем старую привязку (для совместимости)
         tu: { select: { id: true, name: true, login: true } }, 
-        // ИЗМЕНЕНО: Читаем новую множественную привязку
+        // Безопасно вытягиваем массив привязанных ТУ
         tus: { select: { id: true, name: true, login: true } },
-        // ИЗМЕНЕНО: Достаем баллы последнего аудита для карточки
         audits: {
           orderBy: { date: 'desc' },
           take: 1, 
@@ -47,7 +45,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  // Защита: Создавать могут только Админы
+  // Строгая авторизация: Создавать точки могут только Администраторы
   const { error } = await requireAuth([Role.ADMIN]);
   if (error) return error;
 
@@ -60,7 +58,7 @@ export async function POST(req: Request) {
         name: parsedData.name,
         address: parsedData.address,
         isActive: parsedData.isActive,
-        // ИЗМЕНЕНО: Если в массиве есть ID, привязываем их все сразу при создании
+        // Атомарно подключаем всех переданных ТУ через промежуточную таблицу
         ...(parsedData.tuIds.length > 0 ? {
           tus: {
             connect: parsedData.tuIds.map(id => ({ id }))
@@ -83,7 +81,7 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  // Защита: Удалять могут только Админы
+  // Строгая авторизация: Удалять точки могут только Администраторы
   const { error } = await requireAuth([Role.ADMIN]);
   if (error) return error;
 

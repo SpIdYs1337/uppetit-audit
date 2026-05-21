@@ -1,6 +1,6 @@
 import useSWR from 'swr';
 import { fetcher } from '@/lib/fetcher';
-import { Audit } from '@prisma/client';
+import { Audit, Location, User, Checklist } from '@prisma/client';
 
 export interface ParsedAnswer {
   id: string;
@@ -13,12 +13,16 @@ export interface ParsedAnswer {
   photoBase64?: string;
 }
 
+// ДОБАВЛЕНО: Декларируем и экспортируем структуру локации для всего проекта
+export type EnrichedLocation = Location & {
+  tu?: { id: string; name: string | null; login: string } | null;
+  tus?: { id: string; name: string | null; login: string }[];
+  audits?: { score: number }[];
+};
+
+// ИЗМЕНЕНО: Базовый тип аудита теперь использует обновленную EnrichedLocation
 export type EnrichedAudit = Audit & {
-  location?: { 
-    id: string; 
-    name: string;
-    tus?: { id: string; name: string | null; login: string }[]; // <-- ДОБАВЛЕНО
-  } | null;
+  location?: EnrichedLocation | null;
   user?: { id: string; login: string } | null;
   checklist?: { id: string; title: string; version: number } | null;
   answers: ParsedAnswer[];

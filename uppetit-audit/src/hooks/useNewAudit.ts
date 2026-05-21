@@ -1,13 +1,15 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import useSWR from 'swr';
+import { useSession } from 'next-auth/react';
 import { fetcher } from '@/lib/fetcher';
-import { Location, Checklist, User } from '@prisma/client';
-
-// ДОБАВЛЕНО: Экспортируем тип, чтобы page.tsx перестал ругаться
-export type EnrichedLocation = Location & { tus?: User[] };
+import { Checklist, User } from '@prisma/client';
+import { EnrichedLocation } from '@/hooks/useAdminAudits';
 
 export function useNewAudit() {
-  // ИЗМЕНЕНО: Сообщаем SWR, что нам приходят обогащенные локации
+  const { data: session, status: sessionStatus } = useSession();
+  const currentUserId = session?.user?.id;
+  const currentUserRole = (session?.user as any)?.role;
+
   const { data: locations, isLoading: locLoading } = useSWR<EnrichedLocation[]>('/api/locations', fetcher);
   const { data: checklists, isLoading: chkLoading } = useSWR<Checklist[]>('/api/checklists', fetcher);
   const { data: users, isLoading: usersLoading } = useSWR<User[]>('/api/users', fetcher);
@@ -16,24 +18,45 @@ export function useNewAudit() {
   const [selectedLocation, setSelectedLocation] = useState('');
   const [selectedChecklist, setSelectedChecklist] = useState('');
 
-  const isLoading = locLoading || chkLoading || usersLoading;
+  const isLoading = locLoading || chkLoading || usersLoading || sessionStatus === 'loading';
 
-  const tus = users?.filter(u => u.role === 'TU') || [];
+  // Фильтрация списка ТУ: ТУ видит только себя, ADMIN видит виртуальную кнопку + всех остальных
+  const tus = useMemo(() => {
+    const allTus = users?.filter(u => u.role === 'TU') || [];
+    if (currentUserRole === 'TU' && currentUserId) {
+      return allTus.filter(u => u.id === currentUserId);
+    }
+    if (currentUserRole === 'ADMIN') {
+      // Инжектируем виртуального управляющего для оверрайда фильтров
+      return [
+        { id: 'all_admin_locations', name: '✨ ВСЕ ТОЧКИ системы', login: 'admin', role: 'ADMIN' } as any,
+        ...allTus
+      ];
+    }
+    return allTus;
+  }, [users, currentUserRole, currentUserId]);
 
-  // ИЗМЕНЕНО: Обернули в useMemo и добавили правильную фильтрацию
+  // Автоматический выбор: ТУ выбирает себя, ADMIN по умолчанию переходит в режим сквозного аудита
+  useEffect(() => {
+    if (currentUserRole === 'TU' && currentUserId && !selectedTu) {
+      setSelectedTu(currentUserId);
+    } else if (currentUserRole === 'ADMIN' && !selectedTu) {
+      setSelectedTu('all_admin_locations');
+    }
+  }, [currentUserRole, currentUserId, selectedTu]);
+
   const filteredLocations = useMemo(() => {
     if (!locations || !selectedTu) return [];
 
     return locations.filter(loc => {
-      // 1. ПРОВЕРКА ТУ (Ищем и в новом массиве, и в старом поле)
-      const hasNewTu = Array.isArray(loc.tus) && loc.tus.some(tu => tu.id === selectedTu);
-      const hasLegacyTu = loc.tuId === selectedTu;
-      const isMyTu = hasNewTu || hasLegacyTu;
+      // Если выбран режим администратора — привязка к ТУ игнорируется (isMyTu всегда true)
+      const isMyTu = selectedTu === 'all_admin_locations'
+        ? true
+        : (Array.isArray(loc.tus) && loc.tus.some((tu: any) => tu.id === selectedTu)) || loc.tuId === selectedTu;
 
-      // 2. ПРОВЕРКА СТАТУСА
+      // Проверка активности торговой точки
       const isStatusActive = loc.isActive !== false;
 
-      // 3. ПРОВЕРКА ДАТ (Обнуляем часы, чтобы не зависеть от времени суток)
       const now = new Date();
       now.setHours(0, 0, 0, 0);
 
@@ -56,6 +79,7 @@ export function useNewAudit() {
   }, [locations, selectedTu]);
 
   const handleTuSelect = (id: string) => {
+    if (currentUserRole === 'TU' && id !== currentUserId) return;
     setSelectedTu(id);
     setSelectedLocation(''); 
   };

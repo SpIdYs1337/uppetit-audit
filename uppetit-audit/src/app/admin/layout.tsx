@@ -4,12 +4,14 @@ import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { signOut } from 'next-auth/react';
-import { usePathname } from 'next/navigation';
+// ИСПРАВЛЕНО: Добавили useRouter для корректного перехода
+import { usePathname, useRouter } from 'next/navigation'; 
 import { APP_VERSION } from '@/lib/version'; 
 import PushSubscribe from '@/components/PushSubscribe'; 
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname(); 
+  const router = useRouter(); // Инициализируем роутер
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navLinks = [
@@ -68,7 +70,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         
         {/* --- ШАПКА ДЛЯ ПК --- */}
         <div className="p-6 mb-2 hidden md:block">
-        
           <Image 
             src="/logo3.png" 
             alt="UPPETIT" 
@@ -86,35 +87,56 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Отступ на мобилках */}
         <div className="h-4 md:hidden"></div>
 
-        <nav className="flex-1 px-4 space-y-2 overflow-y-auto">
-          {navLinks.map((link) => {
-            const isActive = pathname.startsWith(link.href);
-
-            return (
-              <Link 
-                key={link.href} 
-                href={link.href} 
-                onClick={() => setIsMobileMenuOpen(false)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
-                  isActive 
-                    ? 'bg-[#F25C05] text-white shadow-md shadow-orange-500/20'
-                    : 'text-gray-500 hover:bg-gray-50 hover:text-black'
-                }`}
-              >
-                {link.label}
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="p-4 border-t border-gray-100 flex flex-col gap-2">
+        {/* --- НАВИГАЦИЯ --- */}
+        <div className="flex-1 px-4 space-y-4 overflow-y-auto">
           
-          {/* --- КНОПКА ВКЛЮЧЕНИЯ УВЕДОМЛЕНИЙ --- */}
+          <div className="px-1">
+            {/* ИСПРАВЛЕНО: type="button" и router.push() */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                router.push('/audit/new?backTo=/admin/audits');
+              }}
+              className="flex items-center justify-center gap-2 w-full bg-[#F25C05] hover:bg-orange-600 text-white font-black text-xs uppercase tracking-wider py-3.5 px-4 rounded-xl transition-all shadow-md shadow-orange-500/10 active:scale-95 text-center cursor-pointer"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              Провести аудит
+            </button>
+          </div>
+
+          <nav className="space-y-2">
+            {navLinks.map((link) => {
+              const isActive = pathname.startsWith(link.href);
+
+              return (
+                <Link 
+                  key={link.href} 
+                  href={link.href} 
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
+                    isActive 
+                      ? 'bg-[#F25C05] text-white shadow-md shadow-orange-500/20'
+                      : 'text-gray-500 hover:bg-gray-50 hover:text-black'
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* --- НИЖНЯЯ ПАНЕЛЬ СЕРВИСОВ --- */}
+        <div className="p-4 border-t border-gray-100 flex flex-col gap-2">
           <div className="mb-2">
             <PushSubscribe />
           </div>
 
           <button 
+            type="button"
             onClick={() => signOut({ callbackUrl: '/' })}
             className="w-full text-left px-4 py-3 text-gray-500 hover:text-red-500 font-bold transition-all rounded-xl hover:bg-red-50"
           >
