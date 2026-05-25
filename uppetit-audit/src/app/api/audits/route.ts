@@ -3,18 +3,60 @@ import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/requireAuth';
 import { z } from 'zod';
 import { Role } from '@prisma/client'; 
-import webpush from 'web-push'; // Импортируем библиотеку пушей
+import webpush from 'web-push';
+import AWS from 'aws-sdk'; // ДОБАВЛЕНО: Классический бронебойный клиент
 
 export const dynamic = 'force-dynamic';
 
-// Настройка ключей Web-Push (берутся из вашего .env)
+// Настройка ключей Web-Push
 webpush.setVapidDetails(
   'mailto:admin@uppetit.ru',
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '',
   process.env.VAPID_PRIVATE_KEY || ''
 );
 
-// --- ZOD СХЕМЫ ДЛЯ ВАЛИДАЦИИ ---
+// ЖЕСТКАЯ ОЧИСТКА ЭНДПОИНТА
+let cleanEndpoint = (process.env.S3_ENDPOINT || '').trim();
+if (cleanEndpoint.endsWith('/')) {
+  cleanEndpoint = cleanEndpoint.slice(0, -1);
+}
+
+// СОБИРАЕМ КЛЮЧИ: Учитываем любые варианты названий в твоем .env файле
+const accessKey = (process.env.S3_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY || process.env.AWS_ACCESS_KEY_ID || '').trim();
+const secretKey = (process.env.S3_SECRET_ACCESS_KEY || process.env.S3_SECRET_KEY || process.env.AWS_SECRET_ACCESS_KEY || '').trim();
+
+// Настройка классического S3 клиента (неубиваемый вариант для Ceph/Beget)
+const s3 = new AWS.S3({
+  endpoint: cleanEndpoint || undefined,
+  // Если ключей нет в .env, передаем фейковый текст, чтобы запретить SDK искать сервера Amazon (EC2)
+  accessKeyId: accessKey || 'MISSING_ACCESS_KEY',
+  secretAccessKey: secretKey || 'MISSING_SECRET_KEY',
+  region: (process.env.S3_REGION || 'ru-1').trim(),
+  s3ForcePathStyle: true, // В v2 это работает с Beget идеально
+  signatureVersion: 'v4'
+});
+
+// Вспомогательная функция для извлечения ключа
+function getS3Key(urlStr: string): string | null {
+  try {
+    let pathPart = '';
+    if (urlStr.startsWith('http')) {
+      const url = new URL(urlStr);
+      pathPart = decodeURIComponent(url.pathname);
+    } else {
+      pathPart = decodeURIComponent(urlStr);
+    }
+    
+    if (pathPart.startsWith('/')) {
+      pathPart = pathPart.substring(1);
+    }
+    return pathPart || null;
+  } catch {
+    return null;
+  }
+}
+
+// --- ZOD СХЕМЫ ---
 const auditPostSchema = z.object({
   userId: z.string().min(1, "Требуется ID пользователя"),
   locationId: z.string().min(1, "Требуется ID точки"),
@@ -75,7 +117,6 @@ export async function POST(req: Request) {
 
     const actingAuditorName = user ? (user.name || user.login) : 'Неизвестный аудитор';
 
-    // 1. Создаем аудит в базе данных
     const newAudit = await prisma.audit.create({
       data: {
         userId: data.userId,
@@ -106,7 +147,6 @@ export async function POST(req: Request) {
       }
     });
 
-    // 2. Автоматически закрываем текущий план визита
     try {
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
@@ -126,16 +166,14 @@ export async function POST(req: Request) {
       console.error('Не удалось автоматически закрыть план визита:', planError);
     }
 
-    // 3. РАСПРЕДЕЛЕНИЕ И ОТПРАВКА PUSH-УВЕДОМЛЕНИЙ
     try {
-      // Собираем всех ADMIN + ТУ, которые закреплены за точкой
       const targetUsers = await prisma.user.findMany({
         where: {
-          pushSubscription: { not: null }, // Только пользователи с активной подпиской
+          pushSubscription: { not: null },
           OR: [
-            { role: Role.ADMIN }, // Администраторы получают ВСЁ
-            { id: location?.tuId || undefined }, // Старая одиночная связь ТУ
-            { locations: { some: { id: data.locationId } } } // Новая множественная связь ТУ
+            { role: Role.ADMIN },
+            { id: location?.tuId || undefined },
+            { locations: { some: { id: data.locationId } } }
           ]
         },
         select: { id: true, pushSubscription: true }
@@ -149,7 +187,6 @@ export async function POST(req: Request) {
           badge: '/logo3.png',
         });
 
-        // Веерная рассылка по устройствам
         for (const targetUser of targetUsers) {
           if (!targetUser.pushSubscription) continue;
           try {
@@ -157,7 +194,6 @@ export async function POST(req: Request) {
             await webpush.sendNotification(subscriptionObj, notificationPayload);
           } catch (pushSendErr: any) {
             console.error(`Ошибка отправки пуша пользователю ${targetUser.id}:`, pushSendErr);
-            // Если подписка протухла (410 или 404), удаляем токен, чтобы не грузить сервер в следующий раз
             if (pushSendErr.statusCode === 410 || pushSendErr.statusCode === 404) {
               await prisma.user.update({
                 where: { id: targetUser.id },
@@ -189,7 +225,6 @@ export async function GET() {
     const currentUserId = session?.user?.id;
     const currentUserRole = (session?.user as any)?.role;
 
-    // Безопасный серверный фильтр: ТУ видит строго свою зону ответственности
     const whereClause: any = {};
     if (currentUserRole === Role.TU && currentUserId) {
       whereClause.location = {
@@ -253,21 +288,79 @@ export async function DELETE(req: Request) {
 
   try {
     const { searchParams } = new URL(req.url);
-    
     const queryData = auditDeleteSchema.parse({
       id: searchParams.get('id'),
       clearAll: searchParams.get('clearAll')
     });
     
+    const bucketName = (process.env.S3_BUCKET_NAME || '').trim();
+    const objectsToDelete: string[] = [];
+
+    // СЦЕНАРИЙ А: Полная очистка
     if (queryData.clearAll === 'true') {
+      const allAnswers = await prisma.answer.findMany({ select: { photos: true } });
+      allAnswers.forEach(ans => {
+        ans.photos.forEach(url => {
+          const key = getS3Key(url);
+          if (key) objectsToDelete.push(key);
+        });
+      });
+
+      if (objectsToDelete.length > 0 && bucketName) {
+        console.log(`[S3] Запуск массовой очистки (${objectsToDelete.length} файлов)...`);
+        await Promise.all(objectsToDelete.map(async (key) => {
+          try {
+            await s3.deleteObject({ Bucket: bucketName, Key: key }).promise();
+          } catch (e) {
+             // Игнорируем ошибки при массовой очистке
+          }
+        }));
+      }
+
       await prisma.audit.deleteMany({});
+
+    // СЦЕНАРИЙ Б: Одиночное удаление
     } else if (queryData.id) {
+      const targetAudit = await prisma.audit.findUnique({
+        where: { id: queryData.id },
+        include: { answers: true }
+      });
+
+      if (!targetAudit) {
+        return NextResponse.json({ error: 'Аудит не найден' }, { status: 404 });
+      }
+
+      console.log('\n--- [S3 DEBUG] НАЧИНАЕМ УДАЛЕНИЕ ---');
+      targetAudit.answers.forEach(ans => {
+        ans.photos.forEach(url => {
+          const key = getS3Key(url);
+          if (key) objectsToDelete.push(key);
+        });
+      });
+
+      console.log(`[S3] Найдено ключей для удаления: ${objectsToDelete.length}`);
+
+      if (objectsToDelete.length > 0 && bucketName) {
+        for (const key of objectsToDelete) {
+          try {
+            console.log(`[S3] Удаляю файл: ${key}...`);
+            await s3.deleteObject({ Bucket: bucketName, Key: key }).promise();
+            console.log(`[S3] ✅ Успешно удален: ${key}`);
+          } catch (s3Err) {
+            console.error(`❌ [S3] Ошибка при удалении файла ${key}:`, s3Err);
+          }
+        }
+      } else {
+        console.log('⚠️ [S3] Удаление пропущено: фото нет или бакет не задан.');
+      }
+
       await prisma.audit.delete({ where: { id: queryData.id } });
+      
     } else {
       return NextResponse.json({ error: 'Нет ID для удаления' }, { status: 400 });
     }
     
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, deletedPhotosCount: objectsToDelete.length });
   } catch (err) {
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: 'Неверные параметры запроса', details: err.issues }, { status: 400 });

@@ -1,91 +1,146 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { S3Client, DeleteObjectsCommand } from '@aws-sdk/client-s3';
+import AWS from 'aws-sdk'; 
+import { z } from 'zod';
 
-// Настраиваем S3 клиент (убедись, что переменные окружения совпадают с твоими)
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || 'ru-central1', 
-  endpoint: process.env.AWS_ENDPOINT,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-  },
+export const dynamic = 'force-dynamic';
+
+// ЖЕСТКАЯ ОЧИСТКА ЭНДПОИНТА
+let cleanEndpoint = (process.env.S3_ENDPOINT || '').trim();
+if (cleanEndpoint.endsWith('/')) {
+  cleanEndpoint = cleanEndpoint.slice(0, -1);
+}
+
+// СОБИРАЕМ КЛЮЧИ ИЗ .ENV
+const accessKey = (process.env.S3_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY || process.env.AWS_ACCESS_KEY_ID || '').trim();
+const secretKey = (process.env.S3_SECRET_ACCESS_KEY || process.env.S3_SECRET_KEY || process.env.AWS_SECRET_ACCESS_KEY || '').trim();
+
+// Настройка классического S3 клиента (неубиваемый вариант для Ceph/Beget)
+const s3 = new AWS.S3({
+  endpoint: cleanEndpoint || undefined,
+  accessKeyId: accessKey || 'MISSING_ACCESS_KEY',
+  secretAccessKey: secretKey || 'MISSING_SECRET_KEY',
+  region: (process.env.S3_REGION || 'ru-1').trim(),
+  s3ForcePathStyle: true, 
+  signatureVersion: 'v4'
 });
 
-export async function GET(req: Request) {
-  // 1. ЗАЩИТА: Проверяем секретный ключ, чтобы кто попало не мог запустить очистку
-  const { searchParams } = new URL(req.url);
-  const secret = searchParams.get('key');
-  if (secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'Доступ запрещен' }, { status: 401 });
-  }
+// Zod схема для проверки входящих параметров
+const cronQuerySchema = z.object({
+  key: z.string().min(1, 'Ключ доступа обязателен'),
+});
 
+// Вспомогательная функция для извлечения ключа (Beget-friendly)
+function getS3Key(urlStr: string): string | null {
   try {
-    // 2. ВЫЧИСЛЯЕМ ДАТУ: текущая минус 6 месяцев
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 12);
+    let pathPart = '';
+    if (urlStr.startsWith('http')) {
+      const url = new URL(urlStr);
+      pathPart = decodeURIComponent(url.pathname);
+    } else {
+      pathPart = decodeURIComponent(urlStr);
+    }
+    
+    // Убираем ведущий слэш
+    if (pathPart.startsWith('/')) {
+      pathPart = pathPart.substring(1);
+    }
+    return pathPart || null;
+  } catch {
+    return null;
+  }
+}
 
-    // 3. ИЩЕМ АУДИТЫ: старше 6 месяцев, загружаем их ответы
+export async function GET(req: Request) {
+  try {
+    // 1. ЗАЩИТА: Строгая валидация секретного ключа
+    const { searchParams } = new URL(req.url);
+    const parsedQuery = cronQuerySchema.safeParse({ key: searchParams.get('key') });
+
+    if (!parsedQuery.success || parsedQuery.data.key !== process.env.CRON_SECRET) {
+      return NextResponse.json({ error: 'Доступ запрещен. Неверный ключ.' }, { status: 401 });
+    }
+
+    const bucketName = (process.env.S3_BUCKET_NAME || process.env.AWS_BUCKET_NAME || '').trim();
+
+    // 2. ВЫЧИСЛЯЕМ ДАТУ: Строго минус 6 месяцев
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    // 3. ИЩЕМ АУДИТЫ: старше 6 месяцев
     const oldAudits = await prisma.audit.findMany({
       where: {
         date: { lt: sixMonthsAgo },
       },
       include: {
-        answers: true // Тянем ответы, чтобы достать массив photos
+        answers: true
       }
     });
 
-    const objectsToDelete: { Key: string }[] = [];
-    const answerIdsToClear: string[] = [];
+    const objectsToDelete: string[] = [];
 
-    // 4. СОБИРАЕМ КЛЮЧИ: парсим ссылки, чтобы получить ключи файлов в S3
+    // 4. СОБИРАЕМ ПОЛНЫЕ КЛЮЧИ
     oldAudits.forEach(audit => {
       audit.answers.forEach(answer => {
-        if (answer.photos && answer.photos.length > 0) {
-          answerIdsToClear.push(answer.id);
-          
+        // Безопасная проверка массива фотографий
+        if (answer.photos && Array.isArray(answer.photos) && answer.photos.length > 0) {
           answer.photos.forEach(photoUrl => {
-            // ВАЖНО: Тебе нужно вытащить S3 Key из URL. 
-            // Если ссылка выглядит как https://bucket.s3.ru/folder/image.jpg,
-            // ключ — это "folder/image.jpg". 
-            // Этот код берет просто последнюю часть URL (имя файла). 
-            // Если у тебя есть папки, адаптируй этот парсинг!
-            const urlParts = photoUrl.split('/');
-            const key = urlParts[urlParts.length - 1]; 
-            
+            const key = getS3Key(photoUrl);
             if (key) {
-              objectsToDelete.push({ Key: key });
+              objectsToDelete.push(key);
             }
           });
         }
       });
     });
 
-    // Если удалять нечего — расходимся
+    // Если удалять нечего — завершаем работу
     if (objectsToDelete.length === 0) {
-      return NextResponse.json({ message: 'Нет фото старше 6 месяцев для удаления' });
+      return NextResponse.json({ message: 'Нет фотографий старше 6 месяцев для удаления' });
     }
 
-    // 5. УДАЛЯЕМ ИЗ S3: пачкой
-    await s3Client.send(new DeleteObjectsCommand({
-      Bucket: process.env.AWS_BUCKET_NAME!,
-      Delete: { Objects: objectsToDelete }
-    }));
+    // 5. ИСПРАВЛЕНО: Безопасное "снайперское" удаление пачками по 50 штук (защита от лимитов Beget)
+    let deletedCount = 0;
+    const CHUNK_SIZE = 50; 
 
-    // 6. ОЧИЩАЕМ БД: чтобы вместо битых картинок интерфейс показывал пустоту
-    await prisma.answer.updateMany({
-      where: { id: { in: answerIdsToClear } },
-      data: { photos: [] } // Затираем массив с фото
+    console.log(`[CRON S3] Начинаем очистку ${objectsToDelete.length} старых файлов...`);
+
+    if (bucketName) {
+      for (let i = 0; i < objectsToDelete.length; i += CHUNK_SIZE) {
+        const chunk = objectsToDelete.slice(i, i + CHUNK_SIZE);
+        
+        // Отправляем запросы параллельно, но не больше 50 за раз
+        await Promise.all(chunk.map(async (key) => {
+          try {
+            await s3.deleteObject({ Bucket: bucketName, Key: key }).promise();
+            deletedCount++;
+          } catch (s3Err) {
+            console.error(`[CRON S3] Ошибка удаления ${key}:`, s3Err);
+          }
+        }));
+      }
+    }
+
+    // 6. ОЧИЩАЕМ БД: Атомарно затираем массивы с фото
+    const updateResult = await prisma.answer.updateMany({
+      where: {
+        audit: {
+          date: { lt: sixMonthsAgo }
+        }
+      },
+      data: {
+        photos: [] 
+      }
     });
 
     return NextResponse.json({ 
       success: true, 
-      deletedPhotos: objectsToDelete.length,
-      clearedAnswers: answerIdsToClear.length 
+      deletedFromS3: deletedCount,
+      clearedInDatabase: updateResult.count 
     });
 
   } catch (error) {
-    console.error('Ошибка при автоудалении старых фото:', error);
+    console.error('Ошибка при автоудалении старых фото в Cron-задаче:', error);
     return NextResponse.json({ error: 'Внутренняя ошибка сервера' }, { status: 500 });
   }
 }
