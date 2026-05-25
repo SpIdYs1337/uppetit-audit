@@ -1,9 +1,26 @@
-import NextAuth from "next-auth";
+import NextAuth, { type DefaultSession } from "next-auth"; // ИСПРАВЛЕНО: Добавлен импорт DefaultSession
 import CredentialsProvider from "next-auth/providers/credentials";
 import prisma from "@/lib/prisma";
 import { compare, hash } from 'bcryptjs';
+import { Role } from "@prisma/client";
 
-// Экспортируем сразу всё, что нам нужно: handlers (для API) и auth (для проверок)
+// ИСПРАВЛЕНО: Корректное расширение типов без конфликтов с внутренностями NextAuth
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id: string;
+      role: Role;
+    } & DefaultSession["user"];
+  }
+}
+
+declare module "next-auth/jwt" {
+  interface JWT {
+    id: string;
+    role: Role;
+  }
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     CredentialsProvider({
@@ -13,7 +30,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Пароль", type: "password" }
       },
       async authorize(credentials) {
-        const login = credentials?.login as string;
+        const login = (credentials?.login as string | undefined)?.trim().toLowerCase();
         const password = credentials?.password as string;
 
         if (!login || !password) return null;
@@ -29,15 +46,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             }
           });
 
-          // 🛟 СПАСАТЕЛЬНЫЙ КРУГ: Авто-создание админа
-          if (!user && login === 'admin') {
+          // СПАСАТЕЛЬНЫЙ КРУГ: Авто-создание админа только локально
+          if (!user && login === 'admin' && process.env.NODE_ENV === 'development') {
             console.log("Админ не найден. Создаем нового с шифрованием...");
             const hashedPassword = await hash(password, 10);
             user = await prisma.user.create({
               data: {
                 login: 'admin',
                 passwordHash: hashedPassword,
-                role: 'ADMIN'
+                role: Role.ADMIN
               }
             });
           }
@@ -46,44 +63,45 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             const isPasswordValid = await compare(password, user.passwordHash);
 
             if (isPasswordValid) {
-            return {
-              id: user.id,
-              name: user.login,
-              role: user.role, 
-            }; 
+              return {
+                id: user.id,
+                name: user.login,
+                role: user.role, 
+              }; 
+            }
           }
-        }
         
-        return null;
-      } catch (error) {
-        console.error("Ошибка при авторизации:", error);
-        return null;
+          return null;
+        } catch (error) {
+          console.error("Ошибка при авторизации:", error);
+          return null;
+        }
       }
+    })
+  ],
+  callbacks: {
+    async jwt({ token, user }) { 
+      if (user) {
+        token.id = user.id as string;
+        // Приводим к типу any при чтении динамического свойства, чтобы избежать конфликтов модификаторов базового User
+        token.role = (user as any).role as Role;
+      }
+      return token;
+    },
+    async session({ session, token }) { 
+      if (session.user) {
+        session.user.id = token.id;
+        session.user.role = token.role;
+      }
+      return session;
     }
-  })
-],
-callbacks: {
-  async jwt({ token, user }) { 
-    if (user) {
-      token.id = user.id;
-      token.role = user.role;
-    }
-    return token;
   },
-  async session({ session, token }) { 
-    if (session.user) {
-      session.user.id = token.id;
-      session.user.role = token.role;
-    }
-    return session;
-  }
-},
-session: {
+  session: {
     strategy: "jwt",
   },
   pages: {
     signIn: '/', 
   },
   secret: process.env.AUTH_SECRET,
-  debug: true, // В продакшене лучше переключить на false
+  debug: process.env.NODE_ENV === 'development',
 });
