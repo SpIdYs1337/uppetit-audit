@@ -42,7 +42,7 @@ export async function POST(req: Request) {
     });
 
     // 6. Создаем ссылку-пропуск на 5 минут (300 секунд)
-    const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 });
+    const uploadUrl = await getSignedUrl(s3Client as any, command, { expiresIn: 300 });
     
     // 7. Формируем красивую финальную ссылку для нашей базы данных
     const publicUrl = `${process.env.S3_PUBLIC_URL}/${key}`;
