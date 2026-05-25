@@ -4,7 +4,7 @@ import { requireAuth } from '@/lib/requireAuth';
 import { z } from 'zod';
 import { Role } from '@prisma/client'; 
 import webpush from 'web-push';
-import AWS from 'aws-sdk'; // ДОБАВЛЕНО: Классический бронебойный клиент
+import S3 from 'aws-sdk/clients/s3';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +26,7 @@ const accessKey = (process.env.S3_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY || 
 const secretKey = (process.env.S3_SECRET_ACCESS_KEY || process.env.S3_SECRET_KEY || process.env.AWS_SECRET_ACCESS_KEY || '').trim();
 
 // Настройка классического S3 клиента (неубиваемый вариант для Ceph/Beget)
-const s3 = new AWS.S3({
+const s3 = new S3({
   endpoint: cleanEndpoint || undefined,
   // Если ключей нет в .env, передаем фейковый текст, чтобы запретить SDK искать сервера Amazon (EC2)
   accessKeyId: accessKey || 'MISSING_ACCESS_KEY',

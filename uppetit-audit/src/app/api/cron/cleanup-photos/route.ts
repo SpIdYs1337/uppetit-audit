@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import AWS from 'aws-sdk'; 
+import S3 from 'aws-sdk/clients/s3'; 
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
@@ -16,7 +16,7 @@ const accessKey = (process.env.S3_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY || 
 const secretKey = (process.env.S3_SECRET_ACCESS_KEY || process.env.S3_SECRET_KEY || process.env.AWS_SECRET_ACCESS_KEY || '').trim();
 
 // Настройка классического S3 клиента (неубиваемый вариант для Ceph/Beget)
-const s3 = new AWS.S3({
+const s3 = new S3({
   endpoint: cleanEndpoint || undefined,
   accessKeyId: accessKey || 'MISSING_ACCESS_KEY',
   secretAccessKey: secretKey || 'MISSING_SECRET_KEY',
