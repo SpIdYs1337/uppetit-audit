@@ -4,7 +4,7 @@ import { requireAuth } from '@/lib/requireAuth';
 import { z } from 'zod';
 import { Role } from '@prisma/client'; 
 import webpush from 'web-push';
-import S3 from 'aws-sdk/clients/s3';
+import { s3Client } from '@/lib/s3'; // <-- Единый клиент S3
 
 export const dynamic = 'force-dynamic';
 
@@ -14,27 +14,6 @@ webpush.setVapidDetails(
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '',
   process.env.VAPID_PRIVATE_KEY || ''
 );
-
-// ЖЕСТКАЯ ОЧИСТКА ЭНДПОИНТА
-let cleanEndpoint = (process.env.S3_ENDPOINT || '').trim();
-if (cleanEndpoint.endsWith('/')) {
-  cleanEndpoint = cleanEndpoint.slice(0, -1);
-}
-
-// СОБИРАЕМ КЛЮЧИ: Учитываем любые варианты названий в твоем .env файле
-const accessKey = (process.env.S3_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY || process.env.AWS_ACCESS_KEY_ID || '').trim();
-const secretKey = (process.env.S3_SECRET_ACCESS_KEY || process.env.S3_SECRET_KEY || process.env.AWS_SECRET_ACCESS_KEY || '').trim();
-
-// Настройка классического S3 клиента (неубиваемый вариант для Ceph/Beget)
-const s3 = new S3({
-  endpoint: cleanEndpoint || undefined,
-  // Если ключей нет в .env, передаем фейковый текст, чтобы запретить SDK искать сервера Amazon (EC2)
-  accessKeyId: accessKey || 'MISSING_ACCESS_KEY',
-  secretAccessKey: secretKey || 'MISSING_SECRET_KEY',
-  region: (process.env.S3_REGION || 'ru-1').trim(),
-  s3ForcePathStyle: true, // В v2 это работает с Beget идеально
-  signatureVersion: 'v4'
-});
 
 // Вспомогательная функция для извлечения ключа
 function getS3Key(urlStr: string): string | null {
@@ -237,6 +216,7 @@ export async function GET() {
 
     const audits = await prisma.audit.findMany({
       where: whereClause, 
+      take: 200, 
       include: {
         user: { select: { id: true, login: true, name: true } },
         location: { 
@@ -310,7 +290,7 @@ export async function DELETE(req: Request) {
         console.log(`[S3] Запуск массовой очистки (${objectsToDelete.length} файлов)...`);
         await Promise.all(objectsToDelete.map(async (key) => {
           try {
-            await s3.deleteObject({ Bucket: bucketName, Key: key }).promise();
+            await s3Client.deleteObject({ Bucket: bucketName, Key: key }).promise();
           } catch (e) {
              // Игнорируем ошибки при массовой очистке
           }
@@ -344,7 +324,7 @@ export async function DELETE(req: Request) {
         for (const key of objectsToDelete) {
           try {
             console.log(`[S3] Удаляю файл: ${key}...`);
-            await s3.deleteObject({ Bucket: bucketName, Key: key }).promise();
+            await s3Client.deleteObject({ Bucket: bucketName, Key: key }).promise();
             console.log(`[S3] ✅ Успешно удален: ${key}`);
           } catch (s3Err) {
             console.error(`❌ [S3] Ошибка при удалении файла ${key}:`, s3Err);

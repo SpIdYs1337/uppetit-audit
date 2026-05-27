@@ -1,29 +1,9 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import S3 from 'aws-sdk/clients/s3'; 
 import { z } from 'zod';
+import { s3Client } from '@/lib/s3'; // <-- Единый клиент S3
 
 export const dynamic = 'force-dynamic';
-
-// ЖЕСТКАЯ ОЧИСТКА ЭНДПОИНТА
-let cleanEndpoint = (process.env.S3_ENDPOINT || '').trim();
-if (cleanEndpoint.endsWith('/')) {
-  cleanEndpoint = cleanEndpoint.slice(0, -1);
-}
-
-// СОБИРАЕМ КЛЮЧИ ИЗ .ENV
-const accessKey = (process.env.S3_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY || process.env.AWS_ACCESS_KEY_ID || '').trim();
-const secretKey = (process.env.S3_SECRET_ACCESS_KEY || process.env.S3_SECRET_KEY || process.env.AWS_SECRET_ACCESS_KEY || '').trim();
-
-// Настройка классического S3 клиента (неубиваемый вариант для Ceph/Beget)
-const s3 = new S3({
-  endpoint: cleanEndpoint || undefined,
-  accessKeyId: accessKey || 'MISSING_ACCESS_KEY',
-  secretAccessKey: secretKey || 'MISSING_SECRET_KEY',
-  region: (process.env.S3_REGION || 'ru-1').trim(),
-  s3ForcePathStyle: true, 
-  signatureVersion: 'v4'
-});
 
 // Zod схема для проверки входящих параметров
 const cronQuerySchema = z.object({
@@ -112,7 +92,7 @@ export async function GET(req: Request) {
         // Отправляем запросы параллельно, но не больше 50 за раз
         await Promise.all(chunk.map(async (key) => {
           try {
-            await s3.deleteObject({ Bucket: bucketName, Key: key }).promise();
+            await s3Client.deleteObject({ Bucket: bucketName, Key: key }).promise();
             deletedCount++;
           } catch (s3Err) {
             console.error(`[CRON S3] Ошибка удаления ${key}:`, s3Err);
