@@ -15,10 +15,14 @@
 * **Фреймворк:** [Next.js 14+](https://nextjs.org/) (App Router)
 * **База данных:** PostgreSQL + [Prisma ORM](https://www.prisma.io/)
 * **Стилизация:** [Tailwind CSS](https://tailwindcss.com/)
-* **Аутентификация:** [NextAuth.js](https://next-auth.js.org/)
-* **Хранилище файлов:** AWS S3 (через `@aws-sdk/client-s3`)
+* **Аутентификация:** [NextAuth.js](https://next-auth.js.org/) *(+ `bcryptjs` для надежного шифрования паролей)*
+* **Хранилище файлов:** AWS S3 *(через классический `aws-sdk` v2 для 100% совместимости с Ceph и облаком Beget)*
 * **PWA:** `@ducanh2912/next-pwa`
 * **Генерация PDF:** `@react-pdf/renderer`
+
+**Ключевые инфраструктурные модули:**
+* **Валидация данных:** `zod` *(обеспечивает строгую типизацию API и защиту эндпоинтов)*
+* **Уведомления:** `web-push` *(для отправки push-уведомлений сотрудникам о завершении аудитов)*
 
 ## ⚙️ Переменные окружения (.env)
 
