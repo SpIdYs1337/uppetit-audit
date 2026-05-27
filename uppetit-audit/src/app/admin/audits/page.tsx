@@ -48,18 +48,16 @@ export default function AdminAuditsPage() {
   };
 
   // =====================================================================
-  // ИЗМЕНЕНО: Строгий приоритет ИСТОРИИ (слепков) над живыми данными!
+  // Строгий приоритет ИСТОРИИ (слепков) над живыми данными!
   // =====================================================================
   const uniqueLocations = Array.from(new Set(audits.map(a => a.locationName || a.location?.name || 'Удалена'))).filter(Boolean).sort();
   const uniqueAuditors = Array.from(new Set(audits.map(a => a.auditorName || a.user?.login || 'Удален'))).filter(Boolean).sort();
   
-  // Умный сбор ТУ: разбиваем слепок "TEST, TEST2" на отдельных ТУ для фильтра
   const allTus = audits.flatMap(a => {
     if (a.tuName) {
       if (a.tuName === 'Не был назначен') return ['Не был назначен'];
-      return a.tuName.split(',').map(s => s.trim()); // Разбиваем строку по запятой
+      return a.tuName.split(',').map(s => s.trim()); 
     }
-    // Фоллбэк только для древних аудитов, где tuName == null
     if (a.location?.tus && a.location.tus.length > 0) {
       return a.location.tus.map(tu => tu.name || tu.login);
     }
@@ -88,7 +86,6 @@ export default function AdminAuditsPage() {
       
       const matchLocation = filters.locations.length === 0 || filters.locations.includes(locName);
       const matchAuditor = filters.auditors.length === 0 || filters.auditors.includes(auditorName);
-      // Если выбран хотя бы один ТУ из списка фильтров, который есть в этом аудите — показываем аудит
       const matchTu = filters.tus.length === 0 || filters.tus.some(tu => auditTus.includes(tu));
 
       return matchDateFrom && matchDateTo && matchLocation && matchAuditor && matchTu;
@@ -188,8 +185,8 @@ export default function AdminAuditsPage() {
         </div>
       )}
 
-      {/* ШАПКА */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6 md:mb-8 relative z-10">
+      {/* ШАПКА - ИСПРАВЛЕНО: z-40 (высокий приоритет, но ниже глобальных меню) */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6 md:mb-8 relative z-40">
         <div>
           <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">История проверок</h1>
           <p className="text-gray-500 mt-1 md:mt-2 text-sm md:text-base">
@@ -203,7 +200,7 @@ export default function AdminAuditsPage() {
         )}
       </div>
 
-      {/* ПАНЕЛЬ ФИЛЬТРОВ */}
+      {/* ПАНЕЛЬ ФИЛЬТРОВ - ОСТАВЛЕНО: z-30 (падает поверх таблицы) */}
       <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-100 mb-6 relative z-30">
         <div className="flex justify-between items-center mb-4">
           <h2 className="font-black text-gray-900">Фильтры поиска</h2>
@@ -243,12 +240,14 @@ export default function AdminAuditsPage() {
 
       {/* ТАБЛИЦА */}
       {paginatedAudits.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-3xl border border-gray-100 border-dashed relative z-10">
+        // УБРАНО: z-10
+        <div className="text-center py-12 bg-white rounded-3xl border border-gray-100 border-dashed relative">
           <div className="text-4xl mb-3">📭</div>
           <p className="text-gray-500 font-bold">Аудиты по вашему запросу не найдены.</p>
         </div>
       ) : (
-        <div className="bg-transparent md:bg-white rounded-none md:rounded-3xl shadow-none md:shadow-sm md:border border-gray-100 overflow-hidden mb-6 relative z-10">
+        // ИСПРАВЛЕНО: Убрали класс z-10! Теперь модальное окно из AuditDetails вырвется наружу и закроет фильтры.
+        <div className="bg-transparent md:bg-white rounded-none md:rounded-3xl shadow-none md:shadow-sm md:border border-gray-100 overflow-hidden mb-6 relative">
           <div className="md:overflow-x-auto">
             <table className="w-full text-left border-collapse md:min-w-[900px] block md:table">
               
@@ -273,7 +272,6 @@ export default function AdminAuditsPage() {
                   const locName = audit.locationName || audit.location?.name || 'Удалена';
                   const auditorName = audit.auditorName || audit.user?.login || 'Удален';
                   
-                  // СТРОКА ТУ: Читаем строго слепок. Если его нет (древние аудиты) - читаем живую связь
                   let auditTusStr = 'Не был назначен';
                   if (audit.tuName) {
                     auditTusStr = audit.tuName;
@@ -347,7 +345,8 @@ export default function AdminAuditsPage() {
 
       {/* ПАГИНАЦИЯ */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-gray-100 relative z-10">
+        // УБРАНО: z-10
+        <div className="flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-gray-100 relative">
           <button 
             onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
             disabled={currentPage === 1}

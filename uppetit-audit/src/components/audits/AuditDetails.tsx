@@ -15,6 +15,13 @@ export function AuditDetails({ audit: initialAudit, onZoomPhoto }: AuditDetailsP
   const [isDownloading, setIsDownloading] = useState(false);
   const [updatingAnswerId, setUpdatingAnswerId] = useState<string | null>(null);
 
+  // Стейт для нашего нового красивого модального окна
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    ansId: string;
+    currentIsOk: boolean;
+  } | null>(null);
+
   // Проверяем, является ли текущий пользователь администратором
   const isAdmin = session?.user?.role === 'ADMIN';
 
@@ -50,9 +57,19 @@ export function AuditDetails({ audit: initialAudit, onZoomPhoto }: AuditDetailsP
     }
   };
 
-  // Функция переключения статуса пункта чек-листа для Администратора
-  const handleToggleAnswerStatus = async (e: React.MouseEvent, ansId: string, currentIsOk: boolean) => {
+  // 1. Функция открытия модального окна (вместо прямого запроса)
+  const openConfirmModal = (e: React.MouseEvent, ansId: string, currentIsOk: boolean) => {
     e.stopPropagation(); // Предотвращаем закрытие спойлера таблицы
+    setConfirmDialog({ isOpen: true, ansId, currentIsOk });
+  };
+
+  // 2. Функция реального выполнения запроса (вызывается из модалки)
+  const executeToggleStatus = async () => {
+    if (!confirmDialog) return;
+    
+    const { ansId, currentIsOk } = confirmDialog;
+    setConfirmDialog(null); // Сразу прячем модалку
+
     if (updatingAnswerId) return;
 
     setUpdatingAnswerId(ansId);
@@ -96,7 +113,6 @@ export function AuditDetails({ audit: initialAudit, onZoomPhoto }: AuditDetailsP
           <h3 className="font-black text-gray-800 uppercase text-sm tracking-wide">
             Подробности проверки
           </h3>
-          {/* Индикатор изменения баллов в реальном времени */}
           <p className="text-xs text-gray-400 font-bold mt-1 uppercase">
             Текущий балл в системе: <span className="text-[#F25C05] font-black">{audit.score} б.</span>
           </p>
@@ -174,7 +190,7 @@ export function AuditDetails({ audit: initialAudit, onZoomPhoto }: AuditDetailsP
                   </div>
                   
                   {photosToRender.length > 0 && (
-                    <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
+                    <div className="mt-3 flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
                       {photosToRender.map((photo: string, idx: number) => (
                         <div
                           key={idx}
@@ -199,7 +215,7 @@ export function AuditDetails({ audit: initialAudit, onZoomPhoto }: AuditDetailsP
                   <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end">
                     <button
                       disabled={isLoadingThis}
-                      onClick={(e) => handleToggleAnswerStatus(e, ans.id, ans.isOk)}
+                      onClick={(e) => openConfirmModal(e, ans.id, ans.isOk)}
                       className={`text-[10px] uppercase tracking-wider font-black px-3 py-2 rounded-xl transition-all shadow-sm active:scale-95 border ${
                         ans.isOk
                           ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
@@ -210,12 +226,69 @@ export function AuditDetails({ audit: initialAudit, onZoomPhoto }: AuditDetailsP
                     </button>
                   </div>
                 )}
-
               </div>
             );
           })}
         </div>
       )}
+
+      {/* НОВОЕ КРАСИВОЕ МОДАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ */}
+      {confirmDialog && confirmDialog.isOpen && (
+        <div 
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={(e) => { e.stopPropagation(); setConfirmDialog(null); }}
+        >
+          <div 
+            className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl transform transition-all"
+            onClick={(e) => e.stopPropagation()} // Чтобы клик внутри белого окна не закрывал его
+          >
+            {/* Иконка */}
+            <div className={`flex items-center justify-center w-16 h-16 rounded-full mx-auto mb-6 ${
+              confirmDialog.currentIsOk ? 'bg-red-100 text-red-500' : 'bg-green-100 text-green-500'
+            }`}>
+              {confirmDialog.currentIsOk ? (
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              ) : (
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </div>
+
+            <h3 className="text-xl font-black text-center text-gray-900 mb-2">
+              Вы уверены?
+            </h3>
+            
+            <p className="text-sm text-gray-500 text-center mb-8 font-medium">
+              {confirmDialog.currentIsOk
+                ? 'Вы собираетесь отменить успешный ответ и начислить штрафные баллы. Это напрямую повлияет на общий результат проверки.'
+                : 'Вы собираетесь зачесть этот пункт как успешный. Штрафные баллы по нему будут аннулированы.'}
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmDialog(null)}
+                className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold text-sm hover:bg-gray-200 transition-colors"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={executeToggleStatus}
+                className={`flex-1 px-4 py-3 rounded-xl font-bold text-sm text-white transition-colors shadow-md ${
+                  confirmDialog.currentIsOk
+                    ? 'bg-red-500 hover:bg-red-600 shadow-red-500/20'
+                    : 'bg-green-500 hover:bg-green-600 shadow-green-500/20'
+                }`}
+              >
+                {confirmDialog.currentIsOk ? 'Оштрафовать' : 'Зачесть'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </td>
   );
 }
