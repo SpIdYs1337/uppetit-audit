@@ -197,8 +197,14 @@ export function AuditDetails({ audit: initialAudit, onZoomPhoto }: AuditDetailsP
                           className="overflow-hidden rounded-lg border border-gray-200 flex-shrink-0 w-24 h-24 sm:w-32 sm:h-32 cursor-zoom-in hover:opacity-80 transition-opacity"
                           onClick={(e) => { e.stopPropagation(); onZoomPhoto(photo); }}
                         >
-                          <img src={photo} alt={`Фото ${idx + 1}`} className="w-full h-full object-cover" />
-                        </div>
+                        <img 
+                         src={photo} 
+                         alt={`Фото ${idx + 1}`} 
+                         loading="lazy" 
+                         decoding="async" 
+                         className="w-full h-full object-cover" 
+                         />                        
+                         </div>
                       ))}
                     </div>
                   )}

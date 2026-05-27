@@ -3,16 +3,16 @@
 import { useState } from 'react';
 import { signIn } from "next-auth/react"; 
 import Image from 'next/image';
-import { PrivacyModal } from '@/components/PrivacyModal'; // ИМПОРТ НАШЕЙ МОДАЛКИ
+import { useRouter } from 'next/navigation'; // <-- ДОБАВИЛИ РОУТЕР
+import { PrivacyModal } from '@/components/PrivacyModal'; 
 
 export default function LoginPage() {
+  const router = useRouter(); // <-- ИНИЦИАЛИЗИРУЕМ
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  
-  // НОВОЕ СОСТОЯНИЕ: Открыта ли модалка с политикой?
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
 
   const handleLoginClick = async () => {
@@ -33,16 +33,17 @@ export default function LoginPage() {
 
       if (result?.error) {
         setError("Неверный логин или пароль");
-        setIsLoading(false); 
+        setIsLoading(false);
       } else if (result?.ok) {
         const sessionRes = await fetch('/api/auth/session');
         const sessionData = await sessionRes.json();
         const userRole = sessionData?.user?.role;
 
+        // <-- ИСПРАВЛЕНО: Мгновенный переход без перезагрузки всей страницы
         if (userRole === 'ADMIN') {
-          window.location.href = '/admin/users'; 
+          router.push('/admin/users');
         } else {
-          window.location.href = '/audit'; 
+          router.push('/audit');
         }
       } else {
         setError("Что-то пошло не так");
@@ -74,11 +75,8 @@ export default function LoginPage() {
         </div>
 
         <div className="space-y-5">
-          
           <div>
-            <label className="block text-[11px] font-bold text-zinc-500 mb-2 ml-1 uppercase">
-              Логин или телефон
-            </label>
+            <label className="block text-[11px] font-bold text-zinc-500 mb-2 ml-1 uppercase">Логин или телефон</label>
             <input 
               type="text"
               value={login}
@@ -90,9 +88,7 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-zinc-500 mb-2 ml-1 uppercase">
-              Пароль
-            </label>
+            <label className="block text-[11px] font-bold text-zinc-500 mb-2 ml-1 uppercase">Пароль</label>
             <div className="relative">
               <input 
                 type={showPassword ? "text" : "password"}
@@ -102,7 +98,6 @@ export default function LoginPage() {
                 className="w-full pl-4 pr-12 py-3.5 rounded-xl border border-zinc-800 bg-zinc-900 text-white outline-none focus:border-[#F25C05] transition-all"
                 placeholder="••••••••"
               />
-              
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
@@ -110,24 +105,15 @@ export default function LoginPage() {
                 title={showPassword ? "Скрыть пароль" : "Показать пароль"}
               >
                 {showPassword ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                 ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
-                  </svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
                 )}
               </button>
             </div>
           </div>
 
-          {error && (
-            <div className="text-red-500 text-[12px] text-center font-bold">
-              {error}
-            </div>
-          )}
+          {error && <div className="text-red-500 text-[12px] text-center font-bold">{error}</div>}
 
           <button 
             type="button" 
@@ -138,7 +124,6 @@ export default function LoginPage() {
             {isLoading ? "Загрузка..." : "Войти"}
           </button>
 
-          {/* ИЗМЕНЕНИЕ ЗДЕСЬ: Заменили <Link> на <button> */}
           <div className="mt-6 text-center text-[11px] text-zinc-500 leading-relaxed px-2">
             Авторизуясь в системе, вы соглашаетесь с{' '}
             <button 
@@ -153,11 +138,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* РЕНДЕРИМ МОДАЛКУ */}
-      <PrivacyModal 
-        isOpen={isPrivacyOpen} 
-        onClose={() => setIsPrivacyOpen(false)} 
-      />
+      <PrivacyModal isOpen={isPrivacyOpen} onClose={() => setIsPrivacyOpen(false)} />
     </div>
   );
 }

@@ -149,7 +149,13 @@ export function AuditCard({ audit, onZoomPhoto }: AuditCardProps) {
                             className="overflow-hidden rounded-lg border border-gray-200 flex-shrink-0 w-20 h-20 sm:w-24 sm:h-24 cursor-zoom-in hover:opacity-80 transition-opacity"
                             onClick={(e) => { e.stopPropagation(); onZoomPhoto(photo); }}
                           >
-                            <img src={photo} alt={`Фото ${idx + 1}`} className="w-full h-full object-cover" />
+                            <img 
+                            src={photo} 
+                            alt={`Фото ${idx + 1}`} 
+                            loading="lazy" 
+                            decoding="async" 
+                            className="w-full h-full object-cover" 
+                            />
                           </div>
                         ))}
                       </div>
