@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { requireAuth } from '@/lib/requireAuth';
-import { z } from 'zod'; // <-- Добавили наш любимый валидатор
+import { z } from 'zod';
+import S3 from 'aws-sdk/clients/s3'; // <-- Используем легкий импорт классического v2
 
 export const dynamic = 'force-dynamic';
 
@@ -12,37 +11,48 @@ const uploadSchema = z.object({
   contentType: z.string().min(1, 'Тип файла обязателен'),
 });
 
+// ЖЕСТКАЯ ОЧИСТКА ЭНДПОИНТА
+let cleanEndpoint = (process.env.S3_ENDPOINT || 'https://s3.beget.com').trim();
+if (cleanEndpoint.endsWith('/')) {
+  cleanEndpoint = cleanEndpoint.slice(0, -1);
+}
+
+// СОБИРАЕМ КЛЮЧИ
+const accessKey = (process.env.S3_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY || process.env.AWS_ACCESS_KEY_ID || '').trim();
+const secretKey = (process.env.S3_SECRET_ACCESS_KEY || process.env.S3_SECRET_KEY || process.env.AWS_SECRET_ACCESS_KEY || '').trim();
+
+// Инициализация легкого S3 клиента
+const s3 = new S3({
+  endpoint: cleanEndpoint,
+  accessKeyId: accessKey || 'MISSING_ACCESS_KEY',
+  secretAccessKey: secretKey || 'MISSING_SECRET_KEY',
+  region: (process.env.S3_REGION || 'ru-1').trim(),
+  s3ForcePathStyle: true,
+  signatureVersion: 'v4'
+});
+
 export async function POST(req: Request) {
   const { error } = await requireAuth();
   if (error) return error;
 
   try {
     const body = await req.json();
-
     const { filename, contentType } = uploadSchema.parse(body);
 
-    const s3Client = new S3Client({
-      region: process.env.S3_REGION || 'ru-1', 
-      endpoint: process.env.S3_ENDPOINT || 'https://s3.beget.com',
-      credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY as string,
-        secretAccessKey: process.env.S3_SECRET_KEY as string,
-      },
-    });
-
-    // 4. Создаем уникальное имя для файла, чтобы фотки не перепутали друг друга
+    // 4. Создаем уникальное имя для файла
     const uniqueFilename = `${Date.now()}-${filename.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
     const key = `audits/${uniqueFilename}`; 
+    const bucketName = (process.env.S3_BUCKET_NAME || process.env.AWS_BUCKET_NAME || '').trim();
 
-    // 5. Готовим команду для загрузки
-    const command = new PutObjectCommand({
-      Bucket: process.env.S3_BUCKET_NAME as string,
+    // 5. Генерируем ссылку-пропуск на 5 минут (300 секунд) с помощью v2
+    const params = {
+      Bucket: bucketName,
       Key: key,
       ContentType: contentType,
-    });
+      Expires: 300
+    };
 
-    // 6. Создаем ссылку-пропуск на 5 минут (300 секунд)
-    const uploadUrl = await getSignedUrl(s3Client as any, command, { expiresIn: 300 });
+    const uploadUrl = await s3.getSignedUrlPromise('putObject', params);
     
     // 7. Формируем красивую финальную ссылку для нашей базы данных
     const publicUrl = `${process.env.S3_PUBLIC_URL}/${key}`;

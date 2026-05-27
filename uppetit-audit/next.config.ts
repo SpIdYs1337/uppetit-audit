@@ -3,7 +3,6 @@ import withPWAInit from "@ducanh2912/next-pwa";
 
 const withPWA = withPWAInit({
   dest: "public",
-  // Отключаем PWA в режиме разработки, чтобы кэш не мешал писать код
   disable: process.env.NODE_ENV === "development",
   cacheOnFrontEndNav: true,
   aggressiveFrontEndNavCaching: true,
@@ -14,7 +13,16 @@ const withPWA = withPWAInit({
 });
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '*.storage.beget.cloud', 
+      },
+      // Если у тебя есть прямой домен (без поддоменов), раскомментируй строку ниже:
+      // { protocol: 'https', hostname: 'storage.beget.cloud' }
+    ],
+  },
 };
 
 export default withPWA(nextConfig);

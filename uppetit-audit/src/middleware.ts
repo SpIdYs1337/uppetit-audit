@@ -11,9 +11,21 @@ export async function middleware(req: NextRequest) {
   const url = req.nextUrl.clone();
   const isAuthPage = url.pathname === '/';
   const isSetupPasswordPage = url.pathname.startsWith('/setup-password');
+  
+  // Определяем, является ли запрос обращением к API
+  const isApiRoute = url.pathname.startsWith('/api');
+  // Исключаем системные роуты авторизации из проверки API
+  const isAuthApiRoute = url.pathname.startsWith('/api/auth');
 
-  // 1. Если нет токена и это не открытые страницы — на авторизацию
-  if (!token && !isAuthPage && !isSetupPasswordPage) {
+  // ДОБАВЛЕНО: Глобальная защита API-роутов
+  if (isApiRoute && !isAuthApiRoute) {
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+  }
+
+  // 1. Если нет токена и это не открытые страницы (не API) — на авторизацию
+  if (!isApiRoute && !token && !isAuthPage && !isSetupPasswordPage) {
     url.pathname = '/';
     return NextResponse.redirect(url);
   }
@@ -32,16 +44,13 @@ export async function middleware(req: NextRequest) {
       url.pathname = '/audit';
       return NextResponse.redirect(url);
     }
-
-
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  // Исключения для PWA: manifest.webmanifest, sw.js, workbox, icon-*.png и apple-icon.png
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|logo\\.jpg|logo\\.png|manifest\\.webmanifest|sw\\.js|workbox-.*|icon-.*\\.png|apple-icon\\.png).*)',
+    '/((?!_next/static|_next/image|favicon.ico|logo\\.jpg|logo\\.png|manifest\\.webmanifest|sw\\.js|workbox-.*|icon-.*\\.png|apple-icon\\.png).*)',
   ],
 };

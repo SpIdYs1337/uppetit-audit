@@ -7,175 +7,135 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ДОБАВЛЕНО: Строгий Enum для ролей
 enum Role {
   ADMIN
   AUDITOR
   TU
 }
 
-// ==========================================
-// 1. ПОЛЬЗОВАТЕЛИ (Сотрудники)
-// ==========================================
 model User {
   id               String      @id @default(cuid())
-  
-  // --- НОВЫЕ ПОЛЯ ---
-  name             String?     // Имя и Фамилия
-  email            String?     @unique // E-mail для связи систем
-  // ------------------
-
+  name             String?
+  email            String?     @unique
   login            String      @unique
   phone            String?     @unique
   passwordHash     String?  
   inviteToken      String?     @unique 
-  
   role             Role        @default(AUDITOR)
   pushSubscription String?
 
   audits           Audit[]
-  visitPlans       VisitPlan[] @relation("PlanAssignee") // 
-  assignedTasks    VisitPlan[] @relation("PlanAssigner") // 
-  
-  // Точки, которыми управляет этот пользователь (если он ТУ)
+  visitPlans       VisitPlan[] @relation("PlanAssignee")
+  assignedTasks    VisitPlan[] @relation("PlanAssigner")
   managedLocations Location[]  @relation("LocationToTU")
-  locations        Location[] @relation("LocationTus")
+  locations        Location[]  @relation("LocationTus")
 }
 
-// ==========================================
-// 2. ТОЧКИ (Магазины)
-// ==========================================
 model Location {
   id         String      @id @default(cuid())
   name       String
   address    String?
-  
   isActive   Boolean     @default(true) 
   activeFrom DateTime?   
-  activeTo   DateTime?   
-  
-  // ПРИВЯЗКА К ТЕРРИТОРИАЛЬНОМУ УПРАВЛЯЮЩЕМУ (ТУ)
-  tuId       String?     
+  activeTo   DateTime?
+  tuId       String?
   tu         User?       @relation("LocationToTU", fields: [tuId], references: [id], onDelete: SetNull)
-  tus        User[]    @relation("LocationTus") 
+  tus        User[]      @relation("LocationTus") 
 
   audits     Audit[]
   visitPlans VisitPlan[]
 }
 
-// ==========================================
-// 3. ЧЕК-ЛИСТЫ (Корневая сущность)
-// ==========================================
 model Checklist {
   id              String             @id @default(cuid())
   title           String
   description     String?
-  redThreshold    Int                @default(70) // Порог красной зоны
-  yellowThreshold Int                @default(90) // Порог желтой зоны
+  redThreshold    Int                @default(70) 
+  yellowThreshold Int                @default(90) 
   allowedRoles    Role[]             @default([AUDITOR, TU])
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 
-  versions        ChecklistVersion[] // Связь с версиями
+  versions        ChecklistVersion[] 
 }
 
-// ==========================================
-// 3.1. ВЕРСИИ ЧЕК-ЛИСТОВ (История структуры)
-// ==========================================
 model ChecklistVersion {
   id          String          @id @default(cuid())
   checklistId String
   checklist   Checklist       @relation(fields: [checklistId], references: [id], onDelete: Cascade)
-  
-  version     Int             @default(1)     // Номер версии (1, 2, 3...)
-  isActive    Boolean         @default(false) // Активна ли сейчас эта версия
+  version     Int             @default(1)     
+  isActive    Boolean         @default(false) 
   createdAt   DateTime        @default(now())
 
-  items       ChecklistItem[] // Вопросы в этой версии
-  audits      Audit[]         // Проверки, проведенные по этой версии
+  items       ChecklistItem[] 
+  audits      Audit[]         
 }
 
-// ==========================================
-// 3.2. ВОПРОСЫ ЧЕК-ЛИСТА (Структура вместо JSON)
-// ==========================================
 model ChecklistItem {
   id         String           @id @default(cuid())
   versionId  String
   version    ChecklistVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
-  
   text       String
   zone       String?          @default("Основной раздел")
   score      Int              @default(0)
   isCritical Boolean          @default(false)
-  order      Int              @default(0) // Порядок отображения
+  order      Int              @default(0) 
 
-  answers    Answer[]         // Связь для аналитики провалов по конкретному вопросу
+  answers    Answer[]         
 }
 
-// ==========================================
-// 4. АУДИТЫ (Результаты проверок)
-// ==========================================
 model Audit {
   id                 String           @id @default(cuid())
   date               DateTime         @default(now())
   score              Int
   maxScore           Int?
-  
-  shiftEmployees     String[]         // Массив имен сотрудников
-  generalComment     String?          // Общий комментарий
+  shiftEmployees     String[]         
+  generalComment     String?
 
-  userId             String?          
+  userId             String?
   user               User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
-  auditorName        String?          
+  auditorName        String?
   tuName             String?
-  
-  locationId         String?          
+  locationId         String?
   location           Location?        @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  locationName       String?          // Снэпшот названия точки на момент проверки
+  locationName       String?
   
   checklistVersionId String
   checklistVersion   ChecklistVersion @relation(fields: [checklistVersionId], references: [id], onDelete: Cascade)
 
   answers            Answer[]
+
+  // ДОБАВЛЕНО: Индексы для сверхбыстрого поиска
+  @@index([locationId])
+  @@index([userId])
+  @@index([date])
 }
 
-// ==========================================
-// 5. ОТВЕТЫ С ФОТО
-// ==========================================
 model Answer {
   id        String         @id @default(cuid())
   auditId   String
   audit     Audit          @relation(fields: [auditId], references: [id], onDelete: Cascade)
-  
-  // Прямая ссылка на конкретный вопрос для крутой SQL-аналитики
   itemId    String?
   item      ChecklistItem? @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  
-  // Эти поля пока оставляем (как кеш или для обратной совместимости старых данных)
   zone      String?        @default("Основной раздел")
   question  String?  
-      
   isOk      Boolean 
   penalty   Int            @default(0) 
   photos    String[] 
   comment   String? 
+ 
+  @@index([auditId])
+  @@index([itemId])
 }
 
-// ==========================================
-// 6. ПЛАНЫ ВИЗИТОВ
-// ==========================================
 model VisitPlan {
   id         String   @id @default(cuid())
-  
   userId     String   
   user       User     @relation("PlanAssignee", fields: [userId], references: [id], onDelete: Cascade)
-  
   assignerId String?  
   assigner   User?    @relation("PlanAssigner", fields: [assignerId], references: [id], onDelete: SetNull)
-
   locationId String
   location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  
   date       DateTime 
   status     String   @default("PLANNED") 
   createdAt  DateTime @default(now())
