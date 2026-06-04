@@ -16,9 +16,11 @@ export async function middleware(req: NextRequest) {
   const isApiRoute = url.pathname.startsWith('/api');
   // Исключаем системные роуты авторизации из проверки API
   const isAuthApiRoute = url.pathname.startsWith('/api/auth');
+  // Исключаем API установки пароля
+  const isSetupPasswordApi = url.pathname.startsWith('/api/setup-password');
 
-  // ДОБАВЛЕНО: Глобальная защита API-роутов
-  if (isApiRoute && !isAuthApiRoute) {
+  // Глобальная защита API-роутов (теперь пропускает запрос на сохранение нового пароля)
+  if (isApiRoute && !isAuthApiRoute && !isSetupPasswordApi) {
     if (!token) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -30,7 +32,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // 2. Если авторизован и пытается зайти на логин — раскидываем по домашним страницам
+  // 2. Если авторизован и пытается зайти на логин или регистрацию — раскидываем по домашним страницам
   if (token && (isAuthPage || isSetupPasswordPage)) {
     url.pathname = token.role === 'ADMIN' ? '/admin/users' : '/audit';
     return NextResponse.redirect(url);
@@ -51,6 +53,7 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|logo\\.jpg|logo\\.png|setup-password|manifest\\.webmanifest|sw\\.js|workbox-.*|icon-.*\\.png|apple-icon\\.png).*)',
+    // Убрали setup-password из игнора, чтобы логика внутри middleware (редирект авторизованных) работала правильно
+    '/((?!_next/static|_next/image|favicon.ico|logo\\.jpg|logo\\.png|manifest\\.webmanifest|sw\\.js|workbox-.*|icon-.*\\.png|apple-icon\\.png).*)',
   ],
 };
