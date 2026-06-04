@@ -26,7 +26,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-[#F5F6F8] flex flex-col md:flex-row">
       
       {/* --- МОБИЛЬНАЯ ШАПКА --- */}
-      <div className="md:hidden bg-[#0a0a0a] p-4 flex justify-between items-center sticky top-0 z-30 shadow-md border-b border-zinc-800">
+      {/* ИСПРАВЛЕНО: Повысили z-index до 50 */}
+      <div className="md:hidden bg-[#0a0a0a] p-4 flex justify-between items-center sticky top-0 z-50 shadow-md border-b border-zinc-800">
         <div className="flex items-center gap-3">
           <Image 
             src="/logo.jpg" 
@@ -55,14 +56,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Затемнение фона при открытом мобильном меню */}
       {isMobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden transition-opacity"
+          /* ИСПРАВЛЕНО: Повысили z-index до 60 */
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] md:hidden transition-opacity"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
       {/* --- БОКОВОЕ МЕНЮ (САЙДБАР) ПК --- */}
+      {/* ИСПРАВЛЕНО: Повысили z-index до 70 */}
       <aside className={`
-        fixed md:static inset-y-0 left-0 z-50
+        fixed md:static inset-y-0 left-0 z-[70]
         w-64 bg-white border-r border-gray-200 flex flex-col shadow-2xl md:shadow-sm
         transform transition-transform duration-300 ease-in-out
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
@@ -91,7 +94,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="flex-1 px-4 space-y-4 overflow-y-auto">
           
           <div className="px-1">
-            {/* ИСПРАВЛЕНО: type="button" и router.push() */}
             <button
               type="button"
               onClick={() => {
