@@ -36,7 +36,7 @@ export async function GET(req: Request) {
       orderBy: { date: 'asc' }
     });
 
-    // Собираем список доступных чек-листов (ИСПРАВЛЕНО: убрали прямое обращение к a.checklistId)
+    // Собираем список доступных чек-листов
     const checklistMap = new Map();
     allAudits.forEach(a => {
       const id = a.checklistVersion?.checklistId;
@@ -45,7 +45,7 @@ export async function GET(req: Request) {
     });
     const availableChecklists = Array.from(checklistMap.entries()).map(([id, title]) => ({ id, title }));
 
-    // Если запрошена изолированная аналитика — фильтруем массив (ИСПРАВЛЕНО)
+    // Фильтруем массив для изолированной аналитики
     const audits = checklistId 
       ? allAudits.filter(a => a.checklistVersion?.checklistId === checklistId)
       : allAudits;
@@ -73,7 +73,6 @@ export async function GET(req: Request) {
     let prevAvgScore = 0;
 
     if (prevWhereClause) {
-      // ИСПРАВЛЕНО: корректный select для prevAllAudits
       const prevAllAudits = await prisma.audit.findMany({
         where: prevWhereClause,
         select: { score: true, checklistVersion: { select: { checklistId: true } } }
@@ -86,25 +85,18 @@ export async function GET(req: Request) {
       prevAvgScore = prevAudits.length > 0 ? Math.round(prevAudits.reduce((acc, a) => acc + a.score, 0) / prevAudits.length) : 0;
     }
 
-    // Вспомогательная функция для подсчета среднего процента
-    const calcAvgPct = (arr: any[]) => {
-      let sumPct = 0;
-      let validCount = 0;
-      arr.forEach(a => {
-        const m = a.maxScore || 0;
-        const s = a.score || 0;
-        if (m > 0) {
-          sumPct += (s / m) * 100;
-          validCount++;
-        }
-      });
-      return validCount > 0 ? Math.round(sumPct / validCount) : 0;
-    };
-
     // 3. Базовые KPI
     const totalAudits = audits.length;
     const avgScore = audits.length > 0 ? Math.round(audits.reduce((acc, a) => acc + a.score, 0) / audits.length) : 0;
-    const avgPct = calcAvgPct(audits);
+    
+    // Считаем ВЗВЕШЕННЫЙ общий процент сети
+    let networkTotalScore = 0;
+    let networkMaxScore = 0;
+    audits.forEach(a => {
+      networkTotalScore += (a.score || 0);
+      networkMaxScore += (a.maxScore || 0);
+    });
+    const avgPct = networkMaxScore > 0 ? Math.round((networkTotalScore / networkMaxScore) * 100) : 0;
 
     const calcTrend = (current: number, prev: number) => {
       if (prev === 0 && current > 0) return 100;
@@ -117,7 +109,7 @@ export async function GET(req: Request) {
       score: prevWhereClause ? calcTrend(avgScore, prevAvgScore) : null
     };
 
-    // 4. Светофор (Жестко по твоим правилам: зоны считаются от СУММЫ баллов за день)
+    // 4. Светофор (Зоны считаются от СУММЫ баллов за день)
     const dailyLocationScores: Record<string, { score: number, red: number, yellow: number }> = {};
     audits.forEach(a => {
       const dateStr = new Date(a.date).toISOString().split('T')[0];
@@ -170,28 +162,29 @@ export async function GET(req: Request) {
 
     const trendData = Object.keys(trendMap).map(date => ({ date, count: trendMap[date] }));
 
-    // 6. Рейтинг локаций (С подсчетом процента выполнения)
-    const locMap: Record<string, { total: number, count: number, sumPct: number, validCount: number, name: string }> = {};
+    // 6. Рейтинг локаций (Взвешенный процент + Жесткая сортировка)
+    const locMap: Record<string, { total: number, maxTotal: number, count: number, name: string }> = {};
     audits.forEach(a => {
       const locId = a.locationId || 'unknown_location'; 
       if (!locMap[locId]) {
-        locMap[locId] = { total: 0, count: 0, sumPct: 0, validCount: 0, name: a.locationName || a.location?.name || 'Неизвестная точка' };
+        locMap[locId] = { total: 0, maxTotal: 0, count: 0, name: a.locationName || a.location?.name || 'Неизвестная точка' };
       }
       locMap[locId].total += a.score;
       locMap[locId].count += 1;
-      
-      const max = a.maxScore || 0;
-      if (max > 0) {
-        locMap[locId].sumPct += (a.score / max) * 100;
-        locMap[locId].validCount += 1;
-      }
+      locMap[locId].maxTotal += (a.maxScore || 0); // Суммируем максимум баллов для честного %
     });
 
     const locStats = Object.values(locMap).map(l => ({ 
       name: l.name, 
       avg: Math.round(l.total / l.count),
-      avgPct: l.validCount > 0 ? Math.round(l.sumPct / l.validCount) : 0
-    })).sort((a, b) => b.avg - a.avgPct);
+      avgPct: l.maxTotal > 0 ? Math.round((l.total / l.maxTotal) * 100) : 0
+    }));
+
+    // ЖЕЛЕЗОБЕТОННАЯ СОРТИРОВКА (Сначала % по убыванию, затем баллы по убыванию)
+    locStats.sort((a, b) => {
+      if (b.avgPct !== a.avgPct) return b.avgPct - a.avgPct;
+      return b.avg - a.avg; 
+    });
 
     return NextResponse.json({
       totalAudits,
