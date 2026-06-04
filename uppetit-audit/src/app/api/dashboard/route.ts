@@ -15,7 +15,6 @@ export async function GET(req: Request) {
     const to = searchParams.get('to');
     const checklistId = searchParams.get('checklistId');
 
-    // 1. Формируем фильтр по датам
     const whereClause: any = {};
     if (from || to) {
       whereClause.date = {};
@@ -36,7 +35,6 @@ export async function GET(req: Request) {
       orderBy: { date: 'asc' }
     });
 
-    // Собираем список доступных чек-листов
     const checklistMap = new Map();
     allAudits.forEach(a => {
       const id = a.checklistVersion?.checklistId;
@@ -45,12 +43,10 @@ export async function GET(req: Request) {
     });
     const availableChecklists = Array.from(checklistMap.entries()).map(([id, title]) => ({ id, title }));
 
-    // Фильтруем массив для изолированной аналитики
     const audits = checklistId 
       ? allAudits.filter(a => a.checklistVersion?.checklistId === checklistId)
       : allAudits;
 
-    // 2. Высчитываем ПРЕДЫДУЩИЙ период для динамики
     let prevWhereClause: any = null;
     if (from && to) {
       const f = new Date(from);
@@ -85,11 +81,9 @@ export async function GET(req: Request) {
       prevAvgScore = prevAudits.length > 0 ? Math.round(prevAudits.reduce((acc, a) => acc + a.score, 0) / prevAudits.length) : 0;
     }
 
-    // 3. Базовые KPI
     const totalAudits = audits.length;
     const avgScore = audits.length > 0 ? Math.round(audits.reduce((acc, a) => acc + a.score, 0) / audits.length) : 0;
     
-    // Считаем ВЗВЕШЕННЫЙ общий процент сети
     let networkTotalScore = 0;
     let networkMaxScore = 0;
     audits.forEach(a => {
@@ -109,7 +103,6 @@ export async function GET(req: Request) {
       score: prevWhereClause ? calcTrend(avgScore, prevAvgScore) : null
     };
 
-    // 4. Светофор (Зоны считаются от СУММЫ баллов за день)
     const dailyLocationScores: Record<string, { score: number, red: number, yellow: number }> = {};
     audits.forEach(a => {
       const dateStr = new Date(a.date).toISOString().split('T')[0];
@@ -131,7 +124,7 @@ export async function GET(req: Request) {
       else zones.red++;
     });
 
-    // 5. Динамика проверок
+    // Обычная динамика по количеству проверок
     let isMonths = false;
     let isYears = false;
     if (audits.length > 0) {
@@ -159,10 +152,48 @@ export async function GET(req: Request) {
       if (!trendMap[key]) trendMap[key] = 0;
       trendMap[key] += 1;
     });
-
     const trendData = Object.keys(trendMap).map(date => ({ date, count: trendMap[date] }));
 
-    // 6. Рейтинг локаций (Взвешенный процент + Жесткая сортировка)
+    // НОВОЕ: Динамика процентов (Неделя к Неделе / Месяц к Месяцу)
+    const wowMap: Record<string, { total: number; max: number }> = {};
+    const momMap: Record<string, { total: number; max: number }> = {};
+
+    audits.forEach(a => {
+      const d = new Date(a.date);
+      
+      // Месяц к Месяцу
+      const mStr = (d.getMonth() + 1).toString().padStart(2, '0');
+      const momKey = `${d.getFullYear()}-${mStr}`;
+      
+      if (!momMap[momKey]) momMap[momKey] = { total: 0, max: 0 };
+      momMap[momKey].total += (a.score || 0);
+      momMap[momKey].max += (a.maxScore || 0);
+
+      // Неделя к Неделе (группируем по понедельникам)
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(d);
+      monday.setDate(diff);
+      const monM = (monday.getMonth() + 1).toString().padStart(2, '0');
+      const monD = monday.getDate().toString().padStart(2, '0');
+      const wowKey = `${monday.getFullYear()}-${monM}-${monD}`;
+
+      if (!wowMap[wowKey]) wowMap[wowKey] = { total: 0, max: 0 };
+      wowMap[wowKey].total += (a.score || 0);
+      wowMap[wowKey].max += (a.maxScore || 0);
+    });
+
+    const momData = Object.keys(momMap).sort().map(k => {
+      const [y, m] = k.split('-');
+      return { date: `${m}.${y}`, pct: momMap[k].max > 0 ? Math.round((momMap[k].total / momMap[k].max) * 100) : 0 };
+    });
+
+    const wowData = Object.keys(wowMap).sort().map(k => {
+      const [y, m, d] = k.split('-');
+      return { date: `${d}.${m}`, pct: wowMap[k].max > 0 ? Math.round((wowMap[k].total / wowMap[k].max) * 100) : 0 };
+    });
+
+    // Рейтинг локаций
     const locMap: Record<string, { total: number, maxTotal: number, count: number, name: string }> = {};
     audits.forEach(a => {
       const locId = a.locationId || 'unknown_location'; 
@@ -171,7 +202,7 @@ export async function GET(req: Request) {
       }
       locMap[locId].total += a.score;
       locMap[locId].count += 1;
-      locMap[locId].maxTotal += (a.maxScore || 0); // Суммируем максимум баллов для честного %
+      locMap[locId].maxTotal += (a.maxScore || 0);
     });
 
     const locStats = Object.values(locMap).map(l => ({ 
@@ -180,7 +211,6 @@ export async function GET(req: Request) {
       avgPct: l.maxTotal > 0 ? Math.round((l.total / l.maxTotal) * 100) : 0
     }));
 
-    // ЖЕЛЕЗОБЕТОННАЯ СОРТИРОВКА (Сначала % по убыванию, затем баллы по убыванию)
     locStats.sort((a, b) => {
       if (b.avgPct !== a.avgPct) return b.avgPct - a.avgPct;
       return b.avg - a.avg; 
@@ -197,6 +227,8 @@ export async function GET(req: Request) {
         { name: 'Красная зона', value: zones.red, fill: '#FF4C4C' }
       ],
       trendData,
+      wowData, // Передаем на фронт
+      momData, // Передаем на фронт
       topLocations: locStats.slice(0, 5),
       bottomLocations: locStats.slice(-5).reverse(),
       trendType: isYears ? 'По годам' : isMonths ? 'По месяцам' : 'По дням',

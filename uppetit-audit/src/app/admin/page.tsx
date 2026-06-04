@@ -10,6 +10,8 @@ interface DashboardData {
   trends: { total: number | null; score: number | null };
   zones: { name: string; value: number; fill: string }[];
   trendData: { date: string; count: number }[];
+  wowData: { date: string; pct: number }[];
+  momData: { date: string; pct: number }[];
   topLocations: { name: string; avg: number; avgPct: number }[];
   bottomLocations: { name: string; avg: number; avgPct: number }[];
   trendType: string;
@@ -21,7 +23,6 @@ export default function AdminDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false); 
 
-  // Управление вкладками и фильтрами
   const [activeTab, setActiveTab] = useState<'summary' | 'isolated'>('summary');
   const [selectedChecklist, setSelectedChecklist] = useState<string>('');
 
@@ -38,7 +39,6 @@ export default function AdminDashboardPage() {
       if (dateFrom) params.append('from', dateFrom);
       if (dateTo) params.append('to', dateTo);
       
-      // Передаем checklistId только если мы на вкладке Изолированной аналитики и выбрали чек-лист
       if (activeTab === 'isolated' && selectedChecklist) {
         params.append('checklistId', selectedChecklist);
       }
@@ -126,44 +126,24 @@ export default function AdminDashboardPage() {
         <div className="w-full md:w-auto">
           <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider">Период (От и До)</label>
           <div className="flex items-center gap-2">
-            <input 
-              type="date" 
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="w-full md:w-40 p-2.5 rounded-xl bg-gray-50 border border-gray-100 outline-none focus:bg-white focus:border-[#F25C05] font-bold text-gray-700 text-xs sm:text-sm transition-colors"
-            />
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-full md:w-40 p-2.5 rounded-xl bg-gray-50 border border-gray-100 outline-none focus:bg-white focus:border-[#F25C05] font-bold text-gray-700 text-xs sm:text-sm transition-colors"/>
             <span className="text-gray-300 font-bold">-</span>
-            <input 
-              type="date" 
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="w-full md:w-40 p-2.5 rounded-xl bg-gray-50 border border-gray-100 outline-none focus:bg-white focus:border-[#F25C05] font-bold text-gray-700 text-xs sm:text-sm transition-colors"
-            />
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-full md:w-40 p-2.5 rounded-xl bg-gray-50 border border-gray-100 outline-none focus:bg-white focus:border-[#F25C05] font-bold text-gray-700 text-xs sm:text-sm transition-colors"/>
           </div>
         </div>
 
-        {/* Выбор чек-листа только для Изолированной вкладки */}
         {activeTab === 'isolated' && (
           <div className="w-full md:w-auto md:min-w-[250px]">
             <label className="block text-[10px] font-bold text-[#F25C05] mb-1 uppercase tracking-wider">Выберите Чек-лист</label>
-            <select
-              value={selectedChecklist}
-              onChange={(e) => setSelectedChecklist(e.target.value)}
-              className="w-full p-2.5 rounded-xl bg-[#FFF6F0] border border-orange-200 outline-none focus:border-[#F25C05] font-bold text-gray-800 text-sm transition-colors"
-            >
+            <select value={selectedChecklist} onChange={(e) => setSelectedChecklist(e.target.value)} className="w-full p-2.5 rounded-xl bg-[#FFF6F0] border border-orange-200 outline-none focus:border-[#F25C05] font-bold text-gray-800 text-sm transition-colors">
               <option value="" disabled>-- Не выбран --</option>
-              {data.availableChecklists.map(c => (
-                <option key={c.id} value={c.id}>{c.title}</option>
-              ))}
+              {data.availableChecklists.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
             </select>
           </div>
         )}
 
         {(dateFrom || dateTo || selectedChecklist) && (
-          <button 
-            onClick={() => { setDateFrom(''); setDateTo(''); setSelectedChecklist(''); }}
-            className="text-xs font-bold text-gray-500 hover:text-gray-900 bg-gray-50 px-4 py-2.5 rounded-xl transition-colors h-[42px] flex items-center justify-center border border-gray-200"
-          >
+          <button onClick={() => { setDateFrom(''); setDateTo(''); setSelectedChecklist(''); }} className="text-xs font-bold text-gray-500 hover:text-gray-900 bg-gray-50 px-4 py-2.5 rounded-xl transition-colors h-[42px] flex items-center justify-center border border-gray-200">
             ✕ Сбросить
           </button>
         )}
@@ -178,7 +158,7 @@ export default function AdminDashboardPage() {
         <div className={`transition-opacity duration-300 ${isFetching ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
           
           {/* KPI КАРТОЧКИ */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-start gap-5">
               <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-3xl shrink-0">📊</div>
               <div className="flex-1">
@@ -193,31 +173,25 @@ export default function AdminDashboardPage() {
               <div className="flex-1">
                 <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Средний балл</div>
                 <div className="text-4xl font-black text-gray-900 leading-none flex items-baseline gap-2">
-                  {data.avgScore} 
-                  {/* ПРОЦЕНТЫ */}
-                  <span className="text-lg text-gray-400 font-black tracking-tight">({data.avgPct}%)</span>
+                  {data.avgScore} <span className="text-lg text-gray-400 font-black tracking-tight">({data.avgPct}%)</span>
                 </div>
                 <TrendBadge trend={data.trends.score} />
               </div>
             </div>
           </div>
 
-          {/* ГРАФИКИ */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            
-            {/* Светофор */}
+          {/* ГРАФИКИ (ОБЩИЕ: СВЕТОФОР + КОЛИЧЕСТВО ПРОВЕРОК) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100">
               <h2 className="text-lg font-black text-gray-900 mb-6">Зоны качества (Дни)</h2>
               {data.zones.reduce((a, b) => a + b.value, 0) === 0 ? (
-                <div className="h-64 flex items-center justify-center text-gray-400 font-bold">Нет данных за период</div>
+                <div className="h-64 flex items-center justify-center text-gray-400 font-bold">Нет данных</div>
               ) : (
                 <>
                   <div className="h-64 relative">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                        <Pie 
-                          data={data.zones} cx="50%" cy="50%" innerRadius={65} outerRadius={105} paddingAngle={2} dataKey="value" stroke="none" labelLine={false} label={renderCustomizedLabel}
-                        >
+                        <Pie data={data.zones} cx="50%" cy="50%" innerRadius={65} outerRadius={105} paddingAngle={2} dataKey="value" stroke="none" labelLine={false} label={renderCustomizedLabel}>
                           {data.zones.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
                         </Pie>
                         <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontWeight: 'bold' }} itemStyle={{ color: '#111827' }} />
@@ -240,13 +214,12 @@ export default function AdminDashboardPage() {
               )}
             </div>
 
-            {/* Динамика */}
             <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100">
               <h2 className="text-lg font-black text-gray-900 mb-6">
-                Динамика проверок <span className="text-[#F25C05] text-sm font-bold ml-2 bg-orange-50 px-2 py-1 rounded-lg">{data.trendType}</span>
+                Количество проверок <span className="text-[#F25C05] text-xs font-bold ml-2 bg-orange-50 px-2 py-1 rounded-lg">{data.trendType}</span>
               </h2>
               {data.trendData.length === 0 ? (
-                <div className="h-64 flex items-center justify-center text-gray-400 font-bold">Нет данных за период</div>
+                <div className="h-64 flex items-center justify-center text-gray-400 font-bold">Нет данных</div>
               ) : (
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
@@ -262,7 +235,50 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          {/* РЕЙТИНГИ С ПРОЦЕНТАМИ */}
+          {/* НОВЫЙ БЛОК: ГРАФИКИ КАЧЕСТВА (ПРОЦЕНТЫ) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100">
+              <h2 className="text-lg font-black text-gray-900 mb-6 flex items-center">
+                Динамика качества <span className="text-emerald-600 text-xs font-bold ml-2 bg-emerald-50 px-2 py-1 rounded-lg">По неделям</span>
+              </h2>
+              {data.wowData.length === 0 ? (
+                <div className="h-64 flex items-center justify-center text-gray-400 font-bold">Нет данных</div>
+              ) : (
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={data.wowData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                      <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} dy={10} />
+                      <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `${val}%`} />
+                      <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontWeight: 'bold' }} formatter={(val) => [`${val}%`, 'Качество']} />
+                      <Line type="monotone" dataKey="pct" name="Качество" stroke="#10b981" strokeWidth={4} dot={{ r: 4, strokeWidth: 3, fill: '#fff' }} activeDot={{ r: 7, strokeWidth: 0, fill: '#10b981' }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100">
+              <h2 className="text-lg font-black text-gray-900 mb-6 flex items-center">
+                Динамика качества <span className="text-blue-600 text-xs font-bold ml-2 bg-blue-50 px-2 py-1 rounded-lg">По месяцам</span>
+              </h2>
+              {data.momData.length === 0 ? (
+                <div className="h-64 flex items-center justify-center text-gray-400 font-bold">Нет данных</div>
+              ) : (
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={data.momData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                      <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} dy={10} />
+                      <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `${val}%`} />
+                      <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontWeight: 'bold' }} formatter={(val) => [`${val}%`, 'Качество']} />
+                      <Line type="monotone" dataKey="pct" name="Качество" stroke="#3b82f6" strokeWidth={4} dot={{ r: 4, strokeWidth: 3, fill: '#fff' }} activeDot={{ r: 7, strokeWidth: 0, fill: '#3b82f6' }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* РЕЙТИНГИ */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100">
               <h2 className="text-lg font-black text-gray-900 mb-6 flex items-center gap-2">🏆 Лидеры (Топ-5)</h2>
@@ -296,7 +312,6 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       )}
-
     </div>
   );
 }
