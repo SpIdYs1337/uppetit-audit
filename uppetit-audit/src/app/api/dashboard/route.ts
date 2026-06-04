@@ -143,9 +143,15 @@ export async function GET(req: Request) {
     // 6. Рейтинг локаций (Топ-5 и Анти-Топ-5)
     const locMap: Record<string, { total: number, count: number, name: string }> = {};
     audits.forEach(a => {
-      const locId = a.locationId;
+      // ИСПРАВЛЕНИЕ: Защита от null для locationId
+      const locId = a.locationId || 'unknown_location'; 
+      
       if (!locMap[locId]) {
-        locMap[locId] = { total: 0, count: 0, name: a.locationName || a.location?.name || 'Неизвестная точка' };
+        locMap[locId] = { 
+          total: 0, 
+          count: 0, 
+          name: a.locationName || a.location?.name || 'Неизвестная точка' 
+        };
       }
       locMap[locId].total += a.score;
       locMap[locId].count += 1;
@@ -156,7 +162,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       totalAudits,
       avgScore,
-      trends, // <-- ДОБАВЛЕНО
+      trends,
       zones: [
         { name: 'Зеленая зона', value: zones.green, fill: '#4CAF50' },
         { name: 'Желтая зона', value: zones.yellow, fill: '#FFC107' },
