@@ -191,7 +191,7 @@ export async function GET(req: Request) {
       name: l.name, 
       avg: Math.round(l.total / l.count),
       avgPct: l.validCount > 0 ? Math.round(l.sumPct / l.validCount) : 0
-    })).sort((a, b) => b.avg - a.avg);
+    })).sort((a, b) => b.avg - a.avgPct);
 
     return NextResponse.json({
       totalAudits,
