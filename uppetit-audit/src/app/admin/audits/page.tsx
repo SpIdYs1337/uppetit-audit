@@ -10,6 +10,7 @@ export default function AdminAuditsPage() {
   
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false); // <-- ДОБАВЛЕН СТЕЙТ ДЛЯ EXCEL
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10; 
@@ -91,6 +92,39 @@ export default function AdminAuditsPage() {
       return matchDateFrom && matchDateTo && matchLocation && matchAuditor && matchTu;
     });
   }, [audits, filters]);
+
+  // <-- ДОБАВЛЕНА ФУНКЦИЯ ДЛЯ ВЫГРУЗКИ EXCEL -->
+  const handleExport = async () => {
+    if (filteredAudits.length === 0) return alert('Нет данных для выгрузки');
+    
+    try {
+      setIsExporting(true);
+      const auditIds = filteredAudits.map(a => a.id);
+      
+      const response = await fetch('/api/audits/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auditIds })
+      });
+
+      if (!response.ok) throw new Error('Ошибка скачивания');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Аудиты_${new Date().toLocaleDateString('ru-RU')}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      alert('Не удалось сформировать Excel');
+      console.error(error);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const totalPages = Math.ceil(filteredAudits.length / itemsPerPage) || 1;
   const paginatedAudits = filteredAudits.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -185,23 +219,39 @@ export default function AdminAuditsPage() {
         </div>
       )}
 
-      {/* ШАПКА - ИСПРАВЛЕНО: z-40 (высокий приоритет, но ниже глобальных меню) */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6 md:mb-8 relative z-40">
+      {/* ШАПКА - ДОБАВЛЕНА КНОПКА EXCEL */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6 md:mb-8 relative z-10">
         <div>
           <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">История проверок</h1>
           <p className="text-gray-500 mt-1 md:mt-2 text-sm md:text-base">
             Найдено аудитов: <span className="font-bold text-gray-800">{filteredAudits.length}</span>
           </p>
         </div>
-        {audits.length > 0 && (
-          <button onClick={handleClearHistory} className="w-full sm:w-auto text-red-500 bg-red-50 hover:bg-red-100 px-4 py-3 sm:py-2 rounded-xl font-bold text-sm transition-colors text-center shadow-sm">
-            Очистить всю историю
-          </button>
-        )}
+        
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          {filteredAudits.length > 0 && (
+            <button 
+              onClick={handleExport} 
+              disabled={isExporting}
+              className="w-full sm:w-auto text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 px-4 py-3 sm:py-2 rounded-xl font-bold text-sm transition-colors text-center shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isExporting ? 'Формируем...' : '📊 Выгрузить в Excel'}
+            </button>
+          )}
+
+          {audits.length > 0 && (
+            <button 
+              onClick={handleClearHistory} 
+              className="w-full sm:w-auto text-red-500 bg-red-50 hover:bg-red-100 border border-red-100 px-4 py-3 sm:py-2 rounded-xl font-bold text-sm transition-colors text-center shadow-sm"
+            >
+              Очистить историю
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* ПАНЕЛЬ ФИЛЬТРОВ - ОСТАВЛЕНО: z-30 (падает поверх таблицы) */}
-      <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-100 mb-6 relative z-30">
+      {/* ПАНЕЛЬ ФИЛЬТРОВ */}
+      <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-100 mb-6 relative z-20">
         <div className="flex justify-between items-center mb-4">
           <h2 className="font-black text-gray-900">Фильтры поиска</h2>
           {isAnyFilterActive && (
@@ -240,13 +290,11 @@ export default function AdminAuditsPage() {
 
       {/* ТАБЛИЦА */}
       {paginatedAudits.length === 0 ? (
-        // УБРАНО: z-10
         <div className="text-center py-12 bg-white rounded-3xl border border-gray-100 border-dashed relative">
           <div className="text-4xl mb-3">📭</div>
           <p className="text-gray-500 font-bold">Аудиты по вашему запросу не найдены.</p>
         </div>
       ) : (
-        // ИСПРАВЛЕНО: Убрали класс z-10! Теперь модальное окно из AuditDetails вырвется наружу и закроет фильтры.
         <div className="bg-transparent md:bg-white rounded-none md:rounded-3xl shadow-none md:shadow-sm md:border border-gray-100 overflow-hidden mb-6 relative">
           <div className="md:overflow-x-auto">
             <table className="w-full text-left border-collapse md:min-w-[900px] block md:table">
@@ -345,7 +393,6 @@ export default function AdminAuditsPage() {
 
       {/* ПАГИНАЦИЯ */}
       {totalPages > 1 && (
-        // УБРАНО: z-10
         <div className="flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-gray-100 relative">
           <button 
             onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
