@@ -13,8 +13,9 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const from = searchParams.get('from');
     const to = searchParams.get('to');
+    const checklistId = searchParams.get('checklistId');
 
-    // 1. Формируем фильтр по датам для ТЕКУЩЕГО периода
+    // 1. Формируем фильтр по датам
     const whereClause: any = {};
     if (from || to) {
       whereClause.date = {};
@@ -26,7 +27,7 @@ export async function GET(req: Request) {
       }
     }
 
-    const audits = await prisma.audit.findMany({
+    const allAudits = await prisma.audit.findMany({
       where: whereClause,
       include: {
         location: true,
@@ -34,6 +35,20 @@ export async function GET(req: Request) {
       },
       orderBy: { date: 'asc' }
     });
+
+    // Собираем список доступных чек-листов (ИСПРАВЛЕНО: убрали прямое обращение к a.checklistId)
+    const checklistMap = new Map();
+    allAudits.forEach(a => {
+      const id = a.checklistVersion?.checklistId;
+      const title = a.checklistVersion?.checklist?.title || 'Неизвестный чек-лист';
+      if (id && !checklistMap.has(id)) checklistMap.set(id, title);
+    });
+    const availableChecklists = Array.from(checklistMap.entries()).map(([id, title]) => ({ id, title }));
+
+    // Если запрошена изолированная аналитика — фильтруем массив (ИСПРАВЛЕНО)
+    const audits = checklistId 
+      ? allAudits.filter(a => a.checklistVersion?.checklistId === checklistId)
+      : allAudits;
 
     // 2. Высчитываем ПРЕДЫДУЩИЙ период для динамики
     let prevWhereClause: any = null;
@@ -58,21 +73,38 @@ export async function GET(req: Request) {
     let prevAvgScore = 0;
 
     if (prevWhereClause) {
-      const prevAudits = await prisma.audit.findMany({
+      // ИСПРАВЛЕНО: корректный select для prevAllAudits
+      const prevAllAudits = await prisma.audit.findMany({
         where: prevWhereClause,
-        select: { score: true }
+        select: { score: true, checklistVersion: { select: { checklistId: true } } }
       });
+      const prevAudits = checklistId 
+        ? prevAllAudits.filter(a => a.checklistVersion?.checklistId === checklistId)
+        : prevAllAudits;
+
       prevTotalAudits = prevAudits.length;
-      prevAvgScore = prevAudits.length > 0 
-        ? Math.round(prevAudits.reduce((acc, a) => acc + a.score, 0) / prevAudits.length) 
-        : 0;
+      prevAvgScore = prevAudits.length > 0 ? Math.round(prevAudits.reduce((acc, a) => acc + a.score, 0) / prevAudits.length) : 0;
     }
+
+    // Вспомогательная функция для подсчета среднего процента
+    const calcAvgPct = (arr: any[]) => {
+      let sumPct = 0;
+      let validCount = 0;
+      arr.forEach(a => {
+        const m = a.maxScore || 0;
+        const s = a.score || 0;
+        if (m > 0) {
+          sumPct += (s / m) * 100;
+          validCount++;
+        }
+      });
+      return validCount > 0 ? Math.round(sumPct / validCount) : 0;
+    };
 
     // 3. Базовые KPI
     const totalAudits = audits.length;
-    const avgScore = audits.length > 0
-      ? Math.round(audits.reduce((acc, a) => acc + a.score, 0) / audits.length)
-      : 0;
+    const avgScore = audits.length > 0 ? Math.round(audits.reduce((acc, a) => acc + a.score, 0) / audits.length) : 0;
+    const avgPct = calcAvgPct(audits);
 
     const calcTrend = (current: number, prev: number) => {
       if (prev === 0 && current > 0) return 100;
@@ -85,7 +117,7 @@ export async function GET(req: Request) {
       score: prevWhereClause ? calcTrend(avgScore, prevAvgScore) : null
     };
 
-    // 4. Распределение по зонам (Светофор)
+    // 4. Светофор (Жестко по твоим правилам: зоны считаются от СУММЫ баллов за день)
     const dailyLocationScores: Record<string, { score: number, red: number, yellow: number }> = {};
     audits.forEach(a => {
       const dateStr = new Date(a.date).toISOString().split('T')[0];
@@ -107,15 +139,13 @@ export async function GET(req: Request) {
       else zones.red++;
     });
 
-    // 5. УМНАЯ ДИНАМИКА ПРОВЕРОК (Дни / Месяцы / Года)
+    // 5. Динамика проверок
     let isMonths = false;
     let isYears = false;
-    
     if (audits.length > 0) {
       const firstDate = new Date(audits[0].date);
       const lastDate = new Date(audits[audits.length - 1].date);
       const diffDays = Math.ceil(Math.abs(lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24));
-      
       if (diffDays > 365) isYears = true;
       else if (diffDays > 60) isMonths = true; 
     }
@@ -140,28 +170,33 @@ export async function GET(req: Request) {
 
     const trendData = Object.keys(trendMap).map(date => ({ date, count: trendMap[date] }));
 
-    // 6. Рейтинг локаций (Топ-5 и Анти-Топ-5)
-    const locMap: Record<string, { total: number, count: number, name: string }> = {};
+    // 6. Рейтинг локаций (С подсчетом процента выполнения)
+    const locMap: Record<string, { total: number, count: number, sumPct: number, validCount: number, name: string }> = {};
     audits.forEach(a => {
-      // ИСПРАВЛЕНИЕ: Защита от null для locationId
       const locId = a.locationId || 'unknown_location'; 
-      
       if (!locMap[locId]) {
-        locMap[locId] = { 
-          total: 0, 
-          count: 0, 
-          name: a.locationName || a.location?.name || 'Неизвестная точка' 
-        };
+        locMap[locId] = { total: 0, count: 0, sumPct: 0, validCount: 0, name: a.locationName || a.location?.name || 'Неизвестная точка' };
       }
       locMap[locId].total += a.score;
       locMap[locId].count += 1;
+      
+      const max = a.maxScore || 0;
+      if (max > 0) {
+        locMap[locId].sumPct += (a.score / max) * 100;
+        locMap[locId].validCount += 1;
+      }
     });
 
-    const locStats = Object.values(locMap).map(l => ({ name: l.name, avg: Math.round(l.total / l.count) })).sort((a, b) => b.avg - a.avg);
+    const locStats = Object.values(locMap).map(l => ({ 
+      name: l.name, 
+      avg: Math.round(l.total / l.count),
+      avgPct: l.validCount > 0 ? Math.round(l.sumPct / l.validCount) : 0
+    })).sort((a, b) => b.avg - a.avg);
 
     return NextResponse.json({
       totalAudits,
       avgScore,
+      avgPct,
       trends,
       zones: [
         { name: 'Зеленая зона', value: zones.green, fill: '#4CAF50' },
@@ -171,7 +206,8 @@ export async function GET(req: Request) {
       trendData,
       topLocations: locStats.slice(0, 5),
       bottomLocations: locStats.slice(-5).reverse(),
-      trendType: isYears ? 'По годам' : isMonths ? 'По месяцам' : 'По дням'
+      trendType: isYears ? 'По годам' : isMonths ? 'По месяцам' : 'По дням',
+      availableChecklists
     });
 
   } catch (err) {
