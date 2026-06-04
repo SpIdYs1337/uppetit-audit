@@ -4,17 +4,18 @@ import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { signOut } from 'next-auth/react';
-// ИСПРАВЛЕНО: Добавили useRouter для корректного перехода
 import { usePathname, useRouter } from 'next/navigation'; 
 import { APP_VERSION } from '@/lib/version'; 
 import PushSubscribe from '@/components/PushSubscribe'; 
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname(); 
-  const router = useRouter(); // Инициализируем роутер
+  const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // ДОБАВЛЕНО: Ссылка на Дэшборд в самом начале
   const navLinks = [
+    { href: '/admin', label: 'Дэшборд' },
     { href: '/admin/users', label: 'Сотрудники' },
     { href: '/admin/locations', label: 'Точки' },
     { href: '/admin/checklists', label: 'Чек-листы' },
@@ -26,7 +27,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-[#F5F6F8] flex flex-col md:flex-row">
       
       {/* --- МОБИЛЬНАЯ ШАПКА --- */}
-      {/* ИСПРАВЛЕНО: Повысили z-index до 50 */}
       <div className="md:hidden bg-[#0a0a0a] p-4 flex justify-between items-center sticky top-0 z-50 shadow-md border-b border-zinc-800">
         <div className="flex items-center gap-3">
           <Image 
@@ -56,14 +56,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Затемнение фона при открытом мобильном меню */}
       {isMobileMenuOpen && (
         <div 
-          /* ИСПРАВЛЕНО: Повысили z-index до 60 */
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] md:hidden transition-opacity"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
       {/* --- БОКОВОЕ МЕНЮ (САЙДБАР) ПК --- */}
-      {/* ИСПРАВЛЕНО: Повысили z-index до 70 */}
       <aside className={`
         fixed md:static inset-y-0 left-0 z-[70]
         w-64 bg-white border-r border-gray-200 flex flex-col shadow-2xl md:shadow-sm
@@ -111,7 +109,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           <nav className="space-y-2">
             {navLinks.map((link) => {
-              const isActive = pathname.startsWith(link.href);
+              // ИСПРАВЛЕНО: Точное совпадение для дэшборда, чтобы он не подсвечивался на других страницах /admin/
+              const isActive = link.href === '/admin' 
+                ? pathname === '/admin' 
+                : pathname.startsWith(link.href);
 
               return (
                 <Link 
