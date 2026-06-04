@@ -32,11 +32,12 @@ export async function POST(req: Request) {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Аудиты');
 
-    // Настраиваем колонки
+    // Настраиваем колонки (ДОБАВЛЕН СТОЛБЕЦ "ЧЕК-ЛИСТ")
     sheet.columns = [
       { header: 'Дата проведения', key: 'date', width: 18 },
       { header: 'Время завершения', key: 'time', width: 20 },
       { header: 'Наименование точки', key: 'location', width: 30 },
+      { header: 'Чек-лист', key: 'checklist', width: 30 }, // <-- ДОБАВЛЕНО
       { header: 'ТУ (Менеджер)', key: 'tu', width: 25 },
       { header: 'Аудитор', key: 'auditor', width: 25 },
       { header: 'Сумма баллов', key: 'score', width: 15 },
@@ -56,8 +57,8 @@ export async function POST(req: Request) {
       const percentage = max > 0 ? (score / max) * 100 : 0;
 
       // Получаем пороги светофора из настроек чек-листа
-      const redThreshold = audit.checklistVersion.checklist.redThreshold;
-      const yellowThreshold = audit.checklistVersion.checklist.yellowThreshold;
+      const redThreshold = audit.checklistVersion?.checklist?.redThreshold || 70;
+      const yellowThreshold = audit.checklistVersion?.checklist?.yellowThreshold || 90;
 
       // Вычисляем зону
       let zoneText = 'Красная';
@@ -77,6 +78,7 @@ export async function POST(req: Request) {
         date: d.toLocaleDateString('ru-RU'),
         time: d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
         location: audit.locationName || audit.location?.name || 'Удалена',
+        checklist: audit.checklistVersion?.checklist?.title || 'Удален / Неизвестно', // <-- ДОБАВЛЕНО ЗНАЧЕНИЕ
         tu: audit.tuName || 'Не назначен',
         auditor: audit.auditorName || 'Неизвестно',
         score: score,
