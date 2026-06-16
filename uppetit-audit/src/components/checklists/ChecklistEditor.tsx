@@ -10,6 +10,7 @@ export interface ChecklistItemType {
   text: string;
   score: number | string;
   isCritical: boolean;
+  isPhotoRequired?: boolean; // <-- ДОБАВЛЕНО: Флаг обязательного фото
 }
 
 export type ExtendedChecklist = Checklist & {
@@ -36,10 +37,14 @@ export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEdito
   });
 
   const [items, setItems] = useState<ChecklistItemType[]>(() => {
-    if (!initialData?.items) return [{ id: Math.random().toString(36).substring(2, 9), zone: 'Основной раздел', text: '', score: 0, isCritical: false }];
+    if (!initialData?.items) return [{ id: Math.random().toString(36).substring(2, 9), zone: 'Основной раздел', text: '', score: 0, isCritical: false, isPhotoRequired: false }];
     try {
       const parsedItems = typeof initialData.items === 'string' ? JSON.parse(initialData.items as string) : initialData.items;
-      return parsedItems.map((item: any) => ({ ...item, id: item.id || Math.random().toString(36).substring(2, 9) }));
+      return parsedItems.map((item: any) => ({ 
+        ...item, 
+        id: item.id || Math.random().toString(36).substring(2, 9),
+        isPhotoRequired: item.isPhotoRequired || false // <-- ДОБАВЛЕНО: Читаем старые данные безопасно
+      }));
     } catch { return []; }
   });
 
@@ -51,7 +56,8 @@ export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEdito
 
   const handleAddItem = () => {
     const lastZone = items.length > 0 ? items[items.length - 1].zone : 'Основной раздел';
-    setItems([...items, { id: Math.random().toString(36).substring(2, 9), zone: lastZone, text: '', score: 0, isCritical: false }]);
+    // <-- ДОБАВЛЕНО: Передаем isPhotoRequired при создании
+    setItems([...items, { id: Math.random().toString(36).substring(2, 9), zone: lastZone, text: '', score: 0, isCritical: false, isPhotoRequired: false }]);
   };
 
   const handleUpdateItem = (id: string, field: string, value: any) => setItems(items.map(i => i.id === id ? { ...i, [field]: value } : i));
@@ -90,7 +96,6 @@ export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEdito
     }
   };
 
-  // Высчитываем значения для показа точных диапазонов
   const rVal = Number(redThreshold) || 0;
   const yVal = Number(yellowThreshold) || 0;
 
@@ -118,7 +123,6 @@ export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEdito
         </div>
       </div>
 
-      {/* --- ИЗМЕНЕННЫЙ БЛОК НАСТРОЙКИ ОЦЕНКИ --- */}
       <div className="mb-8 p-4 md:p-6 bg-gray-50 rounded-2xl border border-gray-100">
         <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
           <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Настройка оценки (в баллах)</h3>
@@ -128,39 +132,24 @@ export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEdito
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* КРАСНАЯ ЗОНА */}
           <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm flex flex-col">
             <label className="block text-xs font-bold text-red-500 mb-1">Красная (строго меньше)</label>
             <div className="text-[10px] text-gray-400 mb-3 leading-tight">Баллы ниже этого числа</div>
-            <input 
-              type="number" 
-              min="0" 
-              value={redThreshold} 
-              onChange={e => setRedThreshold(e.target.value === '' ? '' : Number(e.target.value))} 
-              className="w-full p-2 text-xl font-black text-red-600 bg-red-50 rounded-lg outline-none text-center mb-auto" 
-            />
+            <input type="number" min="0" value={redThreshold} onChange={e => setRedThreshold(e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-2 text-xl font-black text-red-600 bg-red-50 rounded-lg outline-none text-center mb-auto" />
             <div className="mt-3 text-[11px] text-center font-bold text-red-500 bg-red-50/80 py-1.5 rounded-lg border border-red-100/50">
               Попадают: 0 — {rVal > 0 ? rVal - 1 : 0} б.
             </div>
           </div>
 
-          {/* ЖЕЛТАЯ ЗОНА */}
           <div className="bg-white p-4 rounded-xl border border-yellow-100 shadow-sm flex flex-col">
             <label className="block text-xs font-bold text-yellow-600 mb-1">Желтая (строго меньше)</label>
             <div className="text-[10px] text-gray-400 mb-3 leading-tight">Баллы от красной до этого числа</div>
-            <input 
-              type="number" 
-              min="0" 
-              value={yellowThreshold} 
-              onChange={e => setYellowThreshold(e.target.value === '' ? '' : Number(e.target.value))} 
-              className="w-full p-2 text-xl font-black text-yellow-600 bg-yellow-50 rounded-lg outline-none text-center mb-auto" 
-            />
+            <input type="number" min="0" value={yellowThreshold} onChange={e => setYellowThreshold(e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-2 text-xl font-black text-yellow-600 bg-yellow-50 rounded-lg outline-none text-center mb-auto" />
             <div className="mt-3 text-[11px] text-center font-bold text-yellow-600 bg-yellow-50/80 py-1.5 rounded-lg border border-yellow-100/50">
               Попадают: {rVal} — {yVal > 0 ? yVal - 1 : 0} б.
             </div>
           </div>
 
-          {/* ЗЕЛЕНАЯ ЗОНА */}
           <div className="bg-white p-4 rounded-xl border border-green-100 shadow-sm flex flex-col opacity-90">
             <label className="block text-xs font-bold text-green-600 mb-1">Зеленая (включительно)</label>
             <div className="text-[10px] text-gray-400 mb-3 leading-tight">Все баллы начиная с этого числа</div>
@@ -173,7 +162,6 @@ export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEdito
           </div>
         </div>
       </div>
-      {/* ------------------------------------------- */}
 
       <div className="space-y-4 mb-6">
         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Вопросы и зоны</label>

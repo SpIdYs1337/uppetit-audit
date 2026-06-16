@@ -22,6 +22,7 @@ export interface ChecklistItemType {
   score: number;
   isCritical?: boolean;
   order?: number;
+  isPhotoRequired?: boolean;
 }
 
 export function useAuditRun(actualLocationId: string | null, actualChecklistId: string | null) {

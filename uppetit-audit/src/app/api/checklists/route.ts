@@ -15,6 +15,7 @@ const checklistItemSchema = z.object({
   zone: z.string().nullable().optional().default('Основной раздел'),
   score: z.coerce.number().default(0), 
   isCritical: z.coerce.boolean().default(false),
+  isPhotoRequired: z.coerce.boolean().optional().default(false), // <-- ИСПРАВЛЕНО: Добавили в валидацию Zod
 });
 
 // Вытягиваем тип пункта из Zod-схемы, чтобы TS не ругался на 'any' в мапах
@@ -39,7 +40,7 @@ const itemsArraySchemaPost = z.preprocess((val) => {
 
 const checklistPostSchema = z.object({
   title: z.string().min(1, 'Название чек-листа обязательно'),
-  items: itemsArraySchemaPost, // Используем схему с .min() внутри
+  items: itemsArraySchemaPost, 
   redThreshold: z.coerce.number().optional().default(70),
   yellowThreshold: z.coerce.number().optional().default(90),
   allowedRoles: z.union([z.array(z.nativeEnum(Role)), z.string()]).optional().default([Role.AUDITOR, Role.TU]),
@@ -58,7 +59,6 @@ const checklistDeleteSchema = z.object({
   id: z.string().min(1, 'ID обязателен'),
 });
 
-// Вспомогательная функция для парсинга ролей с фронтенда
 function parseRoles(rolesRaw: unknown): Role[] {
   if (Array.isArray(rolesRaw)) return rolesRaw as Role[];
   if (typeof rolesRaw === 'string') {
@@ -130,12 +130,12 @@ export async function POST(request: Request) {
             version: 1,
             isActive: true,
             items: {
-              // ИСПРАВЛЕНО: Явно типизировали item и index
               create: parsedData.items.map((item: ChecklistItemInput, index: number) => ({
                 text: item.text || item.question || 'Новый вопрос',
                 zone: item.zone || 'Основной раздел',
                 score: item.score,
                 isCritical: item.isCritical,
+                isPhotoRequired: item.isPhotoRequired, // <-- ИСПРАВЛЕНО: Передаем в Prisma при создании
                 order: index
               }))
             }
@@ -193,12 +193,12 @@ export async function PUT(request: Request) {
             version: nextVersionNum,
             isActive: true,
             items: {
-              // ИСПРАВЛЕНО: Явно типизировали item и index
               create: parsedData.items.map((item: ChecklistItemInput, index: number) => ({
                 text: item.text || item.question || 'Новый вопрос',
                 zone: item.zone || 'Основной раздел',
                 score: item.score,
                 isCritical: item.isCritical,
+                isPhotoRequired: item.isPhotoRequired, // <-- ИСПРАВЛЕНО: Передаем в Prisma при обновлении
                 order: index
               }))
             }

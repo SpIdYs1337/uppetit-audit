@@ -80,6 +80,7 @@ model ChecklistItem {
   score      Int              @default(0)
   isCritical Boolean          @default(false)
   order      Int              @default(0) 
+  isPhotoRequired Boolean     @default(false)
 
   answers    Answer[]         
 }
