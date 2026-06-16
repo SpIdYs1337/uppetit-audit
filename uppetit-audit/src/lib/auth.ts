@@ -1,10 +1,9 @@
-import NextAuth, { type DefaultSession } from "next-auth"; // ИСПРАВЛЕНО: Добавлен импорт DefaultSession
+import NextAuth, { type DefaultSession } from "next-auth"; 
 import CredentialsProvider from "next-auth/providers/credentials";
 import prisma from "@/lib/prisma";
 import { compare, hash } from 'bcryptjs';
 import { Role } from "@prisma/client";
 
-// ИСПРАВЛЕНО: Корректное расширение типов без конфликтов с внутренностями NextAuth
 declare module "next-auth" {
   interface Session {
     user: {
@@ -30,13 +29,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Пароль", type: "password" }
       },
       async authorize(credentials) {
-        const login = (credentials?.login as string | undefined)?.trim().toLowerCase();
+        // ИСПРАВЛЕНИЕ: Убрали .toLowerCase(), теперь регистр букв сохраняется!
+        const login = (credentials?.login as string | undefined)?.trim();
         const password = credentials?.password as string;
 
         if (!login || !password) return null;
 
         try {
-          // ИЩЕМ И ПО ЛОГИНУ, И ПО ТЕЛЕФОНУ
+          // ИЩЕМ И ПО ЛОГИНУ, И ПО ТЕЛЕФОНУ с точным совпадением регистра
           let user = await prisma.user.findFirst({
             where: {
               OR: [
@@ -83,7 +83,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user }) { 
       if (user) {
         token.id = user.id as string;
-        // Приводим к типу any при чтении динамического свойства, чтобы избежать конфликтов модификаторов базового User
         token.role = (user as any).role as Role;
       }
       return token;
