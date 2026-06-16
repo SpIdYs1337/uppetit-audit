@@ -7,7 +7,7 @@ import { Role } from '@prisma/client';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
-  const { error } = await requireAuth([Role.ADMIN]);
+  const { error } = await requireAuth([Role.ADMIN, Role.TU]);
   if (error) return error;
 
   try {
@@ -17,14 +17,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Нет данных для выгрузки' }, { status: 400 });
     }
 
-    // Достаем аудиты со связями, чтобы получить пороги зон из чек-листа
+    // Убрали `checklist: true`, так как прямой связи нет
     const audits = await prisma.audit.findMany({
       where: { id: { in: auditIds } },
       include: {
         checklistVersion: {
           include: { checklist: true }
         },
-        location: true,
+        location: {
+          include: { tus: true }
+        },
+        user: true, 
       },
       orderBy: { date: 'desc' }
     });
@@ -32,12 +35,12 @@ export async function POST(req: Request) {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Аудиты');
 
-    // Настраиваем колонки (ДОБАВЛЕН СТОЛБЕЦ "ЧЕК-ЛИСТ")
+    // Настраиваем колонки
     sheet.columns = [
       { header: 'Дата проведения', key: 'date', width: 18 },
       { header: 'Время завершения', key: 'time', width: 20 },
       { header: 'Наименование точки', key: 'location', width: 30 },
-      { header: 'Чек-лист', key: 'checklist', width: 30 }, // <-- ДОБАВЛЕНО
+      { header: 'Чек-лист', key: 'checklist', width: 30 },
       { header: 'ТУ (Менеджер)', key: 'tu', width: 25 },
       { header: 'Аудитор', key: 'auditor', width: 25 },
       { header: 'Сумма баллов', key: 'score', width: 15 },
@@ -49,6 +52,7 @@ export async function POST(req: Request) {
     // Стилизуем шапку
     sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
     sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF333333' } };
+    sheet.getRow(1).alignment = { horizontal: 'center', vertical: 'middle' };
 
     // Заполняем данные
     audits.forEach((audit) => {
@@ -56,9 +60,9 @@ export async function POST(req: Request) {
       const score = audit.score || 0;
       const percentage = max > 0 ? (score / max) * 100 : 0;
 
-      // Получаем пороги светофора из настроек чек-листа
-      const redThreshold = audit.checklistVersion?.checklist?.redThreshold || 70;
-      const yellowThreshold = audit.checklistVersion?.checklist?.yellowThreshold || 90;
+      // ИСПРАВЛЕНИЕ: Берем пороги строго из checklistVersion
+      const redThreshold = audit.checklistVersion?.checklist?.redThreshold ?? 70;
+      const yellowThreshold = audit.checklistVersion?.checklist?.yellowThreshold ?? 90;
 
       // Вычисляем зону
       let zoneText = 'Красная';
@@ -74,18 +78,35 @@ export async function POST(req: Request) {
 
       const d = new Date(audit.date);
 
+      let tuStr = 'Не назначен';
+      if (audit.tuName) {
+        tuStr = audit.tuName;
+      } else if (audit.location?.tus && audit.location.tus.length > 0) {
+        tuStr = audit.location.tus.map((tu: any) => tu.name || tu.login).join(', ');
+      }
+
+      const auditorStr = audit.auditorName || audit.user?.name || audit.user?.login || 'Неизвестно';
+
+      // ИСПРАВЛЕНИЕ: Название чек-листа строго из версии
+      const checklistTitle = audit.checklistVersion?.checklist?.title || 'Удален / Неизвестно';
+
       const row = sheet.addRow({
         date: d.toLocaleDateString('ru-RU'),
         time: d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
         location: audit.locationName || audit.location?.name || 'Удалена',
-        checklist: audit.checklistVersion?.checklist?.title || 'Удален / Неизвестно', // <-- ДОБАВЛЕНО ЗНАЧЕНИЕ
-        tu: audit.tuName || 'Не назначен',
-        auditor: audit.auditorName || 'Неизвестно',
+        checklist: checklistTitle,
+        tu: tuStr,
+        auditor: auditorStr,
         score: score,
         maxScore: max,
         percentage: percentage.toFixed(1) + '%',
         zone: zoneText
       });
+
+      // Делаем выравнивание по центру для цифр
+      row.getCell('score').alignment = { horizontal: 'center' };
+      row.getCell('maxScore').alignment = { horizontal: 'center' };
+      row.getCell('percentage').alignment = { horizontal: 'center' };
 
       // Красим ячейку "Зона"
       const zoneCell = row.getCell('zone');
@@ -95,6 +116,7 @@ export async function POST(req: Request) {
         fgColor: { argb: zoneColor }
       };
       zoneCell.font = { bold: true, color: { argb: zoneText === 'Желтая' ? 'FF000000' : 'FFFFFFFF' } };
+      zoneCell.alignment = { horizontal: 'center', vertical: 'middle' };
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
