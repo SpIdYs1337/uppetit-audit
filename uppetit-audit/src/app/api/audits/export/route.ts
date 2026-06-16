@@ -17,7 +17,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Нет данных для выгрузки' }, { status: 400 });
     }
 
-    // Убрали `checklist: true`, так как прямой связи нет
     const audits = await prisma.audit.findMany({
       where: { id: { in: auditIds } },
       include: {
@@ -60,18 +59,23 @@ export async function POST(req: Request) {
       const score = audit.score || 0;
       const percentage = max > 0 ? (score / max) * 100 : 0;
 
-      // ИСПРАВЛЕНИЕ: Берем пороги строго из checklistVersion
-      const redThreshold = audit.checklistVersion?.checklist?.redThreshold ?? 70;
-      const yellowThreshold = audit.checklistVersion?.checklist?.yellowThreshold ?? 90;
+      // ИСПРАВЛЕНИЕ: Вычисляем запасные пороги в БАЛЛАХ (90% и 70% от максимума)
+      const defaultYellow = max > 0 ? max * 0.9 : 90;
+      const defaultRed = max > 0 ? max * 0.7 : 70;
+
+      // Берем пороги из чек-листа. Если их там нет — используем запасные (в баллах)
+      const redThreshold = audit.checklistVersion?.checklist?.redThreshold ?? defaultRed;
+      const yellowThreshold = audit.checklistVersion?.checklist?.yellowThreshold ?? defaultYellow;
 
       // Вычисляем зону
       let zoneText = 'Красная';
       let zoneColor = 'FFFF4C4C'; // Мягкий красный
       
-      if (percentage >= yellowThreshold) {
+      // ИСПРАВЛЕНИЕ: Строго сравниваем БАЛЛ (score) с ПОРОГОМ (Threshold), а не процент
+      if (score >= yellowThreshold) {
         zoneText = 'Зеленая';
         zoneColor = 'FF4CAF50'; // Зеленый
-      } else if (percentage >= redThreshold) {
+      } else if (score >= redThreshold) {
         zoneText = 'Желтая';
         zoneColor = 'FFFFC107'; // Желтый
       }
@@ -86,8 +90,6 @@ export async function POST(req: Request) {
       }
 
       const auditorStr = audit.auditorName || audit.user?.name || audit.user?.login || 'Неизвестно';
-
-      // ИСПРАВЛЕНИЕ: Название чек-листа строго из версии
       const checklistTitle = audit.checklistVersion?.checklist?.title || 'Удален / Неизвестно';
 
       const row = sheet.addRow({
@@ -103,7 +105,7 @@ export async function POST(req: Request) {
         zone: zoneText
       });
 
-      // Делаем выравнивание по центру для цифр
+      // Выравнивание по центру для цифр
       row.getCell('score').alignment = { horizontal: 'center' };
       row.getCell('maxScore').alignment = { horizontal: 'center' };
       row.getCell('percentage').alignment = { horizontal: 'center' };
