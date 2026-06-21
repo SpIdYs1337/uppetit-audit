@@ -205,14 +205,19 @@ export async function GET() {
     const currentUserRole = (session?.user as any)?.role;
 
     const whereClause: any = {};
+    
+    // ИСПРАВЛЕНИЕ: Мощный корневой фильтр для ТУ
     if (currentUserRole === Role.TU && currentUserId) {
-      whereClause.location = {
-        OR: [
-          { tuId: currentUserId },
-          { tus: { some: { id: currentUserId } } }
-        ]
-      };
-    }
+      whereClause.OR = [
+        { userId: currentUserId }, // Аудиты, которые провел лично этот ТУ
+        { location: { tuId: currentUserId } }, // Аудиты, проведенные кем угодно на точке, где он главный ТУ
+        { location: { tus: { some: { id: currentUserId } } } } // Аудиты, проведенные кем угодно на точке, где он со-менеджер
+      ];
+    } 
+    // Если нужно, чтобы Аудиторы видели только свои проверки (раскомментируй, если необходимо):
+    // else if (currentUserRole === Role.AUDITOR && currentUserId) {
+    //   whereClause.userId = currentUserId; 
+    // }
 
     const audits = await prisma.audit.findMany({
       where: whereClause, 
