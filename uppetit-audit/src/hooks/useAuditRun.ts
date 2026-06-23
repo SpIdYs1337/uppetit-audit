@@ -257,7 +257,12 @@ export function useAuditRun(actualLocationId: string | null, actualChecklistId: 
       handleSubmit,
       handleNext: () => currentIndex < questions.length - 1 ? setCurrentIndex(prev => prev + 1) : (isAllAnswered && setIsFinalStep(true)),
       handlePrev: () => isFinalStep ? setIsFinalStep(false) : (currentIndex > 0 && setCurrentIndex(prev => prev - 1)),
-      handleGoToUnanswered: () => firstUnansweredIndex !== -1 && setCurrentIndex(firstUnansweredIndex)
+      handleGoToUnanswered: () => firstUnansweredIndex !== -1 && setCurrentIndex(firstUnansweredIndex),
+      handleJumpToEnd: () => setIsFinalStep(true),
+      handleGoToQuestion: (idx: number) => {
+        setIsFinalStep(false);
+        setCurrentIndex(idx);
+      }
     }
   };
 }
