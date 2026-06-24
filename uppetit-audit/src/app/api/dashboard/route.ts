@@ -13,7 +13,9 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const from = searchParams.get('from');
     const to = searchParams.get('to');
-    const checklistId = searchParams.get('checklistId');
+    
+    const checklistIdsParam = searchParams.get('checklistIds');
+    const checklistIds = checklistIdsParam ? checklistIdsParam.split(',').filter(Boolean) : [];
 
     const whereClause: any = {};
     if (from || to) {
@@ -29,8 +31,9 @@ export async function GET(req: Request) {
     const allAudits = await prisma.audit.findMany({
       where: whereClause,
       include: {
-        location: true,
-        checklistVersion: { include: { checklist: true } }
+        location: { include: { tus: true } },
+        checklistVersion: { include: { checklist: true, items: true } },
+        answers: true
       },
       orderBy: { date: 'asc' }
     });
@@ -43,8 +46,8 @@ export async function GET(req: Request) {
     });
     const availableChecklists = Array.from(checklistMap.entries()).map(([id, title]) => ({ id, title }));
 
-    const audits = checklistId 
-      ? allAudits.filter(a => a.checklistVersion?.checklistId === checklistId)
+    const audits = checklistIds.length > 0 
+      ? allAudits.filter(a => checklistIds.includes(a.checklistVersion?.checklistId || ''))
       : allAudits;
 
     let prevWhereClause: any = null;
@@ -67,18 +70,33 @@ export async function GET(req: Request) {
 
     let prevTotalAudits = 0;
     let prevAvgScore = 0;
+    const prevProblemsMap: Record<string, number> = {};
 
     if (prevWhereClause) {
       const prevAllAudits = await prisma.audit.findMany({
         where: prevWhereClause,
-        select: { score: true, checklistVersion: { select: { checklistId: true } } }
+        select: { 
+          score: true, 
+          checklistVersion: { select: { checklistId: true } },
+          answers: { select: { question: true, isOk: true } }
+        }
       });
-      const prevAudits = checklistId 
-        ? prevAllAudits.filter(a => a.checklistVersion?.checklistId === checklistId)
+      const prevAudits = checklistIds.length > 0 
+        ? prevAllAudits.filter(a => checklistIds.includes(a.checklistVersion?.checklistId || ''))
         : prevAllAudits;
 
       prevTotalAudits = prevAudits.length;
       prevAvgScore = prevAudits.length > 0 ? Math.round(prevAudits.reduce((acc, a) => acc + a.score, 0) / prevAudits.length) : 0;
+
+      prevAudits.forEach(a => {
+        if (a.answers) {
+          a.answers.forEach((ans: any) => {
+            if (ans.isOk === false && ans.question) {
+              prevProblemsMap[ans.question] = (prevProblemsMap[ans.question] || 0) + 1;
+            }
+          });
+        }
+      });
     }
 
     const totalAudits = audits.length;
@@ -103,28 +121,94 @@ export async function GET(req: Request) {
       score: prevWhereClause ? calcTrend(avgScore, prevAvgScore) : null
     };
 
-    const dailyLocationScores: Record<string, { score: number, red: number, yellow: number }> = {};
+    const zones = { green: 0, yellow: 0, red: 0 };
     audits.forEach(a => {
-      const dateStr = new Date(a.date).toISOString().split('T')[0];
-      const key = `${dateStr}_${a.locationId}`;
-      if (!dailyLocationScores[key]) {
-        dailyLocationScores[key] = {
-          score: 0,
-          red: a.checklistVersion?.checklist?.redThreshold || 70,
-          yellow: a.checklistVersion?.checklist?.yellowThreshold || 90
-        };
-      }
-      dailyLocationScores[key].score += a.score;
-    });
+      const max = a.maxScore || 0;
+      const score = a.score || 0;
+      const defaultYellow = max > 0 ? max * 0.9 : 90;
+      const defaultRed = max > 0 ? max * 0.7 : 70;
 
-    let zones = { green: 0, yellow: 0, red: 0 };
-    Object.values(dailyLocationScores).forEach(daily => {
-      if (daily.score >= daily.yellow) zones.green++;
-      else if (daily.score >= daily.red) zones.yellow++;
+      const redThreshold = a.checklistVersion?.checklist?.redThreshold ?? defaultRed;
+      const yellowThreshold = a.checklistVersion?.checklist?.yellowThreshold ?? defaultYellow;
+
+      if (score >= yellowThreshold) zones.green++;
+      else if (score >= redThreshold) zones.yellow++;
       else zones.red++;
     });
 
-    // Обычная динамика по количеству проверок
+    // === ГЕНЕРАЦИЯ ДАННЫХ ДЛЯ ТЕКСТОВОГО ОТЧЕТА ===
+    const currentProblemsMap: Record<string, number> = {};
+    const failedLocations: any[] = [];
+    const criticalViolations: any[] = [];
+
+    audits.forEach(a => {
+      const max = a.maxScore || 0;
+      const score = a.score || 0;
+      
+      const defaultRed = max > 0 ? max * 0.7 : 70;
+      const redThreshold = a.checklistVersion?.checklist?.redThreshold ?? defaultRed;
+
+      const failedAnswers = (a.answers || []).filter((ans: any) => ans.isOk === false);
+      
+      let criticalCount = 0;
+      const critQuestions: string[] = [];
+
+      failedAnswers.forEach((ans: any) => {
+        if (ans.question) {
+          currentProblemsMap[ans.question] = (currentProblemsMap[ans.question] || 0) + 1;
+        }
+        // Проверяем критичность (по id или по тексту)
+        const item = a.checklistVersion?.items?.find((i: any) => i.id === ans.itemId || i.text === ans.question);
+        if (item?.isCritical) {
+          criticalCount++;
+          if (ans.question) critQuestions.push(ans.question);
+        }
+      });
+
+      let tuName = a.tuName && a.tuName !== 'Не был назначен' ? a.tuName : '';
+      if (!tuName) {
+        tuName = a.location?.tus?.map((t: any) => t.name || t.login).join(', ') || 'Не назначен';
+      }
+
+      // Если точка в Красной зоне (провалилась)
+      if (score < redThreshold) {
+        failedLocations.push({
+          name: a.locationName || a.location?.name || 'Неизвестная точка',
+          score,
+          maxScore: max,
+          pct: max > 0 ? Math.round((score/max)*100) : 0,
+          tu: tuName,
+          criticalCount
+        });
+      }
+
+      if (criticalCount > 0) {
+        criticalViolations.push({
+          locationName: a.locationName || a.location?.name || 'Неизвестная точка',
+          tu: tuName,
+          questions: critQuestions
+        });
+      }
+    });
+
+    // Сортируем провалившиеся точки от худших к лучшим (по проценту)
+    failedLocations.sort((a, b) => a.pct - b.pct);
+
+    // Сортируем проблемы от самых частых к редким
+    const problems = Object.keys(currentProblemsMap).map(q => {
+      const count = currentProblemsMap[q];
+      const prevCount = prevProblemsMap[q] || 0;
+      return {
+        question: q,
+        count,
+        pct: totalAudits > 0 ? Math.round((count / totalAudits) * 100) : 0,
+        prevCount,
+        prevPct: prevTotalAudits > 0 ? Math.round((prevCount / prevTotalAudits) * 100) : 0,
+        delta: count - prevCount
+      };
+    }).sort((a, b) => b.count - a.count);
+
+    // Графики
     let isMonths = false;
     let isYears = false;
     if (audits.length > 0) {
@@ -136,40 +220,27 @@ export async function GET(req: Request) {
     }
 
     const trendMap: Record<string, number> = {};
-    audits.forEach(a => {
-      const d = new Date(a.date);
-      let key = '';
-      if (isYears) {
-        key = d.getFullYear().toString(); 
-      } else if (isMonths) {
-        const m = (d.getMonth() + 1).toString().padStart(2, '0');
-        key = `${m}.${d.getFullYear()}`; 
-      } else {
-        const day = d.getDate().toString().padStart(2, '0');
-        const m = (d.getMonth() + 1).toString().padStart(2, '0');
-        key = `${day}.${m}`; 
-      }
-      if (!trendMap[key]) trendMap[key] = 0;
-      trendMap[key] += 1;
-    });
-    const trendData = Object.keys(trendMap).map(date => ({ date, count: trendMap[date] }));
-
-    // НОВОЕ: Динамика процентов (Неделя к Неделе / Месяц к Месяцу)
     const wowMap: Record<string, { total: number; max: number }> = {};
     const momMap: Record<string, { total: number; max: number }> = {};
+    const locMap: Record<string, { total: number, maxTotal: number, count: number, name: string }> = {};
 
     audits.forEach(a => {
       const d = new Date(a.date);
       
-      // Месяц к Месяцу
+      let key = '';
+      if (isYears) key = d.getFullYear().toString(); 
+      else if (isMonths) key = `${(d.getMonth() + 1).toString().padStart(2, '0')}.${d.getFullYear()}`; 
+      else key = `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth() + 1).toString().padStart(2, '0')}`; 
+      
+      if (!trendMap[key]) trendMap[key] = 0;
+      trendMap[key] += 1;
+
       const mStr = (d.getMonth() + 1).toString().padStart(2, '0');
       const momKey = `${d.getFullYear()}-${mStr}`;
-      
       if (!momMap[momKey]) momMap[momKey] = { total: 0, max: 0 };
       momMap[momKey].total += (a.score || 0);
       momMap[momKey].max += (a.maxScore || 0);
 
-      // Неделя к Неделе (группируем по понедельникам)
       const day = d.getDay();
       const diff = d.getDate() - day + (day === 0 ? -6 : 1);
       const monday = new Date(d);
@@ -181,21 +252,7 @@ export async function GET(req: Request) {
       if (!wowMap[wowKey]) wowMap[wowKey] = { total: 0, max: 0 };
       wowMap[wowKey].total += (a.score || 0);
       wowMap[wowKey].max += (a.maxScore || 0);
-    });
 
-    const momData = Object.keys(momMap).sort().map(k => {
-      const [y, m] = k.split('-');
-      return { date: `${m}.${y}`, pct: momMap[k].max > 0 ? Math.round((momMap[k].total / momMap[k].max) * 100) : 0 };
-    });
-
-    const wowData = Object.keys(wowMap).sort().map(k => {
-      const [y, m, d] = k.split('-');
-      return { date: `${d}.${m}`, pct: wowMap[k].max > 0 ? Math.round((wowMap[k].total / wowMap[k].max) * 100) : 0 };
-    });
-
-    // Рейтинг локаций
-    const locMap: Record<string, { total: number, maxTotal: number, count: number, name: string }> = {};
-    audits.forEach(a => {
       const locId = a.locationId || 'unknown_location'; 
       if (!locMap[locId]) {
         locMap[locId] = { total: 0, maxTotal: 0, count: 0, name: a.locationName || a.location?.name || 'Неизвестная точка' };
@@ -205,16 +262,21 @@ export async function GET(req: Request) {
       locMap[locId].maxTotal += (a.maxScore || 0);
     });
 
+    const trendData = Object.keys(trendMap).map(date => ({ date, count: trendMap[date] }));
+    const momData = Object.keys(momMap).sort().map(k => {
+      const [y, m] = k.split('-');
+      return { date: `${m}.${y}`, pct: momMap[k].max > 0 ? Math.round((momMap[k].total / momMap[k].max) * 100) : 0 };
+    });
+    const wowData = Object.keys(wowMap).sort().map(k => {
+      const [y, m, d] = k.split('-');
+      return { date: `${d}.${m}`, pct: wowMap[k].max > 0 ? Math.round((wowMap[k].total / wowMap[k].max) * 100) : 0 };
+    });
+
     const locStats = Object.values(locMap).map(l => ({ 
       name: l.name, 
       avg: Math.round(l.total / l.count),
       avgPct: l.maxTotal > 0 ? Math.round((l.total / l.maxTotal) * 100) : 0
-    }));
-
-    locStats.sort((a, b) => {
-      if (b.avgPct !== a.avgPct) return b.avgPct - a.avgPct;
-      return b.avg - a.avg; 
-    });
+    })).sort((a, b) => b.avgPct !== a.avgPct ? b.avgPct - a.avgPct : b.avg - a.avg);
 
     return NextResponse.json({
       totalAudits,
@@ -227,12 +289,17 @@ export async function GET(req: Request) {
         { name: 'Красная зона', value: zones.red, fill: '#FF4C4C' }
       ],
       trendData,
-      wowData, // Передаем на фронт
-      momData, // Передаем на фронт
+      wowData, 
+      momData, 
       topLocations: locStats.slice(0, 5),
       bottomLocations: locStats.slice(-5).reverse(),
       trendType: isYears ? 'По годам' : isMonths ? 'По месяцам' : 'По дням',
-      availableChecklists
+      availableChecklists,
+      report: {
+        failedLocations,
+        problems,
+        criticalViolations
+      }
     });
 
   } catch (err) {

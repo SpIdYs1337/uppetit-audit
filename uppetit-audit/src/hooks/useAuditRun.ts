@@ -171,9 +171,13 @@ export function useAuditRun(actualLocationId: string | null, actualChecklistId: 
   const firstUnansweredIndex = questions.findIndex((_, idx) => answers[idx]?.isOk === undefined);
   const isAllAnswered = firstUnansweredIndex === -1;
 
-  const handleSubmit = async () => {
+  // ИСПРАВЛЕНИЕ: Теперь функция возвращает Promise<boolean>
+  const handleSubmit = async (): Promise<boolean> => {
     const validEmployees = employees.filter(e => e.trim() !== '');
-    if (validEmployees.length === 0) return alert('Укажите хотя бы одного сотрудника.');
+    if (validEmployees.length === 0) {
+      alert('Укажите хотя бы одного сотрудника.');
+      return false; // Останавливаем процесс, возвращаем false
+    }
 
     setIsSubmitting(true);
     try {
@@ -219,9 +223,10 @@ export function useAuditRun(actualLocationId: string | null, actualChecklistId: 
       localStorage.removeItem('last_active_audit');
 
       alert('Аудит успешно завершен!');
-      router.push('/audit');
+      return true; // Возвращаем true, чтобы run.tsx понял, что можно уходить со страницы
     } catch (err: unknown) {
       alert(`Ошибка: ${err instanceof Error ? err.message : 'Неизвестная ошибка'}`);
+      return false;
     } finally {
       setIsSubmitting(false);
     }

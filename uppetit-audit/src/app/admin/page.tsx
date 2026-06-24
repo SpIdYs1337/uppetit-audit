@@ -3,6 +3,30 @@
 import { useEffect, useState, useCallback } from 'react';
 import { PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
+interface ReportProblem {
+  question: string;
+  count: number;
+  pct: number;
+  prevCount: number;
+  prevPct: number;
+  delta: number;
+}
+
+interface ReportLocation {
+  name: string;
+  score: number;
+  maxScore: number;
+  pct: number;
+  tu: string;
+  criticalCount: number;
+}
+
+interface ReportCritical {
+  locationName: string;
+  tu: string;
+  questions: string[];
+}
+
 interface DashboardData {
   totalAudits: number;
   avgScore: number;
@@ -16,15 +40,22 @@ interface DashboardData {
   bottomLocations: { name: string; avg: number; avgPct: number }[];
   trendType: string;
   availableChecklists: { id: string; title: string }[];
+  report: {
+    failedLocations: ReportLocation[];
+    problems: ReportProblem[];
+    criticalViolations: ReportCritical[];
+  };
 }
 
 export default function AdminDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false); 
+  const [isExporting, setIsExporting] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'summary' | 'isolated'>('summary');
-  const [selectedChecklist, setSelectedChecklist] = useState<string>('');
+  const [selectedChecklists, setSelectedChecklists] = useState<string[]>([]);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date();
@@ -39,8 +70,8 @@ export default function AdminDashboardPage() {
       if (dateFrom) params.append('from', dateFrom);
       if (dateTo) params.append('to', dateTo);
       
-      if (activeTab === 'isolated' && selectedChecklist) {
-        params.append('checklistId', selectedChecklist);
+      if (activeTab === 'isolated' && selectedChecklists.length > 0) {
+        params.append('checklistIds', selectedChecklists.join(','));
       }
 
       const res = await fetch(`/api/dashboard?${params.toString()}`);
@@ -51,11 +82,89 @@ export default function AdminDashboardPage() {
       setIsLoading(false);
       setIsFetching(false);
     }
-  }, [dateFrom, dateTo, activeTab, selectedChecklist]);
+  }, [dateFrom, dateTo, activeTab, selectedChecklists]);
 
   useEffect(() => {
     fetchDashboard();
   }, [fetchDashboard]);
+
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    try {
+      const response = await fetch('/api/dashboard/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          from: dateFrom, 
+          to: dateTo, 
+          checklistIds: activeTab === 'isolated' ? selectedChecklists : [] 
+        })
+      });
+
+      if (!response.ok) throw new Error('Ошибка скачивания');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Аналитика_${new Date().toLocaleDateString('ru-RU')}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      alert('Не удалось сформировать Excel');
+      console.error(error);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const toggleChecklist = (id: string) => {
+    setSelectedChecklists(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  // ФОРМИРОВАНИЕ И КОПИРОВАНИЕ ОТЧЕТА В БУФЕР
+  const handleCopyTextReport = () => {
+    if (!data?.report) return;
+    
+    let text = "🚨 Провалившиеся точки (Красная зона)\n";
+    if (data.report.failedLocations.length > 0) {
+      data.report.failedLocations.forEach(loc => {
+        text += `• ${loc.name} — ${loc.score}/${loc.maxScore} (${loc.pct}%), ТУ: ${loc.tu}, критических: ${loc.criticalCount} шт\n`;
+      });
+    } else {
+      text += "• Нет провалившихся точек\n";
+    }
+
+    text += "\n📊 Детализация по всем пунктам (Топ нарушений)\n";
+    if (data.report.problems.length > 0) {
+      data.report.problems.forEach(p => {
+        const deltaStr = p.delta > 0 ? `+${p.delta}` : p.delta.toString();
+        text += `• ${p.question}. — ${p.count} случаев (${p.pct}%), прошлая неделя: ${p.prevCount} случаев (${p.prevPct}%), Δ: ${deltaStr}\n`;
+      });
+    } else {
+      text += "• Идеально, нарушений нет\n";
+    }
+
+    text += "\n❌ Критические замечания по точкам\n";
+    if (data.report.criticalViolations.length > 0) {
+      data.report.criticalViolations.forEach(cv => {
+        text += `${cv.locationName} (${cv.tu})\n`;
+        cv.questions.forEach(q => {
+          text += `• ${q}\n`;
+        });
+        text += "\n";
+      });
+    } else {
+      text += "• Нет критических нарушений\n";
+    }
+
+    navigator.clipboard.writeText(text.trim());
+    alert('✅ Отчет скопирован в буфер обмена!');
+  };
 
   const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
     if (percent === 0) return null; 
@@ -99,15 +208,24 @@ export default function AdminDashboardPage() {
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto pb-20 relative">
       
-      <div className="mb-6">
-        <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">Аналитика сети</h1>
-        <p className="text-gray-500 mt-1 text-sm md:text-base font-medium">Сводная информация по проверкам</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">Аналитика сети</h1>
+          <p className="text-gray-500 mt-1 text-sm md:text-base font-medium">Сводная информация по проверкам</p>
+        </div>
+        
+        <button 
+          onClick={handleExportExcel} 
+          disabled={isExporting}
+          className="w-full sm:w-auto text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 px-4 py-3 sm:py-2.5 rounded-xl font-bold text-sm transition-colors text-center shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          {isExporting ? 'Формируем...' : '📊 Выгрузить в Excel'}
+        </button>
       </div>
 
-      {/* СИСТЕМА ВКЛАДОК */}
       <div className="flex gap-6 mb-6 border-b border-gray-200 overflow-x-auto">
         <button
-          onClick={() => { setActiveTab('summary'); setSelectedChecklist(''); }}
+          onClick={() => { setActiveTab('summary'); setSelectedChecklists([]); }}
           className={`pb-3 font-black text-sm whitespace-nowrap transition-colors border-b-2 ${activeTab === 'summary' ? 'border-[#F25C05] text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
         >
           Общая сводка
@@ -120,7 +238,6 @@ export default function AdminDashboardPage() {
         </button>
       </div>
 
-      {/* ПАНЕЛЬ ФИЛЬТРОВ */}
       <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-100 mb-8 flex flex-col md:flex-row items-end gap-4 relative z-20">
         
         <div className="w-full md:w-auto">
@@ -133,23 +250,53 @@ export default function AdminDashboardPage() {
         </div>
 
         {activeTab === 'isolated' && (
-          <div className="w-full md:w-auto md:min-w-[250px]">
-            <label className="block text-[10px] font-bold text-[#F25C05] mb-1 uppercase tracking-wider">Выберите Чек-лист</label>
-            <select value={selectedChecklist} onChange={(e) => setSelectedChecklist(e.target.value)} className="w-full p-2.5 rounded-xl bg-[#FFF6F0] border border-orange-200 outline-none focus:border-[#F25C05] font-bold text-gray-800 text-sm transition-colors">
-              <option value="" disabled>-- Не выбран --</option>
-              {data.availableChecklists.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
-            </select>
+          <div className="relative w-full md:w-auto md:min-w-[250px] z-30">
+            <label className="block text-[10px] font-bold text-[#F25C05] mb-1 uppercase tracking-wider">Выберите Чек-листы</label>
+            <div 
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              className={`w-full p-2.5 rounded-xl border outline-none font-bold text-sm cursor-pointer flex justify-between items-center transition-colors ${isDropdownOpen ? 'border-[#F25C05] bg-white text-gray-900' : 'bg-[#FFF6F0] border-orange-200 text-gray-800'}`}
+            >
+              <span className="truncate pr-2">
+                {selectedChecklists.length === 0 ? 'Выберите чек-лист' : `Выбрано: ${selectedChecklists.length}`}
+              </span>
+              <svg className={`w-4 h-4 text-orange-500 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+            {isDropdownOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setIsDropdownOpen(false)}></div>
+                <div className="absolute z-50 top-full left-0 mt-2 w-full min-w-[240px] bg-white border border-gray-100 rounded-xl shadow-xl max-h-[300px] overflow-y-auto p-1.5 custom-scrollbar">
+                  {data.availableChecklists.map(c => {
+                    const isChecked = selectedChecklists.includes(c.id);
+                    return (
+                      <div 
+                        key={c.id} 
+                        onClick={() => toggleChecklist(c.id)}
+                        className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors group"
+                      >
+                        <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors shrink-0 ${isChecked ? 'bg-[#F25C05] border-[#F25C05]' : 'border-gray-300 bg-white group-hover:border-[#F25C05]'}`}>
+                          {isChecked && <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                        </div>
+                        <span className={`text-sm truncate select-none ${isChecked ? 'font-bold text-gray-900' : 'font-medium text-gray-700'}`}>{c.title}</span>
+                      </div>
+                    );
+                  })}
+                  {data.availableChecklists.length === 0 && <div className="p-3 text-center text-sm font-bold text-gray-400">Нет чек-листов</div>}
+                </div>
+              </>
+            )}
           </div>
         )}
 
-        {(dateFrom || dateTo || selectedChecklist) && (
-          <button onClick={() => { setDateFrom(''); setDateTo(''); setSelectedChecklist(''); }} className="text-xs font-bold text-gray-500 hover:text-gray-900 bg-gray-50 px-4 py-2.5 rounded-xl transition-colors h-[42px] flex items-center justify-center border border-gray-200">
+        {(dateFrom || dateTo || selectedChecklists.length > 0) && (
+          <button onClick={() => { setDateFrom(''); setDateTo(''); setSelectedChecklists([]); }} className="text-xs font-bold text-gray-500 hover:text-gray-900 bg-gray-50 px-4 py-2.5 rounded-xl transition-colors h-[42px] flex items-center justify-center border border-gray-200">
             ✕ Сбросить
           </button>
         )}
       </div>
 
-      {activeTab === 'isolated' && !selectedChecklist ? (
+      {activeTab === 'isolated' && selectedChecklists.length === 0 ? (
         <div className="bg-white p-12 rounded-3xl border border-dashed border-gray-300 text-center">
           <div className="text-4xl mb-3">🔍</div>
           <p className="text-gray-500 font-bold text-lg">Выберите чек-лист в фильтре выше,<br/>чтобы увидеть изолированную статистику.</p>
@@ -157,7 +304,6 @@ export default function AdminDashboardPage() {
       ) : (
         <div className={`transition-opacity duration-300 ${isFetching ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
           
-          {/* KPI КАРТОЧКИ */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-start gap-5">
               <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-3xl shrink-0">📊</div>
@@ -180,10 +326,63 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          {/* ГРАФИКИ (ОБЩИЕ: СВЕТОФОР + КОЛИЧЕСТВО ПРОВЕРОК) */}
+          {/* ТЕКСТОВЫЙ ОТЧЕТ */}
+          {activeTab === 'isolated' && (
+            <div className="bg-gradient-to-br from-gray-900 to-gray-800 p-6 md:p-8 rounded-3xl shadow-lg mb-8 text-white relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+                <svg className="w-48 h-48" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM6 20V4h5v6h6v10H6z"/></svg>
+              </div>
+              
+              <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-6">
+                <div>
+                  <h2 className="text-xl font-black mb-1">Детализация (Текстовый отчет)</h2>
+                  <p className="text-gray-400 text-sm font-medium">Готовый формат для отправки в рабочие чаты</p>
+                </div>
+                <button 
+                  onClick={handleCopyTextReport}
+                  className="bg-white/10 hover:bg-white/20 border border-white/20 text-white px-5 py-3 rounded-xl font-bold text-sm transition-all active:scale-95 flex items-center gap-2 w-full md:w-auto justify-center"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                  Скопировать текст
+                </button>
+              </div>
+
+              {/* ПРЕДПРОСМОТР ОТЧЕТА */}
+              <div className="bg-black/30 p-5 rounded-2xl border border-white/10 text-sm font-mono text-gray-300 h-64 overflow-y-auto custom-scrollbar">
+                
+                <div className="font-bold text-white mb-2">🚨 Провалившиеся точки (Красная зона)</div>
+                {data.report.failedLocations.slice(0, 5).map((loc, i) => (
+                  <div key={i}>• {loc.name} — {loc.score}/{loc.maxScore} ({loc.pct}%), ТУ: {loc.tu}, критических: {loc.criticalCount} шт</div>
+                ))}
+                {data.report.failedLocations.length > 5 && <div className="italic opacity-50 mt-1">...и еще {data.report.failedLocations.length - 5} точек</div>}
+                {data.report.failedLocations.length === 0 && <div className="opacity-50 text-green-400">Нет провалившихся точек 🎉</div>}
+                
+                <div className="font-bold text-white mt-6 mb-2">📊 Детализация по пунктам (Топ нарушений)</div>
+                {data.report.problems.slice(0, 8).map((p, i) => (
+                  <div key={i} className="mb-1">
+                    • {p.question}. — {p.count} случаев ({p.pct}%), прошлая неделя: {p.prevCount} случаев ({p.prevPct}%), Δ: {p.delta > 0 ? `+${p.delta}` : p.delta}
+                  </div>
+                ))}
+                {data.report.problems.length > 8 && <div className="italic opacity-50 mt-1">...и еще {data.report.problems.length - 8} нарушений</div>}
+                {data.report.problems.length === 0 && <div className="opacity-50">Нарушений нет</div>}
+
+                <div className="font-bold text-white mt-6 mb-2">❌ Критические замечания по точкам</div>
+                {data.report.criticalViolations.slice(0, 5).map((cv, i) => (
+                  <div key={i} className="mb-3">
+                    <div className="text-white bg-white/5 inline-block px-2 py-0.5 rounded mb-1">{cv.locationName} ({cv.tu})</div>
+                    {cv.questions.map((q, j) => <div key={j} className="pl-2 border-l border-red-500/50 ml-1">• {q}</div>)}
+                  </div>
+                ))}
+                {data.report.criticalViolations.length > 5 && <div className="italic opacity-50 mt-1">...и еще {data.report.criticalViolations.length - 5} точек</div>}
+                {data.report.criticalViolations.length === 0 && <div className="opacity-50">Нет критических нарушений</div>}
+                
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100">
-              <h2 className="text-lg font-black text-gray-900 mb-6">Зоны качества (Дни)</h2>
+              <h2 className="text-lg font-black text-gray-900 mb-6">Зоны качества (Аудиты)</h2>
               {data.zones.reduce((a, b) => a + b.value, 0) === 0 ? (
                 <div className="h-64 flex items-center justify-center text-gray-400 font-bold">Нет данных</div>
               ) : (
@@ -199,7 +398,7 @@ export default function AdminDashboardPage() {
                     </ResponsiveContainer>
                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                       <span className="text-3xl font-black text-gray-900">{data.zones.reduce((a, b) => a + b.value, 0)}</span>
-                      <span className="text-[10px] uppercase font-bold text-gray-400 mt-1">Оценок</span>
+                      <span className="text-[10px] uppercase font-bold text-gray-400 mt-1">Аудитов</span>
                     </div>
                   </div>
                   <div className="flex flex-wrap justify-center gap-4 md:gap-6 mt-6">
@@ -235,7 +434,6 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          {/* НОВЫЙ БЛОК: ГРАФИКИ КАЧЕСТВА (ПРОЦЕНТЫ) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
             <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100">
               <h2 className="text-lg font-black text-gray-900 mb-6 flex items-center">
@@ -278,7 +476,6 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          {/* РЕЙТИНГИ */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100">
               <h2 className="text-lg font-black text-gray-900 mb-6 flex items-center gap-2">🏆 Лидеры (Топ-5)</h2>

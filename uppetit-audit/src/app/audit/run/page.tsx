@@ -43,8 +43,10 @@ function AuditRunForm() {
   const handleInterceptSubmit = async () => {
     if (!audit.handlers.handleSubmit) return;
     try {
-      await audit.handlers.handleSubmit();
-      window.location.href = backToUrl;
+      const isSuccess = await audit.handlers.handleSubmit();
+      if (isSuccess) {
+        window.location.href = backToUrl;
+      }
     } catch (err) {
       console.error('Ошибка отправки аудита:', err);
     }
@@ -94,7 +96,7 @@ function AuditRunForm() {
       )}
 
       {/* HEADER */}
-      <header className="shrink-0 bg-white p-6 shadow-sm z-20">
+      <header className="shrink-0 bg-white p-6 shadow-sm z-20 relative">
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-4">
             <button onClick={handleInterceptCancel} className="w-10 h-10 bg-gray-50 hover:bg-red-50 hover:text-red-500 rounded-full font-bold transition-all text-gray-900">✕</button>
@@ -114,7 +116,6 @@ function AuditRunForm() {
 
       {/* MAIN */}
       <main className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-        {/* ИСПРАВЛЕНИЕ: Отключаем h-full и центрирование на последнем шаге, чтобы верхушка не обрезалась */}
         <div className={`max-w-3xl mx-auto flex flex-col ${audit.isFinalStep ? '' : 'h-full justify-center'}`}>
           {audit.isFinalStep ? (
             <FinalStep audit={audit} />
@@ -128,8 +129,8 @@ function AuditRunForm() {
         </div>
       </main>
 
-      {/* FOOTER */}
-      <footer className="shrink-0 bg-white p-4 border-t flex flex-col gap-2 z-20">
+      {/* FOOTER - ИСПРАВЛЕНА ПОЛОСА */}
+      <footer className="shrink-0 bg-white p-4 flex flex-col gap-2 z-20 shadow-[0_-4px_15px_rgba(0,0,0,0.05)] relative">
         {isPhotoMissing && !audit.isFinalStep && (
           <div className="text-center text-[11px] font-bold text-red-500 uppercase tracking-wider bg-red-50 py-1.5 rounded-lg border border-red-100 animate-pulse">
             Прикрепите фото, чтобы продолжить!
@@ -142,13 +143,13 @@ function AuditRunForm() {
           </button>
           
           {audit.isFinalStep ? (
-            <button onClick={() => setShowSubmitModal(true)} disabled={audit.isSubmitting} className="flex-1 bg-[#F25C05] hover:bg-orange-600 text-white py-4 rounded-2xl font-bold disabled:opacity-70 transition-colors">
+            <button onClick={() => setShowSubmitModal(true)} disabled={audit.isSubmitting} className="flex-1 bg-[#F25C05] hover:bg-orange-600 text-white py-4 rounded-2xl font-bold disabled:opacity-70 transition-colors shadow-md">
               {audit.isSubmitting ? 'Отправка...' : 'Завершить аудит'}
             </button>
           ) : (
             <>
               {showNextBtn && (
-                <button disabled={isPhotoMissing} onClick={audit.handlers.handleNext} className="flex-1 bg-gray-900 hover:bg-black text-white py-4 rounded-2xl font-bold disabled:opacity-50 transition-colors">
+                <button disabled={isPhotoMissing} onClick={audit.handlers.handleNext} className="flex-1 bg-gray-900 hover:bg-black text-white py-4 rounded-2xl font-bold disabled:opacity-50 transition-colors shadow-md">
                   Далее
                 </button>
               )}
