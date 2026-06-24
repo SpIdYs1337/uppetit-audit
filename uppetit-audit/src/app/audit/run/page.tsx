@@ -17,7 +17,6 @@ function AuditRunForm() {
   const [locId, setLocId] = useState(qLoc || '');
   const [chkId, setChkId] = useState(qChk || '');
 
-  // ДОБАВЛЕНО: Стейт для кастомного модального окна
   const [showSubmitModal, setShowSubmitModal] = useState(false);
 
   useEffect(() => {
@@ -66,7 +65,6 @@ function AuditRunForm() {
     !(audit.firstUnansweredIndex === audit.currentIndex || audit.firstUnansweredIndex === audit.currentIndex + 1);
 
   return (
-    // ИСПРАВЛЕНИЕ: Жестко фиксируем высоту на 100dvh и скрываем глобальный скролл
     <div className="flex flex-col h-[100dvh] bg-gray-50 text-gray-900 overflow-hidden relative"> 
       
       {/* КАСТОМНОЕ МОДАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ */}
@@ -95,7 +93,7 @@ function AuditRunForm() {
         </div>
       )}
 
-      {/* HEADER: shrink-0 не дает шапке сжаться при длинном контенте */}
+      {/* HEADER */}
       <header className="shrink-0 bg-white p-6 shadow-sm z-20">
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-4">
@@ -114,9 +112,10 @@ function AuditRunForm() {
         <div className="w-full h-2 bg-gray-100 rounded-full"><div className="h-full bg-blue-500 transition-all" style={{ width: `${progressPercent}%` }}></div></div>
       </header>
 
-      {/* MAIN: flex-1 overflow-y-auto дает нативный скролл только для этой области */}
+      {/* MAIN */}
       <main className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-        <div className="max-w-3xl mx-auto h-full flex flex-col justify-center">
+        {/* ИСПРАВЛЕНИЕ: Отключаем h-full и центрирование на последнем шаге, чтобы верхушка не обрезалась */}
+        <div className={`max-w-3xl mx-auto flex flex-col ${audit.isFinalStep ? '' : 'h-full justify-center'}`}>
           {audit.isFinalStep ? (
             <FinalStep audit={audit} />
           ) : (
@@ -129,7 +128,7 @@ function AuditRunForm() {
         </div>
       </main>
 
-      {/* FOOTER: shrink-0 гарантирует, что футер намертво прибит ко дну */}
+      {/* FOOTER */}
       <footer className="shrink-0 bg-white p-4 border-t flex flex-col gap-2 z-20">
         {isPhotoMissing && !audit.isFinalStep && (
           <div className="text-center text-[11px] font-bold text-red-500 uppercase tracking-wider bg-red-50 py-1.5 rounded-lg border border-red-100 animate-pulse">
@@ -143,7 +142,6 @@ function AuditRunForm() {
           </button>
           
           {audit.isFinalStep ? (
-            // ИСПРАВЛЕНИЕ: Кнопка вызывает красивое модальное окно, а не сразу функцию
             <button onClick={() => setShowSubmitModal(true)} disabled={audit.isSubmitting} className="flex-1 bg-[#F25C05] hover:bg-orange-600 text-white py-4 rounded-2xl font-bold disabled:opacity-70 transition-colors">
               {audit.isSubmitting ? 'Отправка...' : 'Завершить аудит'}
             </button>
