@@ -55,7 +55,8 @@ export async function POST(req: Request) {
         }
 
         locMap[locId] = {
-          name: a.locationName || a.location?.name || 'Неизвестная точка',
+          // ИСПРАВЛЕНИЕ: В первую очередь берем реальный адрес. Если его нет - fallback на имя
+          name: a.location?.address || a.location?.name || a.locationName || 'Неизвестный адрес',
           tu: tuStr,
           totalScore: 0,
           maxTotal: 0,
@@ -82,7 +83,8 @@ export async function POST(req: Request) {
     const sheet = workbook.addWorksheet('Статистика');
 
     sheet.columns = [
-      { header: 'Точка', key: 'name', width: 35 },
+      // ИСПРАВЛЕНИЕ: Расширили колонку для длинных адресов и переименовали заголовок
+      { header: 'Адрес точки', key: 'name', width: 45 },
       { header: 'ТУ', key: 'tu', width: 30 },
       { header: 'Кол-во аудитов', key: 'count', width: 18 },
       { header: 'Средний балл', key: 'avgScore', width: 15 },
