@@ -4,37 +4,160 @@ import { useState } from 'react';
 import { useChecklists, ExtendedChecklist } from '@/hooks/useChecklists';
 import { ChecklistEditor } from '@/components/checklists/ChecklistEditor';
 
+// Расширяем тип для поддержки поля архивации
+type ChecklistWithArchive = ExtendedChecklist & { isArchived?: boolean };
+
 // Описываем структуру распарсенного вопроса
 interface ParsedItem {
   score?: number | string;
   zone?: string;
+  text?: string;
+  title?: string;
+  question?: string;
+  isCritical?: boolean;
+  isStar?: boolean;
+  requiresPhoto?: boolean;
+  [key: string]: any;
 }
 
 export default function AdminChecklistsPage() {
-  const { checklists, isLoading, saveChecklist, deleteChecklist } = useChecklists();
+  // Функция deleteChecklist нам здесь больше не нужна для UI
+  const { checklists, isLoading, saveChecklist } = useChecklists();
   
-  const [editingChecklist, setEditingChecklist] = useState<ExtendedChecklist | null>(null);
+  const [editingChecklist, setEditingChecklist] = useState<ChecklistWithArchive | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'active' | 'archived'>('active');
 
-  const openEditor = (checklist: ExtendedChecklist | null = null) => {
+  const openEditor = (checklist: ChecklistWithArchive | null = null) => {
     setEditingChecklist(checklist);
     setIsEditorOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Точно удалить этот чек-лист?')) return;
+  const handleArchiveToggle = async (checklist: ChecklistWithArchive, archiveStatus: boolean) => {
+    const actionText = archiveStatus ? 'отправить в архив' : 'восстановить';
+    if (!confirm(`Точно ${actionText} этот чек-лист?`)) return;
+    
     try {
-      await deleteChecklist(id);
-    } catch {
-      alert('Ошибка при удалении');
+      // Сохраняем чек-лист с обновленным статусом
+      await saveChecklist({
+        ...checklist,
+        isArchived: archiveStatus
+      });
+    } catch (error) {
+      console.error(error);
+      alert('Ошибка при изменении статуса');
+    }
+  };
+
+  const handleExportExcel = async (checklist: ChecklistWithArchive) => {
+    try {
+      const ExcelJS = (await import('exceljs')).default;
+      const workbook = new ExcelJS.Workbook();
+
+      // Лист 1: Зоны и вопросы
+      const ws1 = workbook.addWorksheet('Зоны и вопросы');
+
+      ws1.columns = [
+        { header: 'Зона', key: 'zone', width: 25 },
+        { header: 'Вопрос', key: 'question', width: 50 },
+        { header: 'Штраф', key: 'score', width: 10 },
+        { header: 'Метка критического замечания', key: 'critical', width: 20 },
+        { header: 'Фото к пункту\n(Аудитор не сможет закрыть проверку без прикрепления фото)', key: 'photo', width: 30 }
+      ];
+
+      ws1.getRow(1).height = 60;
+      ws1.getRow(1).eachCell((cell) => {
+        cell.font = { bold: true };
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      });
+
+      const itemsList: ParsedItem[] = typeof checklist.items === 'string' 
+        ? JSON.parse(checklist.items) 
+        : (checklist.items || []);
+
+      let maxScore = 0;
+
+      itemsList.forEach(item => {
+        const score = Number(item.score) || 0;
+        maxScore += score;
+        
+        ws1.addRow({
+          zone: item.zone || 'Основной раздел',
+          question: item.text || item.title || item.question || '',
+          score: score,
+          critical: item.isCritical || item.isStar ? 'Да' : 'Нет',
+          photo: item.requiresPhoto ? 'Да' : 'Нет'
+        });
+      });
+
+      ws1.eachRow((row, rowNumber) => {
+        if (rowNumber > 1) {
+          row.eachCell((cell) => {
+            cell.alignment = { vertical: 'middle', wrapText: true, horizontal: 'center' };
+          });
+          row.getCell(2).alignment = { vertical: 'middle', wrapText: true, horizontal: 'left' };
+        }
+      });
+
+      // Лист 2: Разделение на Зоны качества
+      const ws2 = workbook.addWorksheet('Разделение на Зоны качества');
+
+      ws2.columns = [
+        { header: 'Зона', key: 'zoneLabel', width: 15 },
+        { header: 'Красная', key: 'red', width: 20 },
+        { header: 'Желтая', key: 'yellow', width: 20 },
+        { header: 'Зеленая', key: 'green', width: 20 },
+        { header: 'Максимальный балл', key: 'max', width: 25 }
+      ];
+
+      ws2.getRow(1).height = 30;
+      ws2.getRow(1).eachCell((cell) => {
+        cell.font = { bold: true };
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      });
+
+      const redThresh = checklist.redThreshold || 0;
+      const yellowThresh = checklist.yellowThreshold || 0;
+
+      ws2.addRow({
+        zoneLabel: 'Балл',
+        red: `0 — ${redThresh - 1} б`,
+        yellow: `${redThresh} — ${yellowThresh - 1} б`,
+        green: `От ${yellowThresh} б`,
+        max: `${maxScore} б`
+      });
+
+      ws2.getRow(2).height = 25;
+      ws2.getRow(2).eachCell((cell) => {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${checklist.title || 'Чек-лист'}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Ошибка при выгрузке в Excel:', error);
+      alert('Произошла ошибка при формировании Excel файла.');
     }
   };
 
   if (isLoading) return <div className="p-8 text-gray-500 font-bold">Загрузка...</div>;
 
+  // Фильтруем чек-листы в зависимости от выбранной вкладки
+  const displayedChecklists = (checklists as ChecklistWithArchive[]).filter(c => 
+    activeTab === 'active' ? !c.isArchived : c.isArchived
+  );
+
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto pb-20">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">Чек-листы</h1>
           <p className="text-gray-500 mt-2 text-sm md:text-base">Управление списками проверок и их зонами</p>
@@ -46,6 +169,23 @@ export default function AdminChecklistsPage() {
         )}
       </div>
 
+      {!isEditorOpen && (
+        <div className="flex gap-4 mb-6 border-b border-gray-200">
+          <button 
+            onClick={() => setActiveTab('active')}
+            className={`pb-3 px-2 font-bold transition-colors border-b-2 text-sm uppercase tracking-wider ${activeTab === 'active' ? 'border-black text-black' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+          >
+            Активные
+          </button>
+          <button 
+            onClick={() => setActiveTab('archived')}
+            className={`pb-3 px-2 font-bold transition-colors border-b-2 text-sm uppercase tracking-wider ${activeTab === 'archived' ? 'border-black text-black' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+          >
+            Архив
+          </button>
+        </div>
+      )}
+
       {isEditorOpen ? (
         <ChecklistEditor 
           initialData={editingChecklist} 
@@ -54,7 +194,13 @@ export default function AdminChecklistsPage() {
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {checklists.map(checklist => {
+          {displayedChecklists.length === 0 && (
+            <div className="col-span-full py-10 text-center text-gray-400 font-medium border-2 border-dashed border-gray-200 rounded-3xl">
+              {activeTab === 'active' ? 'Нет активных чек-листов' : 'Архив пуст'}
+            </div>
+          )}
+          
+          {displayedChecklists.map(checklist => {
             const itemsList: ParsedItem[] = typeof checklist.items === 'string' ? JSON.parse(checklist.items) : (checklist.items || []);
             const maxScore = itemsList.reduce((sum: number, i: ParsedItem) => sum + (Number(i.score) || 0), 0);
             const zones = Array.from(new Set(itemsList.map((i: ParsedItem) => i.zone || 'Основной раздел')));
@@ -64,8 +210,14 @@ export default function AdminChecklistsPage() {
             const roleLabels: Record<string, string> = { AUDITOR: 'Аудиторы', TU: 'ТУ', ADMIN: 'Админы' };
 
             return (
-              <div key={checklist.id} className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col">
-                <h3 className="text-xl font-black text-gray-900 mb-1">{checklist.title}</h3>
+              <div key={checklist.id} className={`bg-white p-6 rounded-3xl shadow-sm border ${activeTab === 'archived' ? 'border-gray-200 opacity-80' : 'border-gray-100'} flex flex-col`}>
+                <div className="flex justify-between items-start mb-1">
+                  <h3 className="text-xl font-black text-gray-900">{checklist.title}</h3>
+                  {activeTab === 'archived' && (
+                    <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-2 py-1 rounded-md uppercase">Архив</span>
+                  )}
+                </div>
+                
                 <p className="text-sm text-gray-500 font-medium mb-3">{itemsList.length} вопросов • {maxScore} баллов максимум</p>
                 
                 <div className="mb-4 flex flex-wrap gap-1 items-center bg-gray-50 p-2 rounded-lg border border-gray-100">
@@ -88,12 +240,28 @@ export default function AdminChecklistsPage() {
                 </div>
 
                 <div className="mt-auto flex gap-2 pt-4 border-t border-gray-50">
-                  <button onClick={() => openEditor(checklist)} className="flex-1 bg-gray-50 text-gray-700 py-2 rounded-xl font-bold text-sm hover:bg-gray-100 transition-colors">
-                    Редактировать
-                  </button>
-                  <button onClick={() => handleDelete(checklist.id)} className="px-4 bg-red-50 text-red-500 rounded-xl font-bold text-sm hover:bg-red-100 transition-colors">
-                    Удалить
-                  </button>
+                  {activeTab === 'active' ? (
+                    <>
+                      <button onClick={() => openEditor(checklist)} className="flex-1 bg-gray-50 text-gray-700 py-2 rounded-xl font-bold text-sm hover:bg-gray-100 transition-colors">
+                        Ред.
+                      </button>
+                      <button onClick={() => handleExportExcel(checklist)} className="px-3 bg-green-50 text-green-600 rounded-xl font-bold text-sm hover:bg-green-100 transition-colors" title="Выгрузить в Excel">
+                        Excel
+                      </button>
+                      <button onClick={() => handleArchiveToggle(checklist, true)} className="px-3 bg-orange-50 text-orange-600 rounded-xl font-bold text-sm hover:bg-orange-100 transition-colors" title="В архив">
+                        В архив
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => handleExportExcel(checklist)} className="flex-1 bg-green-50 text-green-600 py-2 rounded-xl font-bold text-sm hover:bg-green-100 transition-colors" title="Выгрузить в Excel">
+                        Excel
+                      </button>
+                      <button onClick={() => handleArchiveToggle(checklist, false)} className="flex-2 px-4 bg-blue-50 text-blue-600 py-2 rounded-xl font-bold text-sm hover:bg-blue-100 transition-colors">
+                        Восстановить
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             );

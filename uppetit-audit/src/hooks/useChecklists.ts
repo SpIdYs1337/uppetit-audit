@@ -7,9 +7,12 @@ export type ExtendedChecklist = Checklist & { items?: string | ExtendedChecklist
 export function useChecklists() {
   const { data: checklists, error, isLoading, mutate } = useSWR<ExtendedChecklist[]>('/api/checklists', fetcher);
 
-  const saveChecklist = async (body: Partial<ExtendedChecklist>, isUpdate: boolean) => {
+  // Сделали isUpdate опциональным. Если он не передан, определяем автоматически по наличию id.
+  const saveChecklist = async (body: Partial<ExtendedChecklist>, isUpdate?: boolean) => {
+    const updateMode = isUpdate !== undefined ? isUpdate : !!body.id;
+
     const res = await fetch('/api/checklists', {
-      method: isUpdate ? 'PUT' : 'POST',
+      method: updateMode ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
@@ -20,6 +23,7 @@ export function useChecklists() {
     return res.json();
   };
 
+  // Оставили для жесткого удаления на уровне базы, если потребуется в будущем
   const deleteChecklist = async (id: string) => {
     const res = await fetch(`/api/checklists?id=${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Ошибка при удалении');

@@ -38,11 +38,17 @@ function NewAuditContent() {
     fetchSession();
   }, []);
 
+  // --- ОБНОВЛЕННАЯ ЛОГИКА ФИЛЬТРАЦИИ ---
   const filteredChecklists = useMemo(() => {
-    if (!checklists || !userRole) return checklists || [];
-    if (userRole === 'ADMIN') return checklists;
+    if (!checklists) return [];
 
-    return checklists.filter((chk: Checklist) => {
+    // Отсекаем архивные чек-листы
+    const activeChecklists = (checklists as any[]).filter(chk => !chk.isArchived);
+
+    if (!userRole) return activeChecklists;
+    if (userRole === 'ADMIN') return activeChecklists;
+
+    return activeChecklists.filter((chk) => {
       try {
         const allowedRoles = typeof chk.allowedRoles === 'string' 
           ? JSON.parse(chk.allowedRoles) 
@@ -169,7 +175,7 @@ function NewAuditContent() {
           <h2 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-4 ml-1 md:text-sm md:mb-5">3. Выберите чек-лист</h2>
           {filteredChecklists.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-              {filteredChecklists.map((chk: Checklist) => (
+              {filteredChecklists.map((chk: any) => (
                 <div 
                   key={chk.id}
                   onClick={() => setSelectedChecklist(chk.id)}

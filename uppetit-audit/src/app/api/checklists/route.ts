@@ -8,20 +8,17 @@ export const dynamic = 'force-dynamic';
 
 // --- ZOD СХЕМЫ ДЛЯ ВАЛИДАЦИИ ---
 
-// 1. Строгая схема для отдельного пункта (вопроса) чек-листа
 const checklistItemSchema = z.object({
   text: z.string().optional(),
   question: z.string().optional(),
   zone: z.string().nullable().optional().default('Основной раздел'),
   score: z.coerce.number().default(0), 
   isCritical: z.coerce.boolean().default(false),
-  isPhotoRequired: z.coerce.boolean().optional().default(false), // <-- ИСПРАВЛЕНО: Добавили в валидацию Zod
+  isPhotoRequired: z.coerce.boolean().optional().default(false),
 });
 
-// Вытягиваем тип пункта из Zod-схемы, чтобы TS не ругался на 'any' в мапах
 type ChecklistItemInput = z.infer<typeof checklistItemSchema>;
 
-// 2. Препроцессор: парсит строку в массив для обновления (без жесткого требования к длине)
 const itemsArraySchema = z.preprocess((val) => {
   if (typeof val === 'string') {
     try { return JSON.parse(val); } catch { return []; }
@@ -29,14 +26,12 @@ const itemsArraySchema = z.preprocess((val) => {
   return val;
 }, z.array(checklistItemSchema));
 
-// 3. Препроцессор для создания: парсит строку и ТРЕБУЕТ минимум 1 вопрос (исправление ошибки .min)
 const itemsArraySchemaPost = z.preprocess((val) => {
   if (typeof val === 'string') {
     try { return JSON.parse(val); } catch { return []; }
   }
   return val;
 }, z.array(checklistItemSchema).min(1, 'Чек-лист должен содержать хотя бы один вопрос'));
-
 
 const checklistPostSchema = z.object({
   title: z.string().min(1, 'Название чек-листа обязательно'),
@@ -53,6 +48,7 @@ const checklistPutSchema = z.object({
   redThreshold: z.coerce.number().optional().default(70),
   yellowThreshold: z.coerce.number().optional().default(90),
   allowedRoles: z.union([z.array(z.nativeEnum(Role)), z.string()]).optional(),
+  isArchived: z.boolean().optional(), // <-- ДОБАВЛЕНО: Разрешаем обновлять статус архивации
 });
 
 const checklistDeleteSchema = z.object({
@@ -94,6 +90,7 @@ export async function GET() {
       return {
         id: cl.id,
         title: cl.title,
+        isArchived: cl.isArchived, // <-- ДОБАВЛЕНО: Возвращаем статус на фронтенд
         redThreshold: cl.redThreshold,
         yellowThreshold: cl.yellowThreshold,
         allowedRoles: cl.allowedRoles,
@@ -135,7 +132,7 @@ export async function POST(request: Request) {
                 zone: item.zone || 'Основной раздел',
                 score: item.score,
                 isCritical: item.isCritical,
-                isPhotoRequired: item.isPhotoRequired, // <-- ИСПРАВЛЕНО: Передаем в Prisma при создании
+                isPhotoRequired: item.isPhotoRequired,
                 order: index
               }))
             }
@@ -171,6 +168,8 @@ export async function PUT(request: Request) {
           redThreshold: parsedData.redThreshold,
           yellowThreshold: parsedData.yellowThreshold,
           ...(cleanRoles && { allowedRoles: cleanRoles }),
+          // ДОБАВЛЕНО: Передаем статус архивации в базу данных, если он пришел в запросе
+          ...(parsedData.isArchived !== undefined && { isArchived: parsedData.isArchived }),
         }
       });
 
@@ -198,7 +197,7 @@ export async function PUT(request: Request) {
                 zone: item.zone || 'Основной раздел',
                 score: item.score,
                 isCritical: item.isCritical,
-                isPhotoRequired: item.isPhotoRequired, // <-- ИСПРАВЛЕНО: Передаем в Prisma при обновлении
+                isPhotoRequired: item.isPhotoRequired,
                 order: index
               }))
             }
