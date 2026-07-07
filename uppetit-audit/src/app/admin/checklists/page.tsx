@@ -54,7 +54,6 @@ export default function AdminChecklistsPage() {
       const ExcelJS = (await import('exceljs')).default;
       const workbook = new ExcelJS.Workbook();
 
-      // Лист 1: Зоны и вопросы
       const ws1 = workbook.addWorksheet('Зоны и вопросы');
 
       ws1.columns = [
@@ -62,7 +61,7 @@ export default function AdminChecklistsPage() {
         { header: 'Вопрос', key: 'question', width: 50 },
         { header: 'Штраф', key: 'score', width: 10 },
         { header: 'Метка критического замечания', key: 'critical', width: 20 },
-        { header: 'Фото к пункту\n(Аудитор не сможет закрыть проверку без прикрепления фото)', key: 'photo', width: 30 }
+        { header: 'Фото к пункту', key: 'photo', width: 30 }
       ];
 
       ws1.getRow(1).height = 60;
@@ -76,17 +75,32 @@ export default function AdminChecklistsPage() {
         : (checklist.items || []);
 
       let maxScore = 0;
+      
+      // Словарь для перевода статусов
+      const photoStatusMap: Record<string, string> = {
+        OPTIONAL: 'По желанию',
+        REQUIRED: 'Обязательно',
+        VIOLATION: 'Только при нарушении'
+      };
 
       itemsList.forEach(item => {
         const score = Number(item.score) || 0;
         maxScore += score;
         
+        // Читаем новый статус или fallback для старых данных
+        let photoText = 'По желанию';
+        if (item.photoRequirement) {
+          photoText = photoStatusMap[item.photoRequirement] || 'По желанию';
+        } else if (item.isPhotoRequired) {
+          photoText = 'Обязательно';
+        }
+
         ws1.addRow({
           zone: item.zone || 'Основной раздел',
           question: item.text || item.title || item.question || '',
           score: score,
           critical: item.isCritical || item.isStar ? 'Да' : 'Нет',
-          photo: item.requiresPhoto ? 'Да' : 'Нет'
+          photo: photoText
         });
       });
 
@@ -99,7 +113,6 @@ export default function AdminChecklistsPage() {
         }
       });
 
-      // Лист 2: Разделение на Зоны качества
       const ws2 = workbook.addWorksheet('Разделение на Зоны качества');
 
       ws2.columns = [

@@ -17,6 +17,19 @@ export function SortableChecklistItem({ item, handleUpdateItem, handleRemoveItem
     zIndex: isDragging ? 50 : 'auto',
   };
 
+  // Функция для определения цвета выпадающего списка
+  const getPhotoSelectStyle = () => {
+    switch (item.photoRequirement) {
+      case 'REQUIRED':
+        return 'bg-blue-500 border-blue-500 text-white shadow-md shadow-blue-500/30';
+      case 'VIOLATION':
+        return 'bg-orange-500 border-orange-500 text-white shadow-md shadow-orange-500/30';
+      case 'OPTIONAL':
+      default:
+        return 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100';
+    }
+  };
+
   return (
     <div 
       ref={setNodeRef} 
@@ -36,7 +49,7 @@ export function SortableChecklistItem({ item, handleUpdateItem, handleRemoveItem
       </div>
 
       {/* Зона */}
-      <div className="w-full md:w-1/4">
+      <div className="w-full md:w-1/4 shrink-0">
         <input 
           type="text" 
           value={item.zone || ''} 
@@ -58,7 +71,7 @@ export function SortableChecklistItem({ item, handleUpdateItem, handleRemoveItem
       </div>
 
       {/* Штрафной балл */}
-      <div className="w-20">
+      <div className="w-20 shrink-0">
         <input 
           type="number" 
           value={item.score === 0 ? '' : item.score} 
@@ -68,27 +81,31 @@ export function SortableChecklistItem({ item, handleUpdateItem, handleRemoveItem
         />
       </div>
 
-      {/* ДОБАВЛЕНО: Кнопка "Обязательное фото" */}
-      <button 
-        onClick={() => handleUpdateItem(item.id, 'isPhotoRequired', !item.isPhotoRequired)} 
-        title={item.isPhotoRequired ? "Фото обязательно" : "Фото по желанию"}
-        className={`w-12 h-[46px] flex items-center justify-center rounded-xl border-2 transition-all ${
-          item.isPhotoRequired 
-            ? 'bg-blue-500 border-blue-500 text-white shadow-md shadow-blue-500/30' 
-            : 'bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-600'
-        }`}
-      >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-      </button>
+      {/* Выпадающий список "Требование к фото" */}
+      <div className="w-full md:w-[155px] shrink-0 relative">
+        <select
+          value={item.photoRequirement || 'OPTIONAL'}
+          onChange={e => handleUpdateItem(item.id, 'photoRequirement', e.target.value)}
+          className={`w-full h-[46px] appearance-none pl-3 pr-8 rounded-xl border-2 transition-all text-[11px] font-bold outline-none cursor-pointer uppercase tracking-wider ${getPhotoSelectStyle()}`}
+          title="Требование к фото"
+        >
+          <option value="OPTIONAL">📷 По желанию</option>
+          <option value="REQUIRED">📸 Обязательно</option>
+          <option value="VIOLATION">🚨 При нарушении</option>
+        </select>
+        {/* Иконка стрелочки для селекта */}
+        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-current opacity-70">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </div>
 
       {/* Кнопка "Критичный вопрос" */}
       <button 
         onClick={() => handleUpdateItem(item.id, 'isCritical', !item.isCritical)} 
         title={item.isCritical ? "Критичный вопрос" : "Обычный вопрос"}
-        className={`w-12 h-[46px] flex items-center justify-center rounded-xl border-2 transition-all font-black text-lg ${
+        className={`w-12 shrink-0 h-[46px] flex items-center justify-center rounded-xl border-2 transition-all font-black text-lg ${
           item.isCritical 
             ? 'bg-red-500 border-red-500 text-white shadow-md shadow-red-500/30' 
             : 'bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-600'
@@ -101,7 +118,7 @@ export function SortableChecklistItem({ item, handleUpdateItem, handleRemoveItem
       <button 
         onClick={() => handleRemoveItem(item.id)} 
         title="Удалить вопрос"
-        className="w-12 h-[46px] flex items-center justify-center text-red-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 border border-gray-200 hover:border-red-200 rounded-xl transition-colors"
+        className="w-12 shrink-0 h-[46px] flex items-center justify-center text-red-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 border border-gray-200 hover:border-red-200 rounded-xl transition-colors"
       >
         ✕
       </button>

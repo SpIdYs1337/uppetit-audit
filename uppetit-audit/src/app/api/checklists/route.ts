@@ -14,7 +14,8 @@ const checklistItemSchema = z.object({
   zone: z.string().nullable().optional().default('Основной раздел'),
   score: z.coerce.number().default(0), 
   isCritical: z.coerce.boolean().default(false),
-  isPhotoRequired: z.coerce.boolean().optional().default(false),
+  // Внедряем новое поле
+  photoRequirement: z.enum(['OPTIONAL', 'REQUIRED', 'VIOLATION']).optional().default('OPTIONAL'),
 });
 
 type ChecklistItemInput = z.infer<typeof checklistItemSchema>;
@@ -48,7 +49,7 @@ const checklistPutSchema = z.object({
   redThreshold: z.coerce.number().optional().default(70),
   yellowThreshold: z.coerce.number().optional().default(90),
   allowedRoles: z.union([z.array(z.nativeEnum(Role)), z.string()]).optional(),
-  isArchived: z.boolean().optional(), // <-- ДОБАВЛЕНО: Разрешаем обновлять статус архивации
+  isArchived: z.boolean().optional(),
 });
 
 const checklistDeleteSchema = z.object({
@@ -90,7 +91,7 @@ export async function GET() {
       return {
         id: cl.id,
         title: cl.title,
-        isArchived: cl.isArchived, // <-- ДОБАВЛЕНО: Возвращаем статус на фронтенд
+        isArchived: (cl as any).isArchived || false,
         redThreshold: cl.redThreshold,
         yellowThreshold: cl.yellowThreshold,
         allowedRoles: cl.allowedRoles,
@@ -132,7 +133,7 @@ export async function POST(request: Request) {
                 zone: item.zone || 'Основной раздел',
                 score: item.score,
                 isCritical: item.isCritical,
-                isPhotoRequired: item.isPhotoRequired,
+                photoRequirement: item.photoRequirement,
                 order: index
               }))
             }
@@ -168,7 +169,6 @@ export async function PUT(request: Request) {
           redThreshold: parsedData.redThreshold,
           yellowThreshold: parsedData.yellowThreshold,
           ...(cleanRoles && { allowedRoles: cleanRoles }),
-          // ДОБАВЛЕНО: Передаем статус архивации в базу данных, если он пришел в запросе
           ...(parsedData.isArchived !== undefined && { isArchived: parsedData.isArchived }),
         }
       });
@@ -197,7 +197,7 @@ export async function PUT(request: Request) {
                 zone: item.zone || 'Основной раздел',
                 score: item.score,
                 isCritical: item.isCritical,
-                isPhotoRequired: item.isPhotoRequired,
+                photoRequirement: item.photoRequirement,
                 order: index
               }))
             }

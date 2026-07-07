@@ -10,7 +10,7 @@ export interface ChecklistItemType {
   text: string;
   score: number | string;
   isCritical: boolean;
-  isPhotoRequired?: boolean; // <-- ДОБАВЛЕНО: Флаг обязательного фото
+  photoRequirement?: 'OPTIONAL' | 'REQUIRED' | 'VIOLATION'; // <-- Новое поле
 }
 
 export type ExtendedChecklist = Checklist & {
@@ -37,13 +37,14 @@ export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEdito
   });
 
   const [items, setItems] = useState<ChecklistItemType[]>(() => {
-    if (!initialData?.items) return [{ id: Math.random().toString(36).substring(2, 9), zone: 'Основной раздел', text: '', score: 0, isCritical: false, isPhotoRequired: false }];
+    if (!initialData?.items) return [{ id: Math.random().toString(36).substring(2, 9), zone: 'Основной раздел', text: '', score: 0, isCritical: false, photoRequirement: 'OPTIONAL' }];
     try {
       const parsedItems = typeof initialData.items === 'string' ? JSON.parse(initialData.items as string) : initialData.items;
       return parsedItems.map((item: any) => ({ 
         ...item, 
         id: item.id || Math.random().toString(36).substring(2, 9),
-        isPhotoRequired: item.isPhotoRequired || false // <-- ДОБАВЛЕНО: Читаем старые данные безопасно
+        // Безопасно подхватываем старые галочки, если они еще остались в кэше
+        photoRequirement: item.photoRequirement || (item.isPhotoRequired ? 'REQUIRED' : 'OPTIONAL')
       }));
     } catch { return []; }
   });
@@ -56,8 +57,7 @@ export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEdito
 
   const handleAddItem = () => {
     const lastZone = items.length > 0 ? items[items.length - 1].zone : 'Основной раздел';
-    // <-- ДОБАВЛЕНО: Передаем isPhotoRequired при создании
-    setItems([...items, { id: Math.random().toString(36).substring(2, 9), zone: lastZone, text: '', score: 0, isCritical: false, isPhotoRequired: false }]);
+    setItems([...items, { id: Math.random().toString(36).substring(2, 9), zone: lastZone, text: '', score: 0, isCritical: false, photoRequirement: 'OPTIONAL' }]);
   };
 
   const handleUpdateItem = (id: string, field: string, value: any) => setItems(items.map(i => i.id === id ? { ...i, [field]: value } : i));

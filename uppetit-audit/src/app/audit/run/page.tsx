@@ -59,7 +59,22 @@ function AuditRunForm() {
   const currentQ = audit.questions[audit.currentIndex] as any;
   const currentAns = audit.answers[audit.currentIndex];
   const isAnswered = currentAns?.isOk !== undefined;
-  const isPhotoMissing = currentQ?.isPhotoRequired && isAnswered && (!currentAns?.photos || currentAns.photos.length === 0);
+  
+  // --- НОВАЯ ЛОГИКА ТРЕБОВАНИЯ ФОТО ---
+  let needsPhoto = false;
+  if (currentQ) {
+    if (currentQ.photoRequirement === 'REQUIRED') {
+      needsPhoto = true; // Фото нужно всегда
+    } else if (currentQ.photoRequirement === 'VIOLATION' && currentAns?.isOk === false) {
+      needsPhoto = true; // Фото нужно только при фиксации нарушения (isOk === false)
+    } else if (!currentQ.photoRequirement && currentQ.isPhotoRequired) {
+      needsPhoto = true; // Запасной вариант для старых данных в базе
+    }
+  }
+
+  // Блокируем прогресс, если фото требуется, но его нет (или массив пуст)
+  const isPhotoMissing = needsPhoto && isAnswered && (!currentAns?.photos || currentAns.photos.length === 0);
+  // -----------------------------------
 
   const showNextBtn = audit.currentIndex < audit.questions.length - 1;
   const showTeleport = !audit.isAllAnswered && 
@@ -129,11 +144,13 @@ function AuditRunForm() {
         </div>
       </main>
 
-      {/* FOOTER - ИСПРАВЛЕНА ПОЛОСА */}
+      {/* FOOTER */}
       <footer className="shrink-0 bg-white p-4 flex flex-col gap-2 z-20 shadow-[0_-4px_15px_rgba(0,0,0,0.05)] relative">
         {isPhotoMissing && !audit.isFinalStep && (
           <div className="text-center text-[11px] font-bold text-red-500 uppercase tracking-wider bg-red-50 py-1.5 rounded-lg border border-red-100 animate-pulse">
-            Прикрепите фото, чтобы продолжить!
+            {currentQ?.photoRequirement === 'VIOLATION' 
+              ? 'Прикрепите фото нарушения, чтобы продолжить!' 
+              : 'Прикрепите фото, чтобы продолжить!'}
           </div>
         )}
         

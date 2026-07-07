@@ -72,17 +72,17 @@ model ChecklistVersion {
 }
 
 model ChecklistItem {
-  id         String           @id @default(cuid())
-  versionId  String
-  version    ChecklistVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
-  text       String
-  zone       String?          @default("Основной раздел")
-  score      Int              @default(0)
-  isCritical Boolean          @default(false)
-  order      Int              @default(0) 
-  isPhotoRequired Boolean     @default(false)
-
-  answers    Answer[]         
+  id               String           @id @default(cuid())
+  versionId        String
+  version          ChecklistVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  text             String
+  zone             String?          @default("Основной раздел")
+  score            Int              @default(0)
+  isCritical       Boolean          @default(false)
+  order            Int              @default(0)
+  photoRequirement String           @default("OPTIONAL")
+  
+  answers          Answer[]
 }
 
 model Audit {
