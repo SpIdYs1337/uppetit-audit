@@ -1,3 +1,4 @@
+// app/layout.tsx
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import UpdateChecker from "@/components/UpdateChecker";
@@ -29,21 +30,14 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode; }>) {
   return (
-    <html lang="ru">
-      <body>
-        {/* ОБЕРНУЛИ ВСЁ В PROVIDERS */}
+    <html lang="ru" suppressHydrationWarning>
+      <body className="bg-[#F5F6F8] dark:bg-zinc-950 text-gray-900 dark:text-zinc-100 transition-colors duration-300 min-h-[100dvh]">
         <Providers>
           {children}
         </Providers>
-        
-        <UpdateChecker />
       </body>
-    </html>
+    </html>  
   );
 }

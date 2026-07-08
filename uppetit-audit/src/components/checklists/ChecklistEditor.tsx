@@ -10,7 +10,7 @@ export interface ChecklistItemType {
   text: string;
   score: number | string;
   isCritical: boolean;
-  photoRequirement?: 'OPTIONAL' | 'REQUIRED' | 'VIOLATION'; // <-- Новое поле
+  photoRequirement?: 'OPTIONAL' | 'REQUIRED' | 'VIOLATION';
 }
 
 export type ExtendedChecklist = Checklist & {
@@ -43,7 +43,6 @@ export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEdito
       return parsedItems.map((item: any) => ({ 
         ...item, 
         id: item.id || Math.random().toString(36).substring(2, 9),
-        // Безопасно подхватываем старые галочки, если они еще остались в кэше
         photoRequirement: item.photoRequirement || (item.isPhotoRequired ? 'REQUIRED' : 'OPTIONAL')
       }));
     } catch { return []; }
@@ -100,71 +99,78 @@ export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEdito
   const yVal = Number(yellowThreshold) || 0;
 
   return (
-    <div className="bg-white p-4 md:p-6 rounded-3xl shadow-sm border border-gray-100 mb-8">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-black text-gray-900">{isUpdate ? 'Редактирование' : 'Новый чек-лист'}</h2>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 font-bold">✕ Закрыть</button>
+    <div className="bg-white dark:bg-zinc-900/90 p-4 md:p-6 rounded-3xl shadow-lg border border-gray-100 dark:border-zinc-800/50 mb-8 transition-colors duration-300">
+      <div className="flex justify-between items-center mb-8">
+        <h2 className="text-2xl font-black text-gray-900 dark:text-zinc-100 transition-colors">{isUpdate ? 'Редактирование' : 'Новый чек-лист'}</h2>
+        <button onClick={onClose} className="text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 font-bold transition-colors">✕ Закрыть</button>
       </div>
 
-      <div className="mb-6">
-        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Название чек-листа</label>
-        <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full p-4 rounded-xl border-2 border-gray-100 focus:border-[#F25C05] outline-none font-bold text-gray-900" placeholder="Например: Утренний Бар" />
+      <div className="mb-8">
+        <label className="block text-xs font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-2 pl-1 transition-colors">Название чек-листа</label>
+        <input 
+          type="text" 
+          value={title} 
+          onChange={e => setTitle(e.target.value)} 
+          /* Убрали явный бордер, оставили мягкий фон и подчеркивание бордером только при фокусе */
+          className="w-full p-4 rounded-2xl bg-gray-50 dark:bg-zinc-950/50 border border-transparent focus:bg-white dark:focus:bg-zinc-950 focus:border-[#F25C05] dark:focus:border-[#F25C05] outline-none font-bold text-gray-900 dark:text-zinc-100 transition-all shadow-sm" 
+          placeholder="Например: Утренний Бар" 
+        />
       </div>
 
-      <div className="mb-6 bg-gray-50 p-4 md:p-6 rounded-2xl border border-gray-100">
-        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Кто может проводить аудит?</label>
+      <div className="mb-8 bg-gray-50/80 dark:bg-zinc-950/30 p-5 md:p-6 rounded-3xl transition-colors">
+        <label className="block text-xs font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-4 transition-colors">Кто может проводить аудит?</label>
         <div className="flex flex-wrap gap-3">
           {[{ id: 'AUDITOR', label: 'Аудиторы' }, { id: 'TU', label: 'ТУ' }, { id: 'ADMIN', label: 'Админы' }].map(role => (
-            <label key={role.id} className="flex items-center gap-2 cursor-pointer bg-white p-3 rounded-xl border border-gray-200 hover:border-[#F25C05] transition-colors shadow-sm select-none">
+            <label key={role.id} className="flex items-center gap-2 cursor-pointer bg-white dark:bg-zinc-900 px-4 py-3 rounded-xl border border-transparent shadow-sm hover:shadow-md transition-all select-none">
               <input type="checkbox" className="w-5 h-5 text-[#F25C05] rounded focus:ring-[#F25C05] cursor-pointer" checked={allowedRoles.includes(role.id)} onChange={() => handleRoleToggle(role.id)} />
-              <span className="text-sm font-bold text-gray-700">{role.label}</span>
+              <span className="text-sm font-bold text-gray-700 dark:text-zinc-300 transition-colors">{role.label}</span>
             </label>
           ))}
         </div>
       </div>
 
-      <div className="mb-8 p-4 md:p-6 bg-gray-50 rounded-2xl border border-gray-100">
-        <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
-          <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Настройка оценки (в баллах)</h3>
-          <span className="text-[10px] font-bold bg-blue-50 text-blue-500 px-2 py-1 rounded-md uppercase tracking-wider w-fit">
+      <div className="mb-10 p-5 md:p-6 bg-gray-50/80 dark:bg-zinc-950/30 rounded-3xl transition-colors">
+        <div className="mb-5 flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
+          <h3 className="text-sm font-black text-gray-800 dark:text-zinc-200 uppercase tracking-wide transition-colors">Настройка оценки (в баллах)</h3>
+          <span className="text-[10px] font-bold bg-blue-50 dark:bg-blue-900/20 text-blue-500 dark:text-blue-400 px-2 py-1 rounded-md uppercase tracking-wider w-fit transition-colors">
             Границы считаются автоматически
           </span>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm flex flex-col">
-            <label className="block text-xs font-bold text-red-500 mb-1">Красная (строго меньше)</label>
-            <div className="text-[10px] text-gray-400 mb-3 leading-tight">Баллы ниже этого числа</div>
-            <input type="number" min="0" value={redThreshold} onChange={e => setRedThreshold(e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-2 text-xl font-black text-red-600 bg-red-50 rounded-lg outline-none text-center mb-auto" />
-            <div className="mt-3 text-[11px] text-center font-bold text-red-500 bg-red-50/80 py-1.5 rounded-lg border border-red-100/50">
+          <div className="bg-white dark:bg-zinc-900/80 p-5 rounded-2xl shadow-sm flex flex-col transition-colors">
+            <label className="block text-xs font-bold text-red-500 dark:text-red-400 mb-1 transition-colors">Красная (строго меньше)</label>
+            <div className="text-[10px] text-gray-400 dark:text-zinc-500 mb-4 leading-tight transition-colors">Баллы ниже этого числа</div>
+            <input type="number" min="0" value={redThreshold} onChange={e => setRedThreshold(e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-3 text-2xl font-black text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/10 rounded-xl outline-none text-center mb-auto transition-colors" />
+            <div className="mt-4 text-[11px] text-center font-bold text-red-500 dark:text-red-400 bg-red-50/80 dark:bg-red-900/20 py-2 rounded-xl transition-colors">
               Попадают: 0 — {rVal > 0 ? rVal - 1 : 0} б.
             </div>
           </div>
 
-          <div className="bg-white p-4 rounded-xl border border-yellow-100 shadow-sm flex flex-col">
-            <label className="block text-xs font-bold text-yellow-600 mb-1">Желтая (строго меньше)</label>
-            <div className="text-[10px] text-gray-400 mb-3 leading-tight">Баллы от красной до этого числа</div>
-            <input type="number" min="0" value={yellowThreshold} onChange={e => setYellowThreshold(e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-2 text-xl font-black text-yellow-600 bg-yellow-50 rounded-lg outline-none text-center mb-auto" />
-            <div className="mt-3 text-[11px] text-center font-bold text-yellow-600 bg-yellow-50/80 py-1.5 rounded-lg border border-yellow-100/50">
+          <div className="bg-white dark:bg-zinc-900/80 p-5 rounded-2xl shadow-sm flex flex-col transition-colors">
+            <label className="block text-xs font-bold text-yellow-600 dark:text-yellow-500 mb-1 transition-colors">Желтая (строго меньше)</label>
+            <div className="text-[10px] text-gray-400 dark:text-zinc-500 mb-4 leading-tight transition-colors">Баллы от красной до этого числа</div>
+            <input type="number" min="0" value={yellowThreshold} onChange={e => setYellowThreshold(e.target.value === '' ? '' : Number(e.target.value))} className="w-full p-3 text-2xl font-black text-yellow-600 dark:text-yellow-500 bg-yellow-50 dark:bg-yellow-900/10 rounded-xl outline-none text-center mb-auto transition-colors" />
+            <div className="mt-4 text-[11px] text-center font-bold text-yellow-600 dark:text-yellow-500 bg-yellow-50/80 dark:bg-yellow-900/20 py-2 rounded-xl transition-colors">
               Попадают: {rVal} — {yVal > 0 ? yVal - 1 : 0} б.
             </div>
           </div>
 
-          <div className="bg-white p-4 rounded-xl border border-green-100 shadow-sm flex flex-col opacity-90">
-            <label className="block text-xs font-bold text-green-600 mb-1">Зеленая (включительно)</label>
-            <div className="text-[10px] text-gray-400 mb-3 leading-tight">Все баллы начиная с этого числа</div>
-            <div className="w-full p-2 text-xl font-black text-green-600 bg-green-50 rounded-lg text-center mb-auto flex items-center justify-center min-h-[44px]">
+          <div className="bg-white dark:bg-zinc-900/80 p-5 rounded-2xl shadow-sm flex flex-col opacity-90 transition-colors">
+            <label className="block text-xs font-bold text-green-600 dark:text-green-500 mb-1 transition-colors">Зеленая (включительно)</label>
+            <div className="text-[10px] text-gray-400 dark:text-zinc-500 mb-4 leading-tight transition-colors">Все баллы начиная с этого числа</div>
+            <div className="w-full p-3 text-2xl font-black text-green-600 dark:text-green-500 bg-green-50 dark:bg-green-900/10 rounded-xl text-center mb-auto flex items-center justify-center min-h-[56px] transition-colors">
               {yVal} и выше
             </div>
-            <div className="mt-3 text-[11px] text-center font-bold text-green-600 bg-green-50/80 py-1.5 rounded-lg border border-green-100/50">
+            <div className="mt-4 text-[11px] text-center font-bold text-green-600 dark:text-green-500 bg-green-50/80 dark:bg-green-900/20 py-2 rounded-xl transition-colors">
               Попадают: От {yVal} б. до максимума
             </div>
           </div>
         </div>
       </div>
 
-      <div className="space-y-4 mb-6">
-        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Вопросы и зоны</label>
+      <div className="space-y-4 mb-8">
+        <label className="block text-xs font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-3 pl-1 transition-colors">Вопросы и зоны</label>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
             {items.map((item) => (
@@ -174,9 +180,9 @@ export function ChecklistEditor({ initialData, onClose, onSave }: ChecklistEdito
         </DndContext>
       </div>
 
-      <div className="flex flex-col sm:flex-row justify-between items-center border-t border-gray-100 pt-6 mt-4 gap-4">
-        <button onClick={handleAddItem} className="w-full sm:w-auto text-[#F25C05] font-bold bg-orange-50 px-4 py-3 rounded-xl hover:bg-orange-100 transition-colors">+ Добавить вопрос</button>
-        <button onClick={handleSubmit} className="w-full sm:w-auto bg-[#F25C05] text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-orange-500/20 hover:bg-orange-600 transition-all">Сохранить</button>
+      <div className="flex flex-col sm:flex-row justify-between items-center pt-2 gap-4 transition-colors">
+        <button onClick={handleAddItem} className="w-full sm:w-auto text-[#F25C05] font-bold bg-orange-50 dark:bg-orange-900/20 px-6 py-4 rounded-2xl hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors">+ Добавить вопрос</button>
+        <button onClick={handleSubmit} className="w-full sm:w-auto bg-[#F25C05] dark:bg-[#E65604] text-white px-10 py-4 rounded-2xl font-bold shadow-lg shadow-orange-500/20 dark:shadow-orange-900/30 hover:bg-orange-600 dark:hover:bg-[#CC4D03] active:scale-95 transition-all">Сохранить</button>
       </div>
     </div>
   );

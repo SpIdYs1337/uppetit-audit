@@ -7,13 +7,13 @@ import { signOut } from 'next-auth/react';
 import { usePathname, useRouter } from 'next/navigation'; 
 import { APP_VERSION } from '@/lib/version'; 
 import PushSubscribe from '@/components/PushSubscribe'; 
+import { ThemeToggle } from '@/components/ThemeToggle'; 
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname(); 
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // ДОБАВЛЕНО: Ссылка на Дэшборд в самом начале
   const navLinks = [
     { href: '/admin', label: 'Дэшборд' },
     { href: '/admin/users', label: 'Сотрудники' },
@@ -24,39 +24,58 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   ];
 
   return (
-    <div className="min-h-screen bg-[#F5F6F8] flex flex-col md:flex-row">
+    <div className="min-h-screen bg-[#F5F6F8] dark:bg-zinc-950 bg-dotted transition-colors duration-300 flex flex-col md:flex-row">
       
       {/* --- МОБИЛЬНАЯ ШАПКА --- */}
-      <div className="md:hidden bg-[#0a0a0a] p-4 flex justify-between items-center sticky top-0 z-50 shadow-md border-b border-zinc-800">
+      <div className="md:hidden bg-[#0a0a0a]/90 dark:bg-zinc-900/80 backdrop-blur-md p-4 flex justify-between items-center sticky top-0 z-50 shadow-md border-b border-zinc-800 transition-colors duration-300">
         <div className="flex items-center gap-3">
-          <Image 
-            src="/logo.jpg" 
-            alt="UPPETIT" 
-            width={100} 
-            height={24} 
-            className="object-contain" 
-            priority 
-          />
-          <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold mt-0.5 border-l border-zinc-800 pl-3">
+          
+          {/* ЛОГОТИП (МОБИЛЬНАЯ ВЕРСИЯ) */}
+          <div className="relative flex items-center">
+            {/* Черный лого для светлой темы */}
+            <Image 
+              src="/logo3.png" 
+              alt="UPPETIT" 
+              width={120} 
+              height={28} 
+              className="object-contain relative z-10 dark:hidden" 
+              priority
+              unoptimized 
+            />
+            {/* Белый лого для темной темы */}
+            <Image 
+              src="/logo.jpg" 
+              alt="UPPETIT" 
+              width={120} 
+              height={28} 
+              className="object-contain hidden dark:block relative z-10" 
+              priority
+              unoptimized 
+            />
+          </div>
+
+          <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mt-0.5 border-l border-zinc-800 pl-3 relative z-10">
             Админ
           </span>
         </div>
-        <button 
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="p-2 text-zinc-400 hover:text-white focus:outline-none bg-zinc-900 border border-zinc-800 rounded-lg active:scale-95 transition-all"
-        >
-          {isMobileMenuOpen ? (
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-          ) : (
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h16" /></svg>
-          )}
-        </button>
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <button 
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="p-2 text-zinc-400 hover:text-white focus:outline-none bg-zinc-900 dark:bg-zinc-800 border border-zinc-800 dark:border-zinc-700 rounded-lg active:scale-95 transition-all"
+          >
+            {isMobileMenuOpen ? (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h16" /></svg>
+            )}
+          </button>
+        </div>
       </div>
 
-      {/* Затемнение фона при открытом мобильном меню */}
       {isMobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] md:hidden transition-opacity"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] md:hidden transition-opacity duration-300"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
@@ -64,33 +83,41 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* --- БОКОВОЕ МЕНЮ (САЙДБАР) ПК --- */}
       <aside className={`
         fixed md:static inset-y-0 left-0 z-[70]
-        w-64 bg-white border-r border-gray-200 flex flex-col shadow-2xl md:shadow-sm
-        transform transition-transform duration-300 ease-in-out
+        w-64 bg-white dark:bg-zinc-900 border-r border-gray-200 dark:border-zinc-800 flex flex-col shadow-2xl md:shadow-sm
+        transform transition-all duration-300 ease-in-out
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>
         
-        {/* --- ШАПКА ДЛЯ ПК --- */}
-        <div className="p-6 mb-2 hidden md:block">
-          <Image 
-            src="/logo3.png" 
-            alt="UPPETIT" 
-            width={130} 
-            height={32} 
-            className="object-contain mb-2" 
-            priority
-            unoptimized 
-          />
-          <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 font-bold ml-1">
+        <div className="p-6 mb-4 hidden md:block">
+          {/* ЛОГОТИП (ПК ВЕРСИЯ) */}
+          <div className="relative inline-block mb-3">
+            <Image 
+              src="/logo3.png" 
+              alt="UPPETIT" 
+              width={160} 
+              height={40} 
+              className="object-contain relative z-10 dark:hidden" 
+              priority
+              unoptimized 
+            />
+            <Image 
+              src="/logo.jpg" 
+              alt="UPPETIT" 
+              width={160} 
+              height={40} 
+              className="object-contain hidden dark:block relative z-10" 
+              priority
+              unoptimized 
+            />
+          </div>
+          <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 dark:text-zinc-500 font-bold ml-1 transition-colors relative z-10">
             Админ-панель
           </div>
         </div>
 
-        {/* Отступ на мобилках */}
         <div className="h-4 md:hidden"></div>
 
-        {/* --- НАВИГАЦИЯ --- */}
-        <div className="flex-1 px-4 space-y-4 overflow-y-auto">
-          
+        <div className="flex-1 px-4 space-y-5 overflow-y-auto custom-scrollbar">
           <div className="px-1">
             <button
               type="button"
@@ -98,7 +125,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 setIsMobileMenuOpen(false);
                 router.push('/audit/new?backTo=/admin/audits');
               }}
-              className="flex items-center justify-center gap-2 w-full bg-[#F25C05] hover:bg-orange-600 text-white font-black text-xs uppercase tracking-wider py-3.5 px-4 rounded-xl transition-all shadow-md shadow-orange-500/10 active:scale-95 text-center cursor-pointer"
+              className="flex items-center justify-center gap-2 w-full bg-[#F25C05] dark:bg-[#E65604] hover:bg-orange-600 dark:hover:bg-orange-500 text-white font-black text-xs uppercase tracking-wider py-3.5 px-4 rounded-xl transition-all duration-300 shadow-md shadow-orange-500/10 hover:shadow-orange-500/30 hover:-translate-y-0.5 active:scale-95 text-center cursor-pointer"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -107,9 +134,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </button>
           </div>
 
-          <nav className="space-y-2">
+          <nav className="space-y-1.5">
             {navLinks.map((link) => {
-              // ИСПРАВЛЕНО: Точное совпадение для дэшборда, чтобы он не подсвечивался на других страницах /admin/
               const isActive = link.href === '/admin' 
                 ? pathname === '/admin' 
                 : pathname.startsWith(link.href);
@@ -119,10 +145,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   key={link.href} 
                   href={link.href} 
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all duration-300 ${
                     isActive 
-                      ? 'bg-[#F25C05] text-white shadow-md shadow-orange-500/20'
-                      : 'text-gray-500 hover:bg-gray-50 hover:text-black'
+                      ? 'bg-[#F25C05] dark:bg-[#E65604] text-white shadow-lg shadow-orange-500/30 dark:shadow-orange-900/40 scale-[1.02]'
+                      : 'text-gray-500 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800/50 hover:text-gray-900 dark:hover:text-zinc-100 hover:translate-x-1'
                   }`}
                 >
                   {link.label}
@@ -132,8 +158,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </nav>
         </div>
 
-        {/* --- НИЖНЯЯ ПАНЕЛЬ СЕРВИСОВ --- */}
-        <div className="p-4 border-t border-gray-100 flex flex-col gap-2">
+        <div className="p-4 border-t border-gray-100 dark:border-zinc-800 flex flex-col gap-2 transition-colors duration-300">
+          <div className="flex items-center justify-between mb-2 px-2">
+             <span className="text-xs font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider transition-colors">Тема</span>
+             <ThemeToggle />
+          </div>
+
           <div className="mb-2">
             <PushSubscribe />
           </div>
@@ -141,20 +171,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <button 
             type="button"
             onClick={() => signOut({ callbackUrl: '/' })}
-            className="w-full text-left px-4 py-3 text-gray-500 hover:text-red-500 font-bold transition-all rounded-xl hover:bg-red-50"
+            className="w-full text-left px-4 py-3 text-gray-500 dark:text-zinc-400 hover:text-red-500 dark:hover:text-red-400 font-bold transition-all duration-300 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20"
           >
             Выйти из системы
           </button>
           
-          <div className="mt-2 text-center text-[10px] font-bold text-gray-300 uppercase tracking-[0.2em]">
+          <div className="mt-2 text-center text-[10px] font-bold text-gray-300 dark:text-zinc-600 uppercase tracking-[0.2em] transition-colors">
             Версия {APP_VERSION}
           </div>
         </div>
-        
       </aside>
 
       {/* --- ОСНОВНАЯ РАБОЧАЯ ОБЛАСТЬ --- */}
-      <main className="flex-1 p-0 md:p-8 overflow-x-hidden">
+      <main 
+        key={pathname} 
+        className="flex-1 p-0 md:p-8 overflow-x-hidden text-gray-900 dark:text-zinc-100 transition-colors duration-300 animate-page-fade"
+      >
         {children}
       </main>
       

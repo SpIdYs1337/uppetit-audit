@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { signOut, getSession } from 'next-auth/react'; 
 import Image from 'next/image';
 import PushSubscribe from '@/components/PushSubscribe';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 export default function AuditDashboard() {
   const [hasDraft, setHasDraft] = useState(() => {
@@ -14,14 +15,12 @@ export default function AuditDashboard() {
   const [userRole, setUserRole] = useState<string | null>(null); 
 
   useEffect(() => {
-    // 1. Узнаем, кто зашел (ТУ или обычный аудитор)
     const checkSession = async () => {
       const session = await getSession();
       setUserRole((session?.user as any)?.role || null);
     };
     checkSession();
 
-    // 2. Проверяем, есть ли в памяти устройства незаконченный аудит
     const draft = localStorage.getItem('last_active_audit');
     if (draft) {
       setHasDraft(true);
@@ -29,48 +28,65 @@ export default function AuditDashboard() {
   }, []);
 
   return (
-    <div className="flex-1 flex flex-col p-6 md:p-8 w-full">
+    <div className="flex-1 flex flex-col p-6 md:p-8 w-full transition-colors duration-300">
       
-      {/* ШАПКА: На мобилках простая, на ПК в виде плашки */}
-      <header className="flex justify-between items-center mb-10 mt-2 md:mt-4 md:bg-white md:p-6 md:rounded-3xl md:shadow-sm md:border border-gray-100">
+      {/* ШАПКА: На мобилках простая, на ПК в виде плашки с эффектом стекла */}
+      <header className="flex justify-between items-center mb-10 mt-2 md:mt-4 md:bg-white/80 dark:md:bg-zinc-900/80 md:backdrop-blur-md md:p-6 md:rounded-3xl md:shadow-sm md:border border-gray-100 dark:border-zinc-800 transition-colors duration-300 z-20 relative">
         <div>
-          <Image 
-            src="/logo3.png" 
-            alt="UPPETIT" 
-            width={120} 
-            height={30} 
-            className="object-contain" 
-            priority 
-            unoptimized 
-          />
-          <div className="text-[9px] uppercase tracking-[0.2em] text-gray-400 font-bold mt-1 md:ml-1">
+          {/* ЛОГОТИП */}
+          <div className="relative inline-block mb-1">
+            {/* Черный лого для светлой темы */}
+            <Image 
+              src="/logo3.png" 
+              alt="UPPETIT" 
+              width={140} 
+              height={34} 
+              className="object-contain relative z-10 dark:hidden" 
+              priority 
+              unoptimized 
+            />
+            {/* Белый лого для темной темы */}
+            <Image 
+              src="/logo.jpg" 
+              alt="UPPETIT" 
+              width={140} 
+              height={34} 
+              className="object-contain hidden dark:block relative z-10" 
+              priority 
+              unoptimized 
+            />
+          </div>
+          <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 dark:text-zinc-500 font-bold mt-1 md:ml-1 transition-colors relative z-10">
             Аудит качества
           </div>
         </div>
         
-        <button 
-          onClick={() => signOut({ callbackUrl: '/' })}
-          className="w-10 h-10 md:w-auto md:px-5 md:py-2.5 bg-gray-50 md:bg-white md:border border-gray-200 rounded-full md:rounded-xl flex items-center justify-center gap-2 text-gray-400 md:text-gray-600 hover:text-red-500 md:hover:text-red-500 hover:bg-red-50 md:hover:border-red-200 transition-all shadow-sm md:shadow-none"
-        >
-          <span className="hidden md:block text-sm font-bold">Выйти</span>
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.825" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-3 md:gap-4">
+          <ThemeToggle />
+          
+          <button 
+            onClick={() => signOut({ callbackUrl: '/' })}
+            className="w-10 h-10 md:w-auto md:px-5 md:py-2.5 bg-gray-50 dark:bg-zinc-800 md:bg-white dark:md:bg-zinc-800 md:border border-gray-200 dark:border-zinc-700 rounded-full md:rounded-xl flex items-center justify-center gap-2 text-gray-400 dark:text-zinc-400 md:text-gray-600 dark:md:text-zinc-300 hover:text-red-500 md:hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 md:hover:border-red-200 dark:md:hover:border-red-900/50 transition-all shadow-sm md:shadow-none active:scale-95"
+          >
+            <span className="hidden md:block text-sm font-bold">Выйти</span>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.825" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       {/* ПРИВЕТСТВИЕ */}
-      <div className="mb-8 md:mb-10">
-        <h1 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">Привет! 👋</h1>
-        <p className="text-gray-500 font-medium mt-2 text-sm md:text-base">Выбери, что хочешь сделать</p>
+      <div className="mb-8 md:mb-10 relative z-10">
+        <h1 className="text-3xl md:text-4xl font-black text-gray-900 dark:text-zinc-100 tracking-tight transition-colors">Привет! 👋</h1>
+        <p className="text-gray-500 dark:text-zinc-400 font-medium mt-2 text-sm md:text-base transition-colors">Выбери, что хочешь сделать</p>
       </div>
 
-      {/* СЕТКА КНОПОК: 1 колонка на мобилках, 2 на ПК */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+      {/* СЕТКА КНОПОК */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 relative z-10">
         
-        {/* КНОПКА ЧЕРНОВИКА (Всегда на всю ширину) */}
         {hasDraft && (
-          <Link href="/audit/run" className="col-span-1 md:col-span-2 block w-full bg-blue-600 text-white p-6 md:p-8 rounded-3xl shadow-lg shadow-blue-500/20 active:scale-[0.98] hover:-translate-y-1 transition-all relative overflow-hidden group">
+          <Link href="/audit/run" className="col-span-1 md:col-span-2 block w-full bg-blue-600 dark:bg-blue-500 text-white p-6 md:p-8 rounded-3xl shadow-lg shadow-blue-500/20 dark:shadow-blue-900/30 active:scale-[0.98] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group">
             <div className="relative z-10">
               <h2 className="text-xl md:text-2xl font-bold mb-1">Продолжить аудит</h2>
               <p className="text-blue-100 text-sm md:text-base font-medium">У вас есть незавершенная проверка</p>
@@ -79,7 +95,7 @@ export default function AuditDashboard() {
           </Link>
         )}
 
-        <Link href="/audit/new" className="block w-full bg-[#F25C05] text-white p-6 md:p-8 rounded-3xl shadow-lg shadow-orange-500/20 active:scale-[0.98] hover:-translate-y-1 transition-all relative overflow-hidden group">
+        <Link href="/audit/new" className="block w-full bg-[#F25C05] dark:bg-[#E65604] text-white p-6 md:p-8 rounded-3xl shadow-lg shadow-orange-500/20 dark:shadow-orange-900/30 active:scale-[0.98] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group">
           <div className="relative z-10">
             <h2 className="text-xl md:text-2xl font-bold mb-1">Начать проверку</h2>
             <p className="text-orange-100 text-sm font-medium">Новый аудит точки</p>
@@ -87,9 +103,8 @@ export default function AuditDashboard() {
           <div className="absolute -right-4 -bottom-4 w-24 h-24 md:w-32 md:h-32 bg-white/10 rounded-full blur-xl group-hover:bg-white/20 transition-all"></div>
         </Link>
 
-        {/* НОВАЯ КНОПКА ТОЛЬКО ДЛЯ ТУ */}
         {userRole === 'TU' && (
-          <Link href="/audit/tu" className="block w-full bg-zinc-900 text-white p-6 md:p-8 rounded-3xl shadow-lg active:scale-[0.98] hover:-translate-y-1 transition-all relative overflow-hidden group">
+          <Link href="/audit/tu" className="block w-full bg-zinc-900 dark:bg-zinc-800 text-white p-6 md:p-8 rounded-3xl shadow-lg active:scale-[0.98] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group border border-transparent dark:border-zinc-700">
             <div className="relative z-10">
               <h2 className="text-xl md:text-2xl font-bold mb-1 flex items-center gap-2">
                 <span>🏢</span> Мои точки
@@ -100,28 +115,27 @@ export default function AuditDashboard() {
           </Link>
         )}
 
-        <Link href="/audit/schedule" className="block w-full md:bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 active:scale-[0.98] hover:-translate-y-1 hover:shadow-md transition-all">
-          <h2 className="text-xl md:text-2xl font-black text-gray-900 mb-1">Мой план</h2>
-          <p className="text-sm text-gray-500 font-medium">Календарь будущих проверок</p>
+        <Link href="/audit/schedule" className="block w-full bg-white dark:bg-zinc-900 p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-zinc-800 active:scale-[0.98] hover:-translate-y-1 hover:shadow-md transition-all duration-300 group">
+          <h2 className="text-xl md:text-2xl font-black text-gray-900 dark:text-zinc-100 mb-1 transition-colors">Мой план</h2>
+          <p className="text-sm text-gray-500 dark:text-zinc-400 font-medium transition-colors">Календарь будущих проверок</p>
         </Link>
 
-        <Link href="/audit/history" className="block w-full bg-gray-50 md:bg-white border border-gray-100 text-gray-900 p-6 md:p-8 rounded-3xl active:scale-[0.98] hover:-translate-y-1 hover:shadow-md transition-all">
-          <h2 className="text-xl md:text-2xl font-bold mb-1">История проверок</h2>
-          <p className="text-gray-500 text-sm font-medium">Посмотреть прошлые аудиты</p>
+        <Link href="/audit/history" className="block w-full bg-gray-50 dark:bg-zinc-800/50 md:bg-white dark:md:bg-zinc-900 border border-gray-100 dark:border-zinc-800 text-gray-900 dark:text-zinc-100 p-6 md:p-8 rounded-3xl active:scale-[0.98] hover:-translate-y-1 hover:shadow-md transition-all duration-300">
+          <h2 className="text-xl md:text-2xl font-bold mb-1 transition-colors">История проверок</h2>
+          <p className="text-gray-500 dark:text-zinc-400 text-sm font-medium transition-colors">Посмотреть прошлые аудиты</p>
         </Link>
-        {/* --- НОВАЯ КНОПКА ИНСТРУКЦИИ --- */}
-        <Link href="/audit/guide" className="block w-full bg-blue-50/50 md:bg-white border border-blue-100 md:border-gray-100 p-6 md:p-8 rounded-3xl active:scale-[0.98] hover:-translate-y-1 hover:shadow-md transition-all group">
-          <h2 className="text-xl md:text-2xl font-black text-blue-600 md:text-gray-900 mb-1 flex items-center gap-2">
+        
+        <Link href="/audit/guide" className="block w-full bg-blue-50/50 dark:bg-blue-900/10 md:bg-white dark:md:bg-zinc-900 border border-blue-100 dark:border-blue-900/30 md:border-gray-100 dark:md:border-zinc-800 p-6 md:p-8 rounded-3xl active:scale-[0.98] hover:-translate-y-1 hover:shadow-md transition-all duration-300 group">
+          <h2 className="text-xl md:text-2xl font-black text-blue-600 dark:text-blue-500 md:text-gray-900 dark:md:text-zinc-100 mb-1 flex items-center gap-2 transition-colors">
             <span>📖</span> Инструкция
           </h2>
-          <p className="text-blue-500/80 md:text-gray-500 text-sm font-medium group-hover:text-blue-500 transition-colors">Как правильно проводить аудит</p>
+          <p className="text-blue-500/80 dark:text-blue-400/80 md:text-gray-500 dark:md:text-zinc-400 text-sm font-medium group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors">Как правильно проводить аудит</p>
         </Link>
 
       </div>
 
-      {/* Кнопка включения уведомлений */}
       {(userRole === 'TU' || userRole === 'ADMIN') && (
-        <div className="mt-8 md:mt-12 pt-6 border-t border-gray-100 flex justify-center md:justify-start">
+        <div className="mt-8 md:mt-12 pt-6 border-t border-gray-100 dark:border-zinc-800 flex justify-center md:justify-start transition-colors duration-300">
           <PushSubscribe />
         </div>
       )}

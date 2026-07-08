@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:is(.dark *));
 
 :root {
   --background: #ffffff;
@@ -19,15 +20,28 @@
   }
 }
 
+/* Улучшенная анимация без дергания (только плавное изменение прозрачности) */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-page-fade {
+  animation: fadeIn 0.4s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
-/* Убираем стрелочки у input type="number" во всех браузерах */
 
+/* Убираем стрелочки у input type="number" во всех браузерах */
 /* Для Chrome, Safari, Edge, Opera */
-input::-webkit-outer-spin-button,
 input::-webkit-outer-spin-button,
 input::-webkit-inner-spin-button {
   -webkit-appearance: none;
@@ -39,4 +53,17 @@ input::-webkit-inner-spin-button {
 input[type=number] {
   -moz-appearance: textfield;
   appearance: textfield;
+}
+
+/* --- Паттерн в точку --- */
+.bg-dotted {
+  /* Светлая тема: чуть заметные темные точки */
+  background-image: radial-gradient(rgba(0, 0, 0, 0.06) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.dark .bg-dotted {
+  /* Темная тема: чуть заметные белые точки */
+  background-image: radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 20px 20px;
 }
