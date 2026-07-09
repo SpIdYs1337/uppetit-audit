@@ -161,12 +161,14 @@ export default function AdminAuditsPage() {
         
         <div 
           onClick={() => setOpenDropdown(isOpen ? null : filterKey)}
-          className={`w-full p-3 rounded-xl bg-gray-50 dark:bg-zinc-800/50 border outline-none font-bold text-sm cursor-pointer flex justify-between items-center transition-colors ${isOpen ? 'border-[#F25C05] bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100' : 'border-gray-100 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 hover:bg-gray-100/50 dark:hover:bg-zinc-700/50'}`}
+          className={`w-full p-3 rounded-xl bg-gray-50 dark:bg-zinc-800/50 border outline-none font-bold text-sm cursor-pointer flex justify-between items-center gap-2 transition-colors ${isOpen ? 'border-[#F25C05] bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100' : 'border-gray-100 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 hover:bg-gray-100/50 dark:hover:bg-zinc-700/50'}`}
         >
-          <span className="truncate pr-2">
+          {/* Добавлены flex-1 и text-left для корректного обрезания текста */}
+          <span className="truncate flex-1 text-left">
             {selectedCount === 0 ? 'Все' : `Выбрано: ${selectedCount}`}
           </span>
-          <svg className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          {/* Добавлен shrink-0, чтобы стрелка не сжималась */}
+          <svg className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </div>
@@ -256,23 +258,25 @@ export default function AdminAuditsPage() {
             </button>
           )}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+        
+        {/* ИСПРАВЛЕНИЕ СЕТКИ: 5 колонок, из которых Период занимает 2 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
           
-          <div className="relative z-10">
+          <div className="relative z-10 lg:col-span-2">
             <label className="block text-[10px] font-bold text-gray-400 dark:text-zinc-500 mb-1 uppercase tracking-wider transition-colors">Период (От и До)</label>
             <div className="flex items-center gap-2">
               <input 
                 type="date" 
                 value={filters.dateFrom}
                 onChange={(e) => handleDateChange('dateFrom', e.target.value)}
-                className="w-full p-2 rounded-xl bg-gray-50 dark:bg-zinc-800/50 border border-gray-100 dark:border-zinc-700 outline-none focus:bg-white dark:focus:bg-zinc-800 focus:border-[#F25C05] dark:focus:border-[#F25C05] font-bold text-gray-700 dark:text-zinc-300 text-xs sm:text-sm transition-colors [color-scheme:light] dark:[color-scheme:dark]"
+                className="w-full p-3 rounded-xl bg-gray-50 dark:bg-zinc-800/50 border border-gray-100 dark:border-zinc-700 outline-none focus:bg-white dark:focus:bg-zinc-800 focus:border-[#F25C05] dark:focus:border-[#F25C05] font-bold text-gray-700 dark:text-zinc-300 text-xs sm:text-sm transition-colors [color-scheme:light] dark:[color-scheme:dark]"
               />
               <span className="text-gray-300 dark:text-zinc-600 font-bold transition-colors">-</span>
               <input 
                 type="date" 
                 value={filters.dateTo}
                 onChange={(e) => handleDateChange('dateTo', e.target.value)}
-                className="w-full p-2 rounded-xl bg-gray-50 dark:bg-zinc-800/50 border border-gray-100 dark:border-zinc-700 outline-none focus:bg-white dark:focus:bg-zinc-800 focus:border-[#F25C05] dark:focus:border-[#F25C05] font-bold text-gray-700 dark:text-zinc-300 text-xs sm:text-sm transition-colors [color-scheme:light] dark:[color-scheme:dark]"
+                className="w-full p-3 rounded-xl bg-gray-50 dark:bg-zinc-800/50 border border-gray-100 dark:border-zinc-700 outline-none focus:bg-white dark:focus:bg-zinc-800 focus:border-[#F25C05] dark:focus:border-[#F25C05] font-bold text-gray-700 dark:text-zinc-300 text-xs sm:text-sm transition-colors [color-scheme:light] dark:[color-scheme:dark]"
               />
             </div>
           </div>
