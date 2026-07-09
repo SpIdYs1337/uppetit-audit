@@ -57,13 +57,15 @@ input[type=number] {
 
 /* --- Паттерн в точку --- */
 .bg-dotted {
-  /* Светлая тема: чуть заметные темные точки */
-  background-image: radial-gradient(rgba(0, 0, 0, 0.06) 1px, transparent 1px);
+  /* Светлая тема: прозрачность увеличена с 0.06 до 0.1 для большего контраста */
+  background-image: radial-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px);
   background-size: 20px 20px;
+  background-attachment: fixed; /* <--- Точки остаются на месте при скролле */
 }
 
 .dark .bg-dotted {
-  /* Темная тема: чуть заметные белые точки */
-  background-image: radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  /* Темная тема: прозрачность увеличена с 0.04 до 0.08 для большего контраста */
+  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
   background-size: 20px 20px;
+  background-attachment: fixed; /* <--- Точки остаются на месте при скролле */
 }

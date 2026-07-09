@@ -49,7 +49,8 @@ export function QuestionCard({ currentQ, currentAnswer, audit }: QuestionCardPro
   const isPhotoRequiredOnViolation = currentQ.photoRequirement === 'VIOLATION';
 
   return (
-    <div className="bg-white dark:bg-zinc-900 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-zinc-800 relative min-h-[300px] flex flex-col transition-colors duration-300">
+    // ИСПРАВЛЕНИЕ: Увеличил min-h и добавил pb-8 на мобилках
+    <div className="bg-white dark:bg-zinc-900 p-6 pb-8 md:pb-6 rounded-3xl shadow-sm border border-gray-100 dark:border-zinc-800 relative min-h-[400px] flex flex-col transition-colors duration-300">
       
       {/* Метки вопроса */}
       <div className="absolute top-0 right-0 flex items-center">
@@ -106,7 +107,8 @@ export function QuestionCard({ currentQ, currentAnswer, audit }: QuestionCardPro
         </div>
       </div>
 
-      <div className="space-y-3 mt-auto">
+      {/* ИСПРАВЛЕНИЕ: Добавлен shrink-0, чтобы блок с кнопками не сжимался */}
+      <div className="space-y-3 mt-auto shrink-0">
         <button 
           onClick={() => audit.handlers.handleAnswer(true)} 
           className={`w-full py-4 rounded-2xl font-bold border-2 transition-colors ${

@@ -5,10 +5,18 @@ export default function AuditLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen bg-white dark:bg-zinc-950 md:bg-[#F5F6F8] md:dark:bg-zinc-950 bg-dotted transition-colors duration-300">
+    <div className="min-h-screen bg-[#F5F6F8] dark:bg-[#0a0a0a] bg-dotted transition-colors duration-300 relative overflow-hidden">
+      
+      {/* --- ФОНОВЫЕ СВЕЧЕНИЯ (AMBIENT GLOW) --- */}
+      {/* Главное оранжевое свечение сверху по центру */}
+      <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[600px] h-[500px] sm:w-[1000px] sm:h-[600px] bg-[#F25C05]/10 dark:bg-[#F25C05]/15 blur-[100px] sm:blur-[140px] rounded-full pointer-events-none"></div>
+      
+      {/* Дополнительное мягкое свечение снизу справа для объема */}
+      <div className="absolute bottom-[-10%] right-[-10%] w-[400px] h-[400px] bg-orange-400/5 dark:bg-orange-500/10 blur-[100px] sm:blur-[120px] rounded-full pointer-events-none"></div>
+
       <div 
         key={pathname}
-        className="w-full max-w-5xl mx-auto min-h-screen flex flex-col relative animate-page-fade"
+        className="w-full max-w-5xl mx-auto min-h-screen flex flex-col relative z-10 animate-page-fade"
       >
         {children}
       </div>

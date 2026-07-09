@@ -111,7 +111,7 @@ export default function AuditHistoryPage() {
         
         <div 
           onClick={() => setOpenDropdown(isOpen ? null : filterKey)}
-          className={`w-full p-3 rounded-xl bg-gray-50 dark:bg-zinc-800/50 border outline-none font-bold text-sm cursor-pointer flex justify-between items-center transition-colors ${isOpen ? 'border-[#F25C05] bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100' : 'border-gray-100 dark:border-zinc-700 text-gray-700 dark:text-zinc-300 hover:bg-gray-100/50 dark:hover:bg-zinc-700/50'}`}
+          className={`w-full p-3 rounded-2xl bg-white/50 dark:bg-zinc-900/50 border outline-none font-bold text-sm cursor-pointer flex justify-between items-center transition-colors ${isOpen ? 'border-[#F25C05] bg-white dark:bg-zinc-800 text-gray-900 dark:text-zinc-100 shadow-sm' : 'border-gray-200/50 dark:border-zinc-700/50 text-gray-700 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-800'}`}
         >
           <span className="truncate pr-2">
             {selectedCount === 0 ? 'Все' : `Выбрано: ${selectedCount}`}
@@ -124,7 +124,7 @@ export default function AuditHistoryPage() {
         {isOpen && (
           <>
             <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpenDropdown(null); }}></div>
-            <div className="absolute z-50 top-full left-0 mt-2 w-full min-w-[240px] bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-xl shadow-xl max-h-[300px] overflow-y-auto p-1.5 custom-scrollbar transition-colors">
+            <div className="absolute z-50 top-full left-0 mt-2 w-full min-w-[240px] bg-white/90 dark:bg-zinc-900/90 backdrop-blur-xl border border-white/50 dark:border-zinc-800/50 rounded-2xl shadow-xl max-h-[300px] overflow-y-auto p-1.5 custom-scrollbar transition-colors">
               {options.map(option => {
                 const isChecked = filters[filterKey].includes(option);
                 return (
@@ -134,9 +134,9 @@ export default function AuditHistoryPage() {
                       e.stopPropagation(); 
                       toggleFilterItem(filterKey, option);
                     }}
-                    className="flex items-center gap-3 p-2 hover:bg-gray-50 dark:hover:bg-zinc-800/50 rounded-lg cursor-pointer transition-colors group"
+                    className="flex items-center gap-3 p-2.5 hover:bg-gray-50/80 dark:hover:bg-zinc-800/80 rounded-xl cursor-pointer transition-colors group"
                   >
-                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors shrink-0 ${isChecked ? 'bg-[#F25C05] border-[#F25C05]' : 'border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 group-hover:border-[#F25C05]'}`}>
+                    <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 ${isChecked ? 'bg-[#F25C05] border-[#F25C05]' : 'border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 group-hover:border-[#F25C05]'}`}>
                       {isChecked && <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                     </div>
                     <span className={`text-sm truncate select-none transition-colors ${isChecked ? 'font-bold text-gray-900 dark:text-zinc-100' : 'font-medium text-gray-700 dark:text-zinc-400'}`}>{option}</span>
@@ -144,7 +144,7 @@ export default function AuditHistoryPage() {
                 );
               })}
               {options.length === 0 && (
-                <div className="p-3 text-center text-sm font-bold text-gray-400 dark:text-zinc-600">Нет данных</div>
+                <div className="p-4 text-center text-sm font-bold text-gray-400 dark:text-zinc-600">Нет данных</div>
               )}
             </div>
           </>
@@ -153,28 +153,28 @@ export default function AuditHistoryPage() {
     );
   };
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center font-bold text-gray-400 dark:text-zinc-500 transition-colors">Загрузка...</div>;
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center font-bold text-gray-400 dark:text-zinc-500 bg-transparent transition-colors">Загрузка...</div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 md:bg-transparent dark:bg-zinc-950 dark:md:bg-transparent flex flex-col relative pb-20 transition-colors duration-300">
+    <div className="min-h-screen bg-transparent flex flex-col relative pb-20 transition-colors duration-300">
       
       {zoomedPhoto && (
         <div 
-          className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 cursor-zoom-out transition-opacity"
+          className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 cursor-zoom-out transition-opacity"
           onClick={() => setZoomedPhoto(null)}
         >
-          <img src={zoomedPhoto} alt="Увеличенное фото" className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" />
-          <button className="absolute top-6 right-6 text-white bg-black/50 w-10 h-10 rounded-full flex items-center justify-center font-bold hover:bg-black/80 transition-colors">
+          <img src={zoomedPhoto} alt="Увеличенное фото" className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl" />
+          <button className="absolute top-6 right-6 text-white bg-white/10 w-10 h-10 rounded-full flex items-center justify-center font-bold hover:bg-white/20 transition-colors backdrop-blur-md border border-white/20">
             ✕
           </button>
         </div>
       )}
 
       {/* ШАПКА */}
-      <header className="bg-white/90 dark:bg-zinc-900/80 backdrop-blur-md p-4 sm:p-6 shadow-sm sticky top-0 z-30 flex items-center justify-between gap-4 transition-colors">
+      <header className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl p-4 sm:p-6 shadow-sm sticky top-0 z-30 flex items-center justify-between gap-4 transition-colors border-b border-gray-200/50 dark:border-zinc-800/50">
         <div className="flex items-center gap-4">
-          <Link href="/audit" className="w-10 h-10 bg-gray-50 dark:bg-zinc-800 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded-full flex items-center justify-center text-gray-900 dark:text-zinc-100 active:scale-95 transition-all flex-shrink-0">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+          <Link href="/audit" className="w-10 h-10 bg-white dark:bg-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-700 rounded-full flex items-center justify-center text-gray-900 dark:text-zinc-100 border border-gray-200/50 dark:border-zinc-700/50 shadow-sm active:scale-95 transition-all flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
           </Link>
           <div className="min-w-0">
             <h1 className="text-lg sm:text-xl font-black text-gray-900 dark:text-zinc-100 truncate transition-colors">История</h1>
@@ -186,21 +186,21 @@ export default function AuditHistoryPage() {
           <button 
             onClick={handleExport} 
             disabled={isExporting}
-            className="text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/40 border border-green-200 dark:border-green-900/30 px-3 py-2 sm:px-4 sm:py-2 rounded-xl font-bold text-xs sm:text-sm transition-colors flex items-center gap-2 disabled:opacity-50"
+            className="text-green-700 dark:text-green-400 bg-green-50/80 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/40 border border-green-200/50 dark:border-green-900/30 px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 disabled:opacity-50 shadow-sm hover:shadow-md"
           >
             {isExporting ? '⏳' : '📊'} <span className="hidden sm:inline">Выгрузить Excel</span>
           </button>
         )}
       </header>
 
-      <main className="flex-1 p-4 max-w-4xl mx-auto w-full flex flex-col gap-6 relative z-10">
+      <main className="flex-1 p-4 sm:p-6 max-w-4xl mx-auto w-full flex flex-col gap-6 relative z-10">
         
         {/* ПАНЕЛЬ ФИЛЬТРОВ */}
-        <div className="bg-white dark:bg-zinc-900 p-4 sm:p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-zinc-800 transition-colors">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="font-black text-gray-900 dark:text-zinc-100 transition-colors">Фильтры поиска</h2>
+        <div className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl p-6 sm:p-8 rounded-[2rem] shadow-sm border border-white/50 dark:border-zinc-800/50 transition-colors">
+          <div className="flex justify-between items-center mb-5">
+            <h2 className="font-black text-gray-900 dark:text-zinc-100 transition-colors text-lg">Фильтры поиска</h2>
             {isAnyFilterActive && (
-              <button onClick={resetFilters} className="text-xs font-bold text-[#F25C05] hover:text-orange-600 dark:hover:text-[#CC4D03] bg-orange-50 dark:bg-orange-900/20 px-3 py-1 rounded-lg transition-colors">
+              <button onClick={resetFilters} className="text-xs font-bold text-[#F25C05] hover:text-orange-600 dark:hover:text-[#CC4D03] bg-orange-50 dark:bg-orange-900/20 px-4 py-1.5 rounded-xl transition-colors">
                 ✕ Сбросить всё
               </button>
             )}
@@ -214,14 +214,14 @@ export default function AuditHistoryPage() {
                   type="date" 
                   value={filters.dateFrom}
                   onChange={(e) => handleDateChange('dateFrom', e.target.value)}
-                  className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-zinc-800/50 border border-gray-100 dark:border-zinc-700 outline-none focus:bg-white dark:focus:bg-zinc-800 focus:border-[#F25C05] dark:focus:border-[#F25C05] font-bold text-gray-700 dark:text-zinc-300 text-xs sm:text-sm transition-colors [color-scheme:light] dark:[color-scheme:dark]"
+                  className="w-full p-3 rounded-2xl bg-white/50 dark:bg-zinc-900/50 border border-gray-200/50 dark:border-zinc-700/50 outline-none focus:bg-white dark:focus:bg-zinc-800 focus:border-[#F25C05] dark:focus:border-[#F25C05] font-bold text-gray-700 dark:text-zinc-300 text-xs sm:text-sm transition-colors shadow-sm [color-scheme:light] dark:[color-scheme:dark]"
                 />
                 <span className="text-gray-300 dark:text-zinc-600 font-bold transition-colors">-</span>
                 <input 
                   type="date" 
                   value={filters.dateTo}
                   onChange={(e) => handleDateChange('dateTo', e.target.value)}
-                  className="w-full p-2.5 rounded-xl bg-gray-50 dark:bg-zinc-800/50 border border-gray-100 dark:border-zinc-700 outline-none focus:bg-white dark:focus:bg-zinc-800 focus:border-[#F25C05] dark:focus:border-[#F25C05] font-bold text-gray-700 dark:text-zinc-300 text-xs sm:text-sm transition-colors [color-scheme:light] dark:[color-scheme:dark]"
+                  className="w-full p-3 rounded-2xl bg-white/50 dark:bg-zinc-900/50 border border-gray-200/50 dark:border-zinc-700/50 outline-none focus:bg-white dark:focus:bg-zinc-800 focus:border-[#F25C05] dark:focus:border-[#F25C05] font-bold text-gray-700 dark:text-zinc-300 text-xs sm:text-sm transition-colors shadow-sm [color-scheme:light] dark:[color-scheme:dark]"
                 />
               </div>
             </div>
@@ -235,8 +235,8 @@ export default function AuditHistoryPage() {
         {/* СПИСОК АУДИТОВ (Карточки) */}
         <div className="space-y-4">
           {paginatedAudits.length === 0 ? (
-            <div className="text-center py-12 bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-zinc-800 border-dashed transition-colors">
-              <div className="text-4xl mb-3">📭</div>
+            <div className="text-center py-16 bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm rounded-[2rem] border border-gray-200/50 dark:border-zinc-800/50 border-dashed transition-colors">
+              <div className="text-5xl mb-4 opacity-80">📭</div>
               <p className="text-gray-500 dark:text-zinc-400 font-bold transition-colors">По вашему запросу аудитов не найдено.</p>
             </div>
           ) : (
@@ -252,21 +252,21 @@ export default function AuditHistoryPage() {
 
         {/* ПАГИНАЦИЯ */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between bg-white dark:bg-zinc-900 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-800 transition-colors">
+          <div className="flex items-center justify-between bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl p-4 sm:p-5 rounded-[2rem] shadow-sm border border-white/50 dark:border-zinc-800/50 transition-colors">
             <button 
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="px-4 py-2 text-sm font-bold text-gray-700 dark:text-zinc-300 bg-gray-50 dark:bg-zinc-800 rounded-xl hover:bg-gray-100 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
+              className="px-5 py-2.5 text-sm font-bold text-gray-700 dark:text-zinc-300 bg-white dark:bg-zinc-800 rounded-xl hover:bg-gray-50 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95 border border-gray-100 dark:border-zinc-700 shadow-sm"
             >
               ← Назад
             </button>
             <div className="text-sm font-bold text-gray-500 dark:text-zinc-400 transition-colors">
-              Стр. <span className="text-gray-900 dark:text-zinc-100">{currentPage}</span> из {totalPages}
+              Стр. <span className="text-gray-900 dark:text-zinc-100 text-base">{currentPage}</span> из {totalPages}
             </div>
             <button 
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="px-4 py-2 text-sm font-bold text-gray-700 dark:text-zinc-300 bg-gray-50 dark:bg-zinc-800 rounded-xl hover:bg-gray-100 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
+              className="px-5 py-2.5 text-sm font-bold text-gray-700 dark:text-zinc-300 bg-white dark:bg-zinc-800 rounded-xl hover:bg-gray-50 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95 border border-gray-100 dark:border-zinc-700 shadow-sm"
             >
               Вперед →
             </button>

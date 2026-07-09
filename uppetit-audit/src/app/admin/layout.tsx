@@ -24,15 +24,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   ];
 
   return (
-    <div className="min-h-screen bg-[#F5F6F8] dark:bg-zinc-950 bg-dotted transition-colors duration-300 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-[#F5F6F8] dark:bg-zinc-950 bg-dotted transition-colors duration-300 flex flex-col md:flex-row relative">
       
       {/* --- МОБИЛЬНАЯ ШАПКА --- */}
       <div className="md:hidden bg-[#0a0a0a]/90 dark:bg-zinc-900/80 backdrop-blur-md p-4 flex justify-between items-center sticky top-0 z-50 shadow-md border-b border-zinc-800 transition-colors duration-300">
         <div className="flex items-center gap-3">
-          
           {/* ЛОГОТИП (МОБИЛЬНАЯ ВЕРСИЯ) */}
           <div className="relative flex items-center">
-            {/* Черный лого для светлой темы */}
             <Image 
               src="/logo3.png" 
               alt="UPPETIT" 
@@ -42,7 +40,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               priority
               unoptimized 
             />
-            {/* Белый лого для темной темы */}
             <Image 
               src="/logo.jpg" 
               alt="UPPETIT" 
@@ -53,7 +50,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               unoptimized 
             />
           </div>
-
           <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mt-0.5 border-l border-zinc-800 pl-3 relative z-10">
             Админ
           </span>
@@ -81,15 +77,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       )}
 
       {/* --- БОКОВОЕ МЕНЮ (САЙДБАР) ПК --- */}
+      {/* ИСПРАВЛЕНИЕ: Добавлен md:sticky md:top-0 md:h-screen, чтобы зафиксировать сайдбар */}
       <aside className={`
-        fixed md:static inset-y-0 left-0 z-[70]
-        w-64 bg-white dark:bg-zinc-900 border-r border-gray-200 dark:border-zinc-800 flex flex-col shadow-2xl md:shadow-sm
+        fixed md:sticky md:top-0 md:h-screen inset-y-0 left-0 z-[70]
+        w-64 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-xl border-r border-gray-200/50 dark:border-zinc-800/50 flex flex-col shadow-2xl md:shadow-sm
         transform transition-all duration-300 ease-in-out
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>
         
-        <div className="p-6 mb-4 hidden md:block">
-          {/* ЛОГОТИП (ПК ВЕРСИЯ) */}
+        {/* ВЕРХНЯЯ ЧАСТЬ САЙДБАРА (ЛОГОТИП) */}
+        <div className="shrink-0 p-6 mb-4 hidden md:block">
           <div className="relative inline-block mb-3">
             <Image 
               src="/logo3.png" 
@@ -115,8 +112,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </div>
 
-        <div className="h-4 md:hidden"></div>
+        <div className="h-4 shrink-0 md:hidden"></div>
 
+        {/* ЦЕНТРАЛЬНАЯ ЧАСТЬ (НАВИГАЦИЯ, СКРОЛЛИТСЯ) */}
         <div className="flex-1 px-4 space-y-5 overflow-y-auto custom-scrollbar">
           <div className="px-1">
             <button
@@ -134,7 +132,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </button>
           </div>
 
-          <nav className="space-y-1.5">
+          <nav className="space-y-1.5 pb-4">
             {navLinks.map((link) => {
               const isActive = link.href === '/admin' 
                 ? pathname === '/admin' 
@@ -148,7 +146,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all duration-300 ${
                     isActive 
                       ? 'bg-[#F25C05] dark:bg-[#E65604] text-white shadow-lg shadow-orange-500/30 dark:shadow-orange-900/40 scale-[1.02]'
-                      : 'text-gray-500 dark:text-zinc-400 hover:bg-gray-50 dark:hover:bg-zinc-800/50 hover:text-gray-900 dark:hover:text-zinc-100 hover:translate-x-1'
+                      : 'text-gray-500 dark:text-zinc-400 hover:bg-gray-100/80 dark:hover:bg-zinc-800/50 hover:text-gray-900 dark:hover:text-zinc-100 hover:translate-x-1'
                   }`}
                 >
                   {link.label}
@@ -158,25 +156,38 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </nav>
         </div>
 
-        <div className="p-4 border-t border-gray-100 dark:border-zinc-800 flex flex-col gap-2 transition-colors duration-300">
-          <div className="flex items-center justify-between mb-2 px-2">
-             <span className="text-xs font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider transition-colors">Тема</span>
-             <ThemeToggle />
-          </div>
-
-          <div className="mb-2">
-            <PushSubscribe />
-          </div>
-
-          <button 
-            type="button"
-            onClick={() => signOut({ callbackUrl: '/' })}
-            className="w-full text-left px-4 py-3 text-gray-500 dark:text-zinc-400 hover:text-red-500 dark:hover:text-red-400 font-bold transition-all duration-300 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20"
-          >
-            Выйти из системы
-          </button>
+        {/* НИЖНЯЯ ЧАСТЬ (ФИКСИРОВАННАЯ ПАНЕЛЬ ИНСТРУМЕНТОВ) */}
+        {/* ИСПРАВЛЕНИЕ: Новый премиальный дизайн для нижней панели */}
+        <div className="shrink-0 p-4 bg-gray-50/50 dark:bg-zinc-950/30 border-t border-gray-200/50 dark:border-zinc-800/50 transition-colors duration-300">
           
-          <div className="mt-2 text-center text-[10px] font-bold text-gray-300 dark:text-zinc-600 uppercase tracking-[0.2em] transition-colors">
+          <div className="bg-white dark:bg-zinc-900/80 border border-gray-200/60 dark:border-zinc-800/60 rounded-2xl p-2 shadow-sm flex flex-col gap-1 transition-colors duration-300">
+            {/* Строка с темой */}
+            <div className="flex items-center justify-between px-2 py-2">
+               <span className="text-[10px] font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-widest transition-colors">Тема</span>
+               <ThemeToggle />
+            </div>
+
+            {/* Уведомления */}
+            <div className="px-1">
+              <PushSubscribe />
+            </div>
+
+            <div className="h-px w-full bg-gray-100 dark:bg-zinc-800/80 my-1 transition-colors"></div>
+
+            {/* Кнопка выхода */}
+            <button 
+              type="button"
+              onClick={() => signOut({ callbackUrl: '/' })}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 rounded-xl transition-all duration-300 active:scale-95"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.825" />
+              </svg>
+              Выйти из системы
+            </button>
+          </div>
+          
+          <div className="mt-4 text-center text-[10px] font-bold text-gray-400 dark:text-zinc-600 uppercase tracking-[0.2em] transition-colors">
             Версия {APP_VERSION}
           </div>
         </div>

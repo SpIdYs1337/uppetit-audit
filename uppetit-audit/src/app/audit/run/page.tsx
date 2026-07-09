@@ -34,8 +34,8 @@ function AuditRunForm() {
 
   const audit = useAuditRun(locId, chkId);
 
-  if (!locId || !chkId || audit.isLoading) return <div className="flex-1 flex items-center justify-center text-gray-400 dark:text-zinc-500 font-bold min-h-screen transition-colors">Загрузка...</div>;
-  if (!audit.checklist || audit.questions.length === 0) return <div className="flex-1 flex items-center justify-center text-red-500 dark:text-red-400 font-bold min-h-screen transition-colors">Чек-лист пуст или не найден</div>;
+  if (!locId || !chkId || audit.isLoading) return <div className="flex-1 flex items-center justify-center text-gray-400 dark:text-zinc-500 font-bold min-h-screen transition-colors bg-transparent">Загрузка...</div>;
+  if (!audit.checklist || audit.questions.length === 0) return <div className="flex-1 flex items-center justify-center text-red-500 dark:text-red-400 font-bold min-h-screen transition-colors bg-transparent">Чек-лист пуст или не найден</div>;
 
   const answeredCount = Object.values(audit.answers).filter(a => a.isOk !== undefined).length;
   const progressPercent = audit.isFinalStep ? 100 : (answeredCount / audit.questions.length) * 100;
@@ -79,26 +79,27 @@ function AuditRunForm() {
     !(audit.firstUnansweredIndex === audit.currentIndex || audit.firstUnansweredIndex === audit.currentIndex + 1);
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-gray-50 dark:bg-zinc-950 text-gray-900 dark:text-zinc-100 overflow-hidden relative transition-colors duration-300"> 
+    // ИСПРАВЛЕНИЕ: Убрали жесткий фон, добавили bg-transparent
+    <div className="flex flex-col h-[100dvh] bg-transparent text-gray-900 dark:text-zinc-100 overflow-hidden relative transition-colors duration-300"> 
       
       {/* КАСТОМНОЕ МОДАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ */}
       {showSubmitModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowSubmitModal(false)}>
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl transform transition-all" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 transition-all" onClick={() => setShowSubmitModal(false)}>
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl transform transition-all border border-gray-100 dark:border-zinc-800" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-500 dark:text-blue-400 mx-auto mb-6">
               <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
             <h3 className="text-xl font-black text-center text-gray-900 dark:text-zinc-100 mb-2 transition-colors">Завершить аудит?</h3>
             <p className="text-sm text-gray-500 dark:text-zinc-400 text-center mb-8 font-medium transition-colors">Убедитесь, что все пункты проверены и заполнены верно. После отправки редактирование будет невозможно.</p>
             <div className="flex gap-3">
-              <button onClick={() => setShowSubmitModal(false)} className="flex-1 px-4 py-3 bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 rounded-xl font-bold text-sm hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors">
+              <button onClick={() => setShowSubmitModal(false)} className="flex-1 px-4 py-3.5 bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 rounded-2xl font-bold text-sm hover:bg-gray-200 dark:hover:bg-zinc-700 active:scale-95 transition-all">
                 Отмена
               </button>
               <button 
                 onClick={() => { setShowSubmitModal(false); handleInterceptSubmit(); }} 
-                className="flex-1 px-4 py-3 bg-[#F25C05] dark:bg-[#E65604] text-white rounded-xl font-bold text-sm hover:bg-orange-600 dark:hover:bg-[#CC4D03] shadow-md shadow-orange-500/20 dark:shadow-orange-900/20 transition-colors"
+                className="flex-1 px-4 py-3.5 bg-[#F25C05] dark:bg-[#E65604] text-white rounded-2xl font-bold text-sm hover:bg-orange-600 dark:hover:bg-[#CC4D03] shadow-lg shadow-orange-500/20 dark:shadow-orange-900/20 active:scale-95 transition-all"
               >
                 Отправить
               </button>
@@ -107,23 +108,25 @@ function AuditRunForm() {
         </div>
       )}
 
-      {/* HEADER */}
-      <header className="shrink-0 bg-white/90 dark:bg-zinc-900/80 backdrop-blur-md p-6 shadow-sm z-20 relative transition-colors">
+      {/* HEADER: Добавили эффект стекла (backdrop-blur-xl) */}
+      <header className="shrink-0 bg-white/80 dark:bg-zinc-900/70 backdrop-blur-xl p-5 z-20 relative transition-colors border-b border-gray-200/50 dark:border-zinc-800/50 shadow-sm">
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-4">
-            <button onClick={handleInterceptCancel} className="w-10 h-10 bg-gray-50 dark:bg-zinc-800 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-500 dark:hover:text-red-400 rounded-full font-bold transition-all text-gray-900 dark:text-zinc-100">✕</button>
-            <div>
-              <h1 className="text-sm font-black text-gray-900 dark:text-zinc-100 leading-tight transition-colors">{audit.location?.name || 'Загрузка...'}</h1>
-              <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-zinc-500 font-bold mt-1 transition-colors">{audit.checklist?.title}</p>
+            <button onClick={handleInterceptCancel} className="w-10 h-10 bg-gray-100/80 dark:bg-zinc-800/80 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-500 dark:hover:text-red-400 rounded-full font-bold transition-all text-gray-900 dark:text-zinc-100 shrink-0">✕</button>
+            <div className="min-w-0">
+              <h1 className="text-sm font-black text-gray-900 dark:text-zinc-100 leading-tight transition-colors truncate">{audit.location?.name || 'Загрузка...'}</h1>
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-zinc-500 font-bold mt-1 transition-colors truncate">{audit.checklist?.title}</p>
             </div>
           </div>
-          <div className="text-[10px] font-bold text-green-500 dark:text-green-400 h-4 transition-colors">{audit.saveStatus}</div>
+          <div className="text-[10px] font-bold text-green-500 dark:text-green-400 h-4 transition-colors shrink-0">{audit.saveStatus}</div>
         </div>
         <div className="flex items-center justify-between text-xs font-bold mb-2">
           <span className="text-gray-400 dark:text-zinc-500 transition-colors">{audit.isFinalStep ? 'Завершение' : `Вопрос ${audit.currentIndex + 1} из ${audit.questions.length}`}</span>
           <span className="text-blue-500 dark:text-blue-400 transition-colors">{Math.round(progressPercent)}%</span>
         </div>
-        <div className="w-full h-2 bg-gray-100 dark:bg-zinc-800 rounded-full transition-colors"><div className="h-full bg-blue-500 dark:bg-blue-600 transition-all" style={{ width: `${progressPercent}%` }}></div></div>
+        <div className="w-full h-2 bg-gray-200/50 dark:bg-zinc-800/80 rounded-full transition-colors overflow-hidden">
+          <div className="h-full bg-blue-500 dark:bg-blue-600 transition-all rounded-full" style={{ width: `${progressPercent}%` }}></div>
+        </div>
       </header>
 
       {/* MAIN */}
@@ -141,44 +144,48 @@ function AuditRunForm() {
         </div>
       </main>
 
-      {/* FOOTER */}
-      <footer className="shrink-0 bg-white/90 dark:bg-zinc-900/80 backdrop-blur-md p-4 flex flex-col gap-2 z-20 shadow-[0_-4px_15px_rgba(0,0,0,0.05)] relative transition-colors">
+      {/* FOOTER: Усилили эффект стекла */}
+      <footer className="shrink-0 bg-white/80 dark:bg-zinc-900/70 backdrop-blur-xl p-4 pb-6 sm:pb-4 flex flex-col gap-2 z-20 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] dark:shadow-[0_-10px_30px_rgba(0,0,0,0.2)] relative transition-colors border-t border-gray-200/50 dark:border-zinc-800/50">
         {isPhotoMissing && !audit.isFinalStep && (
-          <div className="text-center text-[11px] font-bold text-red-500 dark:text-red-400 uppercase tracking-wider bg-red-50 dark:bg-red-900/20 py-1.5 rounded-lg border border-red-100 dark:border-red-900/30 animate-pulse transition-colors">
+          <div className="text-center text-[10px] sm:text-[11px] font-bold text-red-500 dark:text-red-400 uppercase tracking-wider bg-red-50/90 dark:bg-red-900/30 py-2 rounded-xl border border-red-100 dark:border-red-900/30 animate-pulse transition-colors backdrop-blur-md">
             {currentQ?.photoRequirement === 'VIOLATION' 
-              ? 'Прикрепите фото нарушения, чтобы продолжить!' 
-              : 'Прикрепите фото, чтобы продолжить!'}
+              ? 'Прикрепите фото нарушения!' 
+              : 'Прикрепите фото!'}
           </div>
         )}
         
         <div className="flex gap-2 sm:gap-3 max-w-3xl mx-auto w-full">
-          <button onClick={audit.handlers.handlePrev} disabled={!audit.isFinalStep && audit.currentIndex === 0} className="px-4 sm:px-6 py-4 bg-gray-50 dark:bg-zinc-800 text-gray-500 dark:text-zinc-400 font-bold rounded-2xl disabled:opacity-50 transition-colors hover:bg-gray-100 dark:hover:bg-zinc-700 active:scale-95">
+          <button 
+            onClick={audit.handlers.handlePrev} 
+            disabled={!audit.isFinalStep && audit.currentIndex === 0} 
+            className="w-1/3 sm:w-auto px-2 sm:px-8 py-3.5 bg-gray-100/80 dark:bg-zinc-800/80 text-gray-500 dark:text-zinc-400 font-bold rounded-xl md:rounded-2xl disabled:opacity-50 transition-colors hover:bg-gray-200 dark:hover:bg-zinc-700 active:scale-95 text-sm"
+          >
             Назад
           </button>
           
           {audit.isFinalStep ? (
-            <button onClick={() => setShowSubmitModal(true)} disabled={audit.isSubmitting} className="flex-1 bg-[#F25C05] dark:bg-[#E65604] hover:bg-orange-600 dark:hover:bg-[#CC4D03] text-white py-4 rounded-2xl font-bold disabled:opacity-70 transition-all shadow-md active:scale-95">
+            <button onClick={() => setShowSubmitModal(true)} disabled={audit.isSubmitting} className="flex-1 bg-[#F25C05] dark:bg-[#E65604] hover:bg-orange-600 dark:hover:bg-[#CC4D03] text-white py-3.5 rounded-xl md:rounded-2xl font-bold disabled:opacity-70 transition-all shadow-md active:scale-95 text-sm">
               {audit.isSubmitting ? 'Отправка...' : 'Завершить аудит'}
             </button>
           ) : (
             <>
               {showNextBtn && (
-                <button disabled={isPhotoMissing} onClick={audit.handlers.handleNext} className="flex-1 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-gray-200 text-white dark:text-gray-900 py-4 rounded-2xl font-bold disabled:opacity-50 transition-all shadow-md active:scale-95">
+                <button disabled={isPhotoMissing} onClick={audit.handlers.handleNext} className="flex-1 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-gray-200 text-white dark:text-gray-900 py-3.5 rounded-xl md:rounded-2xl font-bold disabled:opacity-50 transition-all shadow-md active:scale-95 text-sm">
                   Далее
                 </button>
               )}
 
               {audit.isAllAnswered ? (
-                <button disabled={isPhotoMissing} onClick={audit.handlers.handleJumpToEnd} className="flex-1 bg-green-500 dark:bg-green-600 hover:bg-green-600 dark:hover:bg-green-700 text-white py-4 rounded-2xl font-bold disabled:opacity-50 shadow-md transition-all whitespace-nowrap text-xs sm:text-base active:scale-95">
+                <button disabled={isPhotoMissing} onClick={audit.handlers.handleJumpToEnd} className="flex-1 bg-green-500 dark:bg-green-600 hover:bg-green-600 dark:hover:bg-green-700 text-white py-3.5 rounded-xl md:rounded-2xl font-bold disabled:opacity-50 shadow-md transition-all whitespace-nowrap text-sm active:scale-95">
                   К итогам ⏭
                 </button>
               ) : showTeleport ? (
-                <button disabled={isPhotoMissing} onClick={audit.handlers.handleGoToUnanswered} className="flex-1 bg-blue-500 dark:bg-blue-600 hover:bg-blue-600 dark:hover:bg-blue-700 text-white py-4 rounded-2xl font-bold disabled:opacity-50 shadow-md transition-all whitespace-nowrap text-xs sm:text-sm active:scale-95">
+                <button disabled={isPhotoMissing} onClick={audit.handlers.handleGoToUnanswered} className="flex-1 bg-blue-500 dark:bg-blue-600 hover:bg-blue-600 dark:hover:bg-blue-700 text-white py-3.5 rounded-xl md:rounded-2xl font-bold disabled:opacity-50 shadow-md transition-all whitespace-nowrap text-sm active:scale-95">
                   {audit.firstUnansweredIndex > audit.currentIndex ? `К пропуску ⏭` : `К пропуску ⏪`}
                 </button>
               ) : !showNextBtn && !audit.isAllAnswered ? (
-                <div className="flex-1 bg-gray-100 dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 py-4 rounded-2xl font-bold text-center border border-gray-200 dark:border-zinc-700 border-dashed text-xs sm:text-sm flex items-center justify-center transition-colors">
-                  Ожидание ответа...
+                <div className="flex-1 bg-gray-100/80 dark:bg-zinc-800/80 text-gray-400 dark:text-zinc-500 py-3.5 rounded-xl md:rounded-2xl font-bold text-center border border-gray-200/50 dark:border-zinc-700/50 border-dashed text-xs sm:text-sm flex items-center justify-center transition-colors">
+                  Ожидание...
                 </div>
               ) : null}
             </>
@@ -191,7 +198,7 @@ function AuditRunForm() {
 
 export default function RunAuditPage() {
   return (
-    <Suspense fallback={<div className="h-screen flex justify-center items-center font-bold text-gray-400 dark:text-zinc-500">Загрузка...</div>}>
+    <Suspense fallback={<div className="h-screen flex justify-center items-center font-bold text-gray-400 dark:text-zinc-500 bg-transparent">Загрузка...</div>}>
       <AuditRunForm />
     </Suspense>
   );
