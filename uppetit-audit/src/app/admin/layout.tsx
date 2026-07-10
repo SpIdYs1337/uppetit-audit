@@ -24,7 +24,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   ];
 
   return (
-    <div className="min-h-screen bg-[#F5F6F8] dark:bg-zinc-950 bg-dotted transition-colors duration-300 flex flex-col md:flex-row relative">
+    // Убрали bg-dotted отсюда
+    <div className="min-h-screen bg-[#F5F6F8] dark:bg-zinc-950 transition-colors duration-300 flex flex-col md:flex-row relative">
+      
+      {/* --- ФИКСИРОВАННЫЙ ФОН С ТОЧКАМИ (Решает проблему мобильных браузеров) --- */}
+      <div className="fixed inset-0 z-0 pointer-events-none bg-dotted"></div>
       
       {/* --- МОБИЛЬНАЯ ШАПКА --- */}
       <div className="md:hidden bg-[#0a0a0a]/90 dark:bg-zinc-900/80 backdrop-blur-md p-4 flex justify-between items-center sticky top-0 z-50 shadow-md border-b border-zinc-800 transition-colors duration-300">
@@ -54,7 +58,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             Админ
           </span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 relative z-10">
           <ThemeToggle />
           <button 
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -77,7 +81,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       )}
 
       {/* --- БОКОВОЕ МЕНЮ (САЙДБАР) ПК --- */}
-      {/* ИСПРАВЛЕНИЕ: Добавлен md:sticky md:top-0 md:h-screen, чтобы зафиксировать сайдбар */}
       <aside className={`
         fixed md:sticky md:top-0 md:h-screen inset-y-0 left-0 z-[70]
         w-64 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-xl border-r border-gray-200/50 dark:border-zinc-800/50 flex flex-col shadow-2xl md:shadow-sm
@@ -157,9 +160,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
 
         {/* НИЖНЯЯ ЧАСТЬ (ФИКСИРОВАННАЯ ПАНЕЛЬ ИНСТРУМЕНТОВ) */}
-        {/* ИСПРАВЛЕНИЕ: Новый премиальный дизайн для нижней панели */}
         <div className="shrink-0 p-4 bg-gray-50/50 dark:bg-zinc-950/30 border-t border-gray-200/50 dark:border-zinc-800/50 transition-colors duration-300">
-          
           <div className="bg-white dark:bg-zinc-900/80 border border-gray-200/60 dark:border-zinc-800/60 rounded-2xl p-2 shadow-sm flex flex-col gap-1 transition-colors duration-300">
             {/* Строка с темой */}
             <div className="flex items-center justify-between px-2 py-2">
@@ -196,7 +197,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* --- ОСНОВНАЯ РАБОЧАЯ ОБЛАСТЬ --- */}
       <main 
         key={pathname} 
-        className="flex-1 p-0 md:p-8 overflow-x-hidden text-gray-900 dark:text-zinc-100 transition-colors duration-300 animate-page-fade"
+        // ДОБАВЛЕНО: relative z-10
+        className="flex-1 relative z-10 p-0 md:p-8 overflow-x-hidden text-gray-900 dark:text-zinc-100 transition-colors duration-300 animate-page-fade"
       >
         {children}
       </main>
