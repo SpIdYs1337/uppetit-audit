@@ -78,7 +78,7 @@ export default function AuditDashboard() {
 
       {/* ПРИВЕТСТВИЕ */}
       <div className="mb-8 md:mb-10 relative z-10">
-        <h1 className="text-3xl md:text-4xl font-black text-gray-900 dark:text-zinc-100 tracking-tight transition-colors">Привет! </h1>
+        <h1 className="text-3xl md:text-4xl font-black text-gray-900 dark:text-zinc-100 tracking-tight transition-colors">Привет! 👋</h1>
         <p className="text-gray-500 dark:text-zinc-400 font-medium mt-2 text-sm md:text-base transition-colors">Выбери, что хочешь сделать</p>
       </div>
 
@@ -103,16 +103,29 @@ export default function AuditDashboard() {
           <div className="absolute -right-4 -bottom-4 w-24 h-24 md:w-32 md:h-32 bg-white/20 rounded-full blur-2xl group-hover:bg-white/30 transition-all"></div>
         </Link>
 
-        {userRole === 'TU' && (
-          <Link href="/audit/tu" className="block w-full bg-zinc-900/90 dark:bg-zinc-800/80 backdrop-blur-xl text-white p-6 md:p-8 rounded-[2rem] shadow-lg active:scale-[0.98] hover:-translate-y-1 hover:shadow-xl transition-all duration-300 relative overflow-hidden group border border-zinc-700/50">
-            <div className="relative z-10">
-              <h2 className="text-xl md:text-2xl font-black mb-1 flex items-center gap-2">
-                <span>🏢</span> Мои точки
-              </h2>
-              <p className="text-zinc-400 text-sm font-medium">Отчеты по вашей территории</p>
-            </div>
-            <div className="absolute -right-4 -bottom-4 w-24 h-24 md:w-32 md:h-32 bg-white/10 rounded-full blur-2xl group-hover:bg-white/20 transition-all"></div>
-          </Link>
+        {/* БЛОК КНОПОК ТОЛЬКО ДЛЯ ТУ (И АДМИНОВ) */}
+        {(userRole === 'TU' || userRole === 'ADMIN') && (
+          <>
+            <Link href="/audit/tu" className="block w-full bg-zinc-900/90 dark:bg-zinc-800/80 backdrop-blur-xl text-white p-6 md:p-8 rounded-[2rem] shadow-lg active:scale-[0.98] hover:-translate-y-1 hover:shadow-xl transition-all duration-300 relative overflow-hidden group border border-zinc-700/50">
+              <div className="relative z-10">
+                <h2 className="text-xl md:text-2xl font-black mb-1 flex items-center gap-2">
+                  <span>🏢</span> Мои точки
+                </h2>
+                <p className="text-zinc-400 text-sm font-medium">Отчеты по вашей территории</p>
+              </div>
+              <div className="absolute -right-4 -bottom-4 w-24 h-24 md:w-32 md:h-32 bg-white/10 rounded-full blur-2xl group-hover:bg-white/20 transition-all"></div>
+            </Link>
+
+            <Link href="/audit/dashboard" className="block w-full bg-indigo-600/90 dark:bg-indigo-600/80 backdrop-blur-xl border border-indigo-500/50 dark:border-indigo-500/30 text-white p-6 md:p-8 rounded-[2rem] shadow-lg shadow-indigo-500/20 dark:shadow-indigo-900/30 active:scale-[0.98] hover:-translate-y-1 hover:shadow-xl transition-all duration-300 relative overflow-hidden group">
+              <div className="relative z-10">
+                <h2 className="text-xl md:text-2xl font-black mb-1 flex items-center gap-2">
+                  <span>📈</span> Аналитика
+                </h2>
+                <p className="text-indigo-100/90 text-sm font-medium">Статистика по вашим точкам</p>
+              </div>
+              <div className="absolute -right-4 -bottom-4 w-24 h-24 md:w-32 md:h-32 bg-white/20 rounded-full blur-2xl group-hover:bg-white/30 transition-all"></div>
+            </Link>
+          </>
         )}
 
         <Link href="/audit/schedule" className="block w-full bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl p-6 md:p-8 rounded-[2rem] shadow-sm border border-white/50 dark:border-zinc-800/50 active:scale-[0.98] hover:-translate-y-1 hover:shadow-md transition-all duration-300 group">
