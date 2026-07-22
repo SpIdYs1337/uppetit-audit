@@ -10,18 +10,41 @@ export default function UpdateChecker() {
   useEffect(() => {
     const checkVersion = async () => {
       try {
-        const res = await fetch(`/api/version?t=${new Date().getTime()}`);
+        // Усиленная защита от кэширования браузером и Next.js
+        const res = await fetch(`/api/version?t=${new Date().getTime()}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+
         if (res.ok) {
           const data = await res.json();
-          if (data.version !== APP_VERSION) setHasUpdate(true);
+          // Проверяем, что версия пришла и она отличается от локальной
+          if (data.version && data.version !== APP_VERSION) {
+            setHasUpdate(true);
+          }
+        } else {
+          console.warn(`UpdateChecker: Ошибка ответа API. Статус: ${res.status}`);
         }
-      } catch (err) { console.error('Ошибка проверки обновлений', err); }
+      } catch (err) { 
+        console.error('Ошибка проверки обновлений', err); 
+      }
     };
+
     checkVersion();
-    const interval = setInterval(checkVersion, 600000);
-    const handleVisibilityChange = () => { if (document.visibilityState === 'visible') checkVersion(); };
+    const interval = setInterval(checkVersion, 600000); // Проверка каждые 10 минут
+    
+    const handleVisibilityChange = () => { 
+      if (document.visibilityState === 'visible') checkVersion(); 
+    };
+    
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', handleVisibilityChange); };
+    return () => { 
+      clearInterval(interval); 
+      document.removeEventListener('visibilitychange', handleVisibilityChange); 
+    };
   }, []);
 
   const handleUpdate = async () => {
@@ -29,14 +52,20 @@ export default function UpdateChecker() {
     try {
       if ('serviceWorker' in navigator) {
         const registrations = await navigator.serviceWorker.getRegistrations();
-        for (const registration of registrations) await registration.unregister();
+        for (const registration of registrations) {
+          await registration.unregister();
+        }
       }
       if ('caches' in window) {
         const cacheNames = await caches.keys();
-        for (const cacheName of cacheNames) await caches.delete(cacheName);
+        for (const cacheName of cacheNames) {
+          await caches.delete(cacheName);
+        }
       }
       window.location.reload();
-    } catch (error) { window.location.reload(); }
+    } catch (error) { 
+      window.location.reload(); 
+    }
   };
 
   if (!hasUpdate) return null;
