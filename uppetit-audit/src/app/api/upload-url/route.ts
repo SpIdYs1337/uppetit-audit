@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/requireAuth';
 import { z } from 'zod';
-import { s3Client } from '@/lib/s3'; // <-- Единый клиент S3
+import { s3Client } from '@/lib/s3';
 
 export const dynamic = 'force-dynamic';
 

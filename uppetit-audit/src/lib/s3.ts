@@ -1,6 +1,6 @@
 import S3 from 'aws-sdk/clients/s3';
 
-let cleanEndpoint = (process.env.S3_ENDPOINT || 'https://s3.beget.com').trim();
+let cleanEndpoint = (process.env.S3_ENDPOINT || '').trim();
 if (cleanEndpoint.endsWith('/')) cleanEndpoint = cleanEndpoint.slice(0, -1);
 
 const accessKey = (process.env.S3_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY || '').trim();
