@@ -55,6 +55,8 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
       updateData.tus = {
         set: parsedData.tuIds.map((id) => ({ id }))
       };
+      // ПРИНУДИТЕЛЬНО очищаем старый фантомный ID, чтобы он не конфликтовал с новым массивом
+      updateData.tuId = null; 
     }
 
     // 5. СОХРАНЯЕМ В БАЗУ
