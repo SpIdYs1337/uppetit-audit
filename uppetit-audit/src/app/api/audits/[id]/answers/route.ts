@@ -33,8 +33,11 @@ export async function PATCH(
     // ИСПРАВЛЕНО: Строгая валидация входящих данных через Zod
     const parsedData = auditPatchSchema.parse(body);
 
+    return await prisma.$transaction(async tx => {
+    // Serialize edits to different answers of the same audit before recalculation.
+    await tx.$queryRaw`SELECT "id" FROM "Audit" WHERE "id" = ${auditId} FOR UPDATE`;
     // 2. Ищем текущий ответ в базе данных
-    const currentAnswer = await prisma.answer.findUnique({
+    const currentAnswer = await tx.answer.findUnique({
       where: { id: parsedData.answerId },
       include: {
         audit: {
@@ -52,14 +55,14 @@ export async function PATCH(
     }
 
     const checklistItem = currentAnswer.audit.checklistVersion?.items.find(
-      (item) => item.text === currentAnswer.question
+      (item) => currentAnswer.itemId ? item.id === currentAnswer.itemId : item.text === currentAnswer.question && (item.zone || 'Основной раздел') === currentAnswer.zone
     );
     
     // Определяем штрафной балл за этот пункт
     const penaltyValue = checklistItem ? checklistItem.score : (currentAnswer.penalty || 0);
 
     // 3. Обновляем статус ответа в базе
-    await prisma.answer.update({
+    await tx.answer.update({
       where: { id: parsedData.answerId },
       data: {
         isOk: parsedData.isOk,
@@ -68,7 +71,7 @@ export async function PATCH(
     });
 
     // 4. Пересчитываем суммарный балл всего аудита
-    const allAnswers = await prisma.answer.findMany({
+    const allAnswers = await tx.answer.findMany({
       where: { auditId: auditId }
     });
 
@@ -82,7 +85,7 @@ export async function PATCH(
     const newScore = Math.max(0, maxScore - totalPenalty);
 
     // Обновляем итоговый счет в аудите
-    const updatedAudit = await prisma.audit.update({
+    const updatedAudit = await tx.audit.update({
       where: { id: auditId },
       data: { score: newScore },
       include: { answers: { orderBy: { id: 'asc' } } }
@@ -92,6 +95,7 @@ export async function PATCH(
       success: true, 
       newScore: updatedAudit.score,
       answers: updatedAudit.answers 
+    });
     });
 
   } catch (err) {

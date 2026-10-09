@@ -2,6 +2,8 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { readDraft, writeDraft } from '@/lib/draftStorage';
 import { useAuditRun } from '@/hooks/useAuditRun';
 import { QuestionCard } from '@/components/audit-run/QuestionCard';
 import { FinalStep } from '@/components/audit-run/FinalStep';
@@ -12,29 +14,35 @@ function AuditRunForm() {
   const qLoc = searchParams.get('location');
   const qChk = searchParams.get('checklist');
   
-  const backToUrl = searchParams.get('backTo') || '/audit';
+  const backToUrl = searchParams.get('backTo') === '/admin/audits' ? '/admin/audits' : '/audit';
+  const { data: session } = useSession();
 
-  const [locId, setLocId] = useState(qLoc || '');
-  const [chkId, setChkId] = useState(qChk || '');
+  const [savedLocId, setLocId] = useState('');
+  const [savedChkId, setChkId] = useState('');
+  const locId = qLoc || savedLocId;
+  const chkId = qChk || savedChkId;
 
   const [showSubmitModal, setShowSubmitModal] = useState(false);
 
   useEffect(() => {
+    if (!session?.draftKey) return;
+    let cancelled = false;
     if (qLoc && qChk) {
-      setLocId(qLoc); setChkId(qChk);
-      localStorage.setItem('last_active_audit', JSON.stringify({ loc: qLoc, chk: qChk }));
+      void writeDraft(session.user.id, 'last-active', session.draftKey, { loc: qLoc, chk: qChk }).catch(() => {});
     } else {
-      const meta = localStorage.getItem('last_active_audit');
-      if (meta) {
-        const parsed = JSON.parse(meta);
-        setLocId(parsed.loc); setChkId(parsed.chk);
-      } else router.replace('/audit/new');
+      void readDraft<{ loc: string; chk: string }>(session.user.id, 'last-active', session.draftKey).then(meta => {
+        if (cancelled) return;
+        if (meta?.loc && meta?.chk) { setLocId(meta.loc); setChkId(meta.chk); }
+        else router.replace('/audit/new');
+      }).catch(() => { if (!cancelled) router.replace('/audit/new'); });
     }
-  }, [searchParams, router, qLoc, qChk]);
+    return () => { cancelled = true; };
+  }, [session?.user.id, session?.draftKey, router, qLoc, qChk]);
 
   const audit = useAuditRun(locId, chkId);
 
   if (!locId || !chkId || audit.isLoading) return <div className="flex-1 flex items-center justify-center text-gray-400 dark:text-zinc-500 font-bold min-h-screen transition-colors bg-transparent">Загрузка...</div>;
+  if (audit.draftError) return <div className="p-8 space-y-4"><p role="alert">{audit.draftError}</p><button className="bg-orange-600 text-white p-3 rounded-xl" onClick={audit.handlers.restartDraft}>Удалить старый черновик и начать заново</button></div>;
   if (!audit.checklist || audit.questions.length === 0) return <div className="flex-1 flex items-center justify-center text-red-500 dark:text-red-400 font-bold min-h-screen transition-colors bg-transparent">Чек-лист пуст или не найден</div>;
 
   const answeredCount = Object.values(audit.answers).filter(a => a.isOk !== undefined).length;
@@ -56,7 +64,7 @@ function AuditRunForm() {
     window.location.href = backToUrl;
   };
 
-  const currentQ = audit.questions[audit.currentIndex] as any;
+  const currentQ = audit.questions[audit.currentIndex];
   const currentAns = audit.answers[audit.currentIndex];
   const isAnswered = currentAns?.isOk !== undefined;
   

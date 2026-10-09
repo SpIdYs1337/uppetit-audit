@@ -3,13 +3,15 @@ import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/requireAuth';
 import { z } from 'zod';
 import { Role } from '@prisma/client'; 
+import { auditAccessWhere, locationAccessWhere, calculateAudit } from '@/lib/accessControl';
+import { isAuditPhotoUrl } from '@/lib/photoPolicy';
 import webpush from 'web-push';
 import { s3Client } from '@/lib/s3'; // <-- Единый клиент S3
 
 export const dynamic = 'force-dynamic';
 
 // Настройка ключей Web-Push
-webpush.setVapidDetails(
+if (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) webpush.setVapidDetails(
   'mailto:admin@uppetit.ru',
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '',
   process.env.VAPID_PRIVATE_KEY || ''
@@ -37,21 +39,19 @@ function getS3Key(urlStr: string): string | null {
 
 // --- ZOD СХЕМЫ ---
 const auditPostSchema = z.object({
-  userId: z.string().min(1, "Требуется ID пользователя"),
   locationId: z.string().min(1, "Требуется ID точки"),
   checklistId: z.string().min(1, "Требуется ID чек-листа"),
-  score: z.number(),
-  maxScore: z.number().optional(),
-  shiftEmployees: z.array(z.string()).default([]),
-  generalComment: z.string().optional(),
+  checklistVersionId: z.string().min(1),
+  shiftEmployees: z.array(z.string().trim().min(1).max(200)).min(1).max(100),
+  generalComment: z.string().max(5000).optional(),
   answers: z.array(z.object({
+    itemId: z.string().min(1),
     zone: z.string().optional(),
     questionText: z.string(),
     isOk: z.boolean(),
-    penalty: z.number().default(0),
-    photos: z.array(z.string()).default([]),
-    comment: z.string().optional()
-  }))
+    photos: z.array(z.string().refine(isAuditPhotoUrl, 'Недопустимая ссылка на фото')).max(20).default([]),
+    comment: z.string().max(5000).optional()
+  })).min(1).max(1000)
 });
 
 const auditDeleteSchema = z.object({
@@ -60,7 +60,7 @@ const auditDeleteSchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const { error } = await requireAuth();
+  const { error, session } = await requireAuth();
   if (error) return error;
 
   try {
@@ -69,23 +69,36 @@ export async function POST(req: Request) {
 
     const activeVersion = await prisma.checklistVersion.findFirst({
       where: { checklistId: data.checklistId, isActive: true },
-      include: { items: true } 
+      include: { items: true, checklist: true }
     });
 
     if (!activeVersion) {
       return NextResponse.json({ error: 'Не найдена активная версия чек-листа' }, { status: 400 });
     }
+    if (activeVersion.id !== data.checklistVersionId) return NextResponse.json({ error: 'Чек-лист изменился. Начните проверку по актуальной версии.' }, { status: 409 });
+    if (activeVersion.checklist.isArchived || (session!.user.role !== Role.ADMIN && !activeVersion.checklist.allowedRoles.includes(session!.user.role))) {
+      return NextResponse.json({ error: 'Чек-лист недоступен' }, { status: 403 });
+    }
+    let calculated;
+    try { calculated = calculateAudit(activeVersion.items, data.answers); }
+    catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Неверные ответы' }, { status: 400 }); }
 
     const [user, location] = await Promise.all([
-      prisma.user.findUnique({ where: { id: data.userId }, select: { login: true, name: true } }),
-      prisma.location.findUnique({ 
-        where: { id: data.locationId }, 
+      prisma.user.findUnique({ where: { id: session!.user.id }, select: { login: true, name: true } }),
+      prisma.location.findFirst({
+        where: { id: data.locationId, ...locationAccessWhere(session!.user) },
         include: { 
           tu: { select: { id: true, name: true, login: true } },
           tus: { select: { id: true, name: true, login: true } } 
         } 
       })
     ]);
+    if (!location || !location.isActive) return NextResponse.json({ error: 'Точка недоступна' }, { status: 403 });
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const end = location.activeTo ? new Date(location.activeTo) : null; end?.setHours(23, 59, 59, 999);
+    if ((location.activeFrom && location.activeFrom > new Date()) || (end && end < today)) {
+      return NextResponse.json({ error: 'Точка неактивна в выбранный период' }, { status: 403 });
+    }
 
     let actingTuName = 'Не был назначен';
     if (location?.tus && location.tus.length > 0) {
@@ -98,30 +111,19 @@ export async function POST(req: Request) {
 
     const newAudit = await prisma.audit.create({
       data: {
-        userId: data.userId,
+        userId: session!.user.id,
         locationId: data.locationId,
         auditorName: actingAuditorName,
         locationName: location?.name || 'Неизвестная точка', 
         tuName: actingTuName, 
         checklistVersionId: activeVersion.id, 
-        score: data.score,
-        maxScore: data.maxScore,
+        score: calculated.score,
+        maxScore: calculated.maxScore,
         shiftEmployees: data.shiftEmployees,
         generalComment: data.generalComment,
         
         answers: {
-          create: data.answers.map(ans => {
-            const matchedItem = activeVersion.items.find(i => i.text === ans.questionText);
-            return {
-              itemId: matchedItem?.id, 
-              zone: ans.zone || 'Основной раздел',
-              question: ans.questionText,
-              isOk: ans.isOk,
-              penalty: ans.penalty,
-              photos: ans.photos,
-              comment: ans.comment
-            };
-          })
+          create: calculated.answers
         }
       }
     });
@@ -134,7 +136,7 @@ export async function POST(req: Request) {
 
       await prisma.visitPlan.updateMany({
         where: {
-          userId: data.userId,
+          userId: session!.user.id,
           locationId: data.locationId,
           status: 'PLANNED',
           date: { gte: todayStart, lte: todayEnd }
@@ -148,10 +150,12 @@ export async function POST(req: Request) {
     try {
       const targetUsers = await prisma.user.findMany({
         where: {
+          isActive: true,
+          passwordHash: { not: null },
           pushSubscription: { not: null },
           OR: [
             { role: Role.ADMIN },
-            { id: location?.tuId || undefined },
+            ...(location.tuId ? [{ id: location.tuId }] : []),
             { locations: { some: { id: data.locationId } } }
           ]
         },
@@ -161,7 +165,7 @@ export async function POST(req: Request) {
       if (targetUsers.length > 0) {
         const notificationPayload = JSON.stringify({
           title: 'Завершен аудит точки! 📍',
-          body: `Точка: ${location?.name || 'Неизвестная'}\nРезультат: ${data.score} из ${data.maxScore || 100} б.\nАудитор: ${actingAuditorName}`,
+          body: `Точка: ${location.name}\nРезультат: ${calculated.score} из ${calculated.maxScore} б.\nАудитор: ${actingAuditorName}`,
           icon: '/logo3.png',
           badge: '/logo3.png',
         });
@@ -201,23 +205,7 @@ export async function GET() {
   if (error) return error;
 
   try {
-    const currentUserId = session?.user?.id;
-    const currentUserRole = (session?.user as any)?.role;
-
-    const whereClause: any = {};
-    
-    // ИСПРАВЛЕНИЕ: Мощный корневой фильтр для ТУ
-    if (currentUserRole === Role.TU && currentUserId) {
-      whereClause.OR = [
-        { userId: currentUserId }, // Аудиты, которые провел лично этот ТУ
-        { location: { tuId: currentUserId } }, // Аудиты, проведенные кем угодно на точке, где он главный ТУ
-        { location: { tus: { some: { id: currentUserId } } } } // Аудиты, проведенные кем угодно на точке, где он со-менеджер
-      ];
-    } 
-    // Если нужно, чтобы Аудиторы видели только свои проверки (раскомментируй, если необходимо):
-    // else if (currentUserRole === Role.AUDITOR && currentUserId) {
-    //   whereClause.userId = currentUserId; 
-    // }
+    const whereClause = auditAccessWhere(session!.user);
 
     const audits = await prisma.audit.findMany({
       where: whereClause, 

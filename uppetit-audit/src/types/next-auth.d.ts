@@ -1,24 +1,22 @@
-import { Role } from '@prisma/client';
+import type { Role } from '@prisma/client';
+import type { DefaultSession } from 'next-auth';
 
-// Расширяем стандартные типы сессии и пользователя
 declare module 'next-auth' {
   interface Session {
-    user: {
-      id: string;
-      role: Role;
-    } & DefaultSession['user'];
+    sessionId: string;
+    draftKey: string;
+    user: { id: string; role: Role; mfaRequired: boolean; mfaVerified: boolean } & DefaultSession['user'];
   }
-
-  interface User extends DefaultUser {
-    id: string;
-    role: Role;
-  }
+  interface User { role: Role; sessionId: string; mfaVerified: boolean; }
 }
-
-// Расширяем тип JWT-токена
 declare module 'next-auth/jwt' {
   interface JWT {
     id: string;
     role: Role;
+    sessionId: string;
+    mfaRequired: boolean;
+    mfaVerified: boolean;
+    absoluteExpiresAt: number;
+    authVersion: number;
   }
 }

@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import { requireAuth } from '@/lib/requireAuth'; 
 import { Role } from '@prisma/client'; 
+import { publicUserSelect, locationAccessWhere, planWriteWhere } from '@/lib/accessControl';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,8 +44,8 @@ export async function GET(request: Request) {
       },
       include: { 
         location: true, 
-        user: true,
-        assigner: true 
+        user: { select: publicUserSelect },
+        assigner: { select: publicUserSelect }
       },
       orderBy: { date: 'asc' }
     });
@@ -66,6 +67,16 @@ export async function POST(request: Request) {
     const parsedData = schedulePostSchema.parse(body);
 
     const currentUserId = (session.user as any).id;
+    if (session.user.role !== Role.ADMIN && parsedData.userId !== currentUserId) {
+      return NextResponse.json({ error: 'Нельзя назначать проверки другим сотрудникам' }, { status: 403 });
+    }
+    const [assignee, location] = await Promise.all([
+      prisma.user.findFirst({ where: { id: parsedData.userId, isActive: true }, select: { id: true } }),
+      prisma.location.findFirst({ where: { id: parsedData.locationId, ...locationAccessWhere(session.user) }, select: { id: true } }),
+    ]);
+    if (!assignee || !location || Number.isNaN(new Date(parsedData.date).getTime())) {
+      return NextResponse.json({ error: 'Сотрудник, точка или дата недоступны' }, { status: 400 });
+    }
     const isPersonalPlan = currentUserId === parsedData.userId;
     const assignerId = isPersonalPlan ? null : currentUserId;
 
@@ -88,7 +99,7 @@ export async function POST(request: Request) {
 
 
 export async function DELETE(request: Request) {
-  const { error } = await requireAuth([Role.ADMIN, Role.AUDITOR, Role.TU]);
+  const { error, session } = await requireAuth([Role.ADMIN, Role.AUDITOR, Role.TU]);
   if (error) return error;
 
   try {
@@ -97,7 +108,8 @@ export async function DELETE(request: Request) {
     
     if (!id) return NextResponse.json({ error: 'ID не указан' }, { status: 400 });
 
-    await prisma.visitPlan.delete({ where: { id } });
+    const deleted = await prisma.visitPlan.deleteMany({ where: { id, ...planWriteWhere(session!.user) } });
+    if (!deleted.count) return NextResponse.json({ error: 'План не найден' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch { 
     return NextResponse.json({ error: 'Ошибка удаления' }, { status: 500 }); 

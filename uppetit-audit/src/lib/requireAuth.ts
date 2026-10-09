@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth'; 
 import { Role } from '@prisma/client';
 
-export async function requireAuth(allowedRoles?: Role[]) {
+export async function requireAuth(allowedRoles?: Role[], options?: { allowMfaEnrollment?: boolean }) {
   const session = await auth();
 
   if (!session?.user) {
@@ -10,6 +10,10 @@ export async function requireAuth(allowedRoles?: Role[]) {
       error: NextResponse.json({ error: 'Не авторизован' }, { status: 401 }), 
       session: null 
     };
+  }
+
+  if (session.user.mfaRequired && !options?.allowMfaEnrollment) {
+    return { error: NextResponse.json({ error: 'Настройте двухфакторный вход', code: 'MFA_REQUIRED' }, { status: 403 }), session: null };
   }
 
   if (allowedRoles && allowedRoles.length > 0) {

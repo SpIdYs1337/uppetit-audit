@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import { requireAuth } from '@/lib/requireAuth';
 import { Role } from '@prisma/client'; 
+import { locationAccessWhere, auditAccessWhere } from '@/lib/accessControl';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,17 +21,19 @@ const locationDeleteSchema = z.object({
 
 export async function GET() {
   // Строгая аутентификация: только авторизованные пользователи
-  const { error } = await requireAuth();
+  const { error, session } = await requireAuth();
   if (error) return error;
 
   try {
     const locations = await prisma.location.findMany({
+      where: locationAccessWhere(session!.user),
       orderBy: { name: 'asc' },
       include: { 
         tu: { select: { id: true, name: true, login: true } }, 
         // Безопасно вытягиваем массив привязанных ТУ
         tus: { select: { id: true, name: true, login: true } },
         audits: {
+          where: auditAccessWhere(session!.user),
           orderBy: { date: 'desc' },
           take: 1, 
           select: { score: true }

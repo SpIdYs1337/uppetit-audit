@@ -5,6 +5,13 @@ import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
 
+export async function DELETE() {
+  const { error, session } = await requireAuth();
+  if (error || !session) return error;
+  await prisma.user.update({ where: { id: session.user.id }, data: { pushSubscription: null } });
+  return NextResponse.json({ success: true });
+}
+
 // --- ZOD СХЕМА ДЛЯ ВАЛИДАЦИИ ---
 // Теперь мы строго проверяем структуру объекта PushSubscription
 const pushSubscriptionSchema = z.object({

@@ -2,30 +2,23 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { signOut, getSession } from 'next-auth/react'; 
+import { useSession } from 'next-auth/react';
+import { secureSignOut } from '@/lib/clientSignOut';
+import { readDraft } from '@/lib/draftStorage';
 import Image from 'next/image';
 import PushSubscribe from '@/components/PushSubscribe';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
 export default function AuditDashboard() {
-  const [hasDraft, setHasDraft] = useState(() => {
-    if (typeof window !== 'undefined') return !!localStorage.getItem('last_active_audit');
-    return false;
-  });
-  const [userRole, setUserRole] = useState<string | null>(null); 
-
+  const { data: session } = useSession();
+  const [hasDraft, setHasDraft] = useState(false);
+  const userRole = session?.user.role;
   useEffect(() => {
-    const checkSession = async () => {
-      const session = await getSession();
-      setUserRole((session?.user as any)?.role || null);
-    };
-    checkSession();
-
-    const draft = localStorage.getItem('last_active_audit');
-    if (draft) {
-      setHasDraft(true);
-    }
-  }, []);
+    let cancelled = false;
+    if (session?.draftKey) void readDraft(session.user.id, 'last-active', session.draftKey)
+      .then(value => { if (!cancelled) setHasDraft(!!value); }).catch(() => { if (!cancelled) setHasDraft(false); });
+    return () => { cancelled = true; };
+  }, [session?.user.id, session?.draftKey]);
 
   return (
     <div className="flex-1 flex flex-col p-4 sm:p-6 md:p-8 w-full bg-transparent transition-colors duration-300 relative z-10">
@@ -65,7 +58,7 @@ export default function AuditDashboard() {
           <ThemeToggle />
           
           <button 
-            onClick={() => signOut({ callbackUrl: '/' })}
+            onClick={() => secureSignOut()}
             className="w-10 h-10 md:w-auto md:px-5 md:py-2.5 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md md:bg-white/50 dark:md:bg-zinc-800/50 border border-gray-200/50 dark:border-zinc-700/50 rounded-full md:rounded-xl flex items-center justify-center gap-2 text-gray-700 dark:text-zinc-300 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-200 dark:hover:border-red-900/50 transition-all shadow-sm active:scale-95"
           >
             <span className="hidden md:block text-sm font-bold">Выйти</span>

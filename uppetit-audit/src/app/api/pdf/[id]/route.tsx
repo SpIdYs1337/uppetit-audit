@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/requireAuth';
+import { auditAccessWhere } from '@/lib/accessControl';
 import { Document, Page, Text, View, StyleSheet, Font, renderToStream, Image } from '@react-pdf/renderer';
 import { Audit, User, Location, ChecklistVersion, Checklist, ChecklistItem, Answer } from '@prisma/client';
 import React from 'react';
@@ -183,7 +184,7 @@ const AuditPDF = ({ audit, maxScore, logoBase64 }: { audit: EnrichedAudit, maxSc
 
 // API ОБРАБОТЧИК
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
-  const { error } = await requireAuth();
+  const { error, session } = await requireAuth();
   if (error) return error;
 
   try {
@@ -194,8 +195,8 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: 'ID аудита не передан' }, { status: 400 });
     }
 
-    const audit = await prisma.audit.findUnique({
-      where: { id: auditId },
+    const audit = await prisma.audit.findFirst({
+      where: { id: auditId, ...auditAccessWhere(session!.user) },
       include: {
         user: true,
         location: true,

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { signOut } from 'next-auth/react';
+import { secureSignOut } from '@/lib/clientSignOut';
 import { usePathname, useRouter } from 'next/navigation'; 
 import { APP_VERSION } from '@/lib/version'; 
 import PushSubscribe from '@/components/PushSubscribe'; 
@@ -178,7 +178,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             {/* Кнопка выхода */}
             <button 
               type="button"
-              onClick={() => signOut({ callbackUrl: '/' })}
+              onClick={() => secureSignOut()}
               className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 rounded-xl transition-all duration-300 active:scale-95"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">

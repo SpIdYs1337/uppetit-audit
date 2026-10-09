@@ -5,14 +5,14 @@ import { User } from '@prisma/client';
 export function useUsers() {
   const { data: users, error, isLoading, mutate } = useSWR<User[]>('/api/users', fetcher);
 
-  const saveUser = async (body: Partial<User>, isUpdate: boolean) => {
+  const saveUser = async (body: Partial<User> & { reissueInvite?: boolean; revokeSessions?: boolean }, isUpdate: boolean) => {
     const res = await fetch('/api/users', {
       method: isUpdate ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
     
-    if (!res.ok) throw new Error('Ошибка при сохранении');
+    if (!res.ok) { const error = await res.json().catch(() => ({})); throw new Error(error.error || 'Ошибка при сохранении'); }
     
     const data = await res.json();
     await mutate(); // Убеждаемся, что кэш обновился

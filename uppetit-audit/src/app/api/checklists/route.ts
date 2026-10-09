@@ -70,11 +70,12 @@ function parseRoles(rolesRaw: unknown): Role[] {
 }
 
 export async function GET() {
-  const { error } = await requireAuth();
+  const { error, session } = await requireAuth();
   if (error) return error;
 
   try {
     const checklists = await prisma.checklist.findMany({
+      where: session!.user.role === Role.ADMIN ? {} : { isArchived: false, allowedRoles: { has: session!.user.role } },
       include: {
         versions: {
           where: { isActive: true },

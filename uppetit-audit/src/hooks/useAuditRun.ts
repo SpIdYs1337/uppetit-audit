@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSession } from 'next-auth/react';
+import { getSession, useSession } from 'next-auth/react';
+import { readDraft, writeDraft, removeDraft } from '@/lib/draftStorage';
 import useSWR from 'swr';
 import { fetcher } from '@/lib/fetcher';
 import { uploadAuditPhoto } from '@/lib/uploadPhoto';
@@ -13,7 +14,7 @@ interface AnswerData {
   photoBase64?: string;
 }
 
-export type ExtendedChecklist = Checklist & { items?: string | ChecklistItemType[] };
+export type ExtendedChecklist = Checklist & { activeVersionId?: string; items?: string | ChecklistItemType[] };
 
 export interface ChecklistItemType {
   id: string;
@@ -23,10 +24,17 @@ export interface ChecklistItemType {
   isCritical?: boolean;
   order?: number;
   isPhotoRequired?: boolean;
+  photoRequirement?: 'OPTIONAL' | 'REQUIRED' | 'VIOLATION';
 }
 
 export function useAuditRun(actualLocationId: string | null, actualChecklistId: string | null) {
   const router = useRouter();
+  const { data: session } = useSession();
+  const draftName = `audit:${actualLocationId}:${actualChecklistId}`;
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftError, setDraftError] = useState('');
+  const [draftRevision, setDraftRevision] = useState(0);
+  const submitted = useRef(false);
 
   const { data: locations, isLoading: locLoading } = useSWR<Location[]>('/api/locations', fetcher);
   const { data: checklists, isLoading: chkLoading } = useSWR<ExtendedChecklist[]>('/api/checklists', fetcher);
@@ -49,70 +57,61 @@ export function useAuditRun(actualLocationId: string | null, actualChecklistId: 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!checklist?.items) return;
-
-    const parsedQuestions: ChecklistItemType[] = typeof checklist.items === 'string' ? JSON.parse(checklist.items) : checklist.items;
+    if (!checklist?.items || !session?.draftKey) return;
+    let cancelled = false;
+    submitted.current = false;
+    setDraftReady(false); setDraftError('');
+    const parsedQuestions: ChecklistItemType[] = typeof checklist.items === 'string' ? JSON.parse(checklist.items) : [...checklist.items];
     parsedQuestions.sort((a, b) => {
       if (typeof a.order === 'number' && typeof b.order === 'number') return a.order - b.order;
-      const zoneA = a.zone || 'Основной раздел';
-      const zoneB = b.zone || 'Основной раздел';
-      if (zoneA === zoneB) return 0;
-      if (zoneA === 'Основной раздел') return -1;
-      if (zoneB === 'Основной раздел') return 1;
-      return zoneA.localeCompare(zoneB);
+      const zoneA = a.zone || 'Основной раздел', zoneB = b.zone || 'Основной раздел';
+      return zoneA === zoneB ? 0 : zoneA === 'Основной раздел' ? -1 : zoneB === 'Основной раздел' ? 1 : zoneA.localeCompare(zoneB);
     });
-
     setQuestions(parsedQuestions);
-
-    if (actualLocationId && actualChecklistId) {
-      const draftKey = `audit_draft_${actualLocationId}_${actualChecklistId}`;
-      const metaKey = `audit_meta_${actualLocationId}_${actualChecklistId}`;
-      
-      const savedMeta = localStorage.getItem(metaKey);
-      if (savedMeta) {
-        const parsedMeta = JSON.parse(savedMeta);
-        if (parsedMeta.employees) setEmployees(parsedMeta.employees);
-        if (parsedMeta.generalComment) setGeneralComment(parsedMeta.generalComment);
+    setAnswers({}); setEmployees(['']); setGeneralComment(''); setCurrentIndex(0); setIsFinalStep(false);
+    void readDraft<{ versionId: string; questionIds: string[]; answers: Record<number, AnswerData>; employees: string[]; generalComment: string }>(
+      session.user.id, draftName, session.draftKey
+    ).then(draft => {
+      if (cancelled) return;
+      if (draft) {
+        if (draft.versionId !== checklist.activeVersionId || JSON.stringify(draft.questionIds) !== JSON.stringify(parsedQuestions.map(q => q.id))) {
+          setDraftError('Чек-лист изменился. Старый черновик нельзя отправить по новой версии. Начните новую проверку.'); return;
+        }
+        setAnswers(draft.answers); setEmployees(draft.employees); setGeneralComment(draft.generalComment);
+        const first = parsedQuestions.findIndex((_, idx) => draft.answers[idx]?.isOk === undefined);
+        setCurrentIndex(first < 0 ? Math.max(0, parsedQuestions.length - 1) : first);
       }
-
-      const savedDraft = localStorage.getItem(draftKey);
-      if (savedDraft) {
-        const parsedAnswers = JSON.parse(savedDraft);
-        Object.keys(parsedAnswers).forEach(key => {
-          if (parsedAnswers[key].photoBase64 && !parsedAnswers[key].photos) {
-            parsedAnswers[key].photos = [parsedAnswers[key].photoBase64];
-            delete parsedAnswers[key].photoBase64;
-          }
-        });
-        setAnswers(parsedAnswers);
-
-        const answeredKeys = Object.keys(parsedAnswers).filter(k => parsedAnswers[Number(k)]?.isOk !== undefined).map(Number);
-        const firstUnanswered = parsedQuestions.findIndex((_, idx) => !answeredKeys.includes(idx));
-        setCurrentIndex(firstUnanswered !== -1 ? firstUnanswered : parsedQuestions.length - 1);
-      }
-    }
-  }, [checklist, actualLocationId, actualChecklistId]);
+      setDraftReady(true);
+    }).catch(() => { if (!cancelled) setDraftError('Не удалось прочитать черновик. Возможно, пароль или права доступа изменились.'); });
+    return () => { cancelled = true; };
+    // Published checklist versions are immutable; SWR refreshes must not reset entered answers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checklist?.activeVersionId, actualLocationId, actualChecklistId, session?.user.id, session?.draftKey, draftRevision]);
 
   useEffect(() => {
-    if (actualLocationId && actualChecklistId && Object.keys(answers).length > 0) {
-      localStorage.setItem(`audit_draft_${actualLocationId}_${actualChecklistId}`, JSON.stringify(answers));
-      localStorage.setItem(`audit_meta_${actualLocationId}_${actualChecklistId}`, JSON.stringify({ employees, generalComment }));
+    if (!draftReady || submitted.current || !session?.draftKey || !questions.length) return;
+    let cancelled = false;
+    void writeDraft(session.user.id, draftName, session.draftKey, {
+      versionId: checklist?.activeVersionId, questionIds: questions.map(q => q.id), answers, employees, generalComment
+    }).then(() => { if (!cancelled) setSaveStatus('Черновик сохранён'); })
+      .catch(() => { if (!cancelled) setSaveStatus('Не удалось сохранить черновик на устройстве'); });
+    return () => { cancelled = true; };
+  }, [draftReady, answers, employees, generalComment, draftName, session?.user.id, session?.draftKey, questions, checklist?.activeVersionId]);
       
-      setSaveStatus('Черновик сохранен');
-      const timer = setTimeout(() => setSaveStatus(''), 2000);
-      return () => clearTimeout(timer);
+  const clearCurrentDraft = async () => {
+    submitted.current = true; setDraftReady(false);
+    if (session?.user.id) {
+      await removeDraft(session.user.id, draftName);
+      await removeDraft(session.user.id, 'last-active');
     }
-  }, [answers, employees, generalComment, actualLocationId, actualChecklistId]);
-
-  const handleCancel = () => {
-    if (window.confirm('Прервать аудит? Все несохраненные фото будут удалены.')) {
-      if (actualLocationId && actualChecklistId) {
-        localStorage.removeItem(`audit_draft_${actualLocationId}_${actualChecklistId}`);
-        localStorage.removeItem(`audit_meta_${actualLocationId}_${actualChecklistId}`);
-      }
-      localStorage.removeItem('last_active_audit');
-      router.push('/audit');
-    }
+  };
+  const restartDraft = async () => {
+    if (!window.confirm('Удалить старый черновик? Его ответы будут потеряны.')) return;
+    if (session?.user.id) await removeDraft(session.user.id, draftName);
+    setDraftRevision(value => value + 1);
+  };
+  const handleCancel = async () => {
+    if (window.confirm('Прервать аудит и удалить черновик?')) { await clearCurrentDraft(); router.push('/audit'); }
   };
 
   const handleAnswer = (isOk: boolean) => {
@@ -185,13 +184,11 @@ export function useAuditRun(actualLocationId: string | null, actualChecklistId: 
       const userId = session?.user?.id;
       if (!userId) throw new Error('Ошибка авторизации');
 
-      const maxScore = questions.reduce((sum, q) => sum + (Number(q.score) || 0), 0);
-      let lostPoints = 0;
 
       const answersArray = Object.entries(answers).map(([idx, ans]) => {
         const q = questions[Number(idx)];
-        if (!ans.isOk) lostPoints += (Number(q.score) || 0);
         return {
+          itemId: q.id,
           zone: q.zone || 'Основной раздел',
           questionText: q.text,
           isOk: ans.isOk,
@@ -205,22 +202,18 @@ export function useAuditRun(actualLocationId: string | null, actualChecklistId: 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId,
           locationId: actualLocationId,
           checklistId: actualChecklistId,
-          score: Math.max(0, maxScore - lostPoints),
-          maxScore,
+          checklistVersionId: checklist?.activeVersionId,
           shiftEmployees: validEmployees,
           generalComment,
           answers: answersArray
         }),
       });
 
-      if (!res.ok) throw new Error('Ошибка сервера');
+      if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || 'Ошибка сервера'); }
 
-      localStorage.removeItem(`audit_draft_${actualLocationId}_${actualChecklistId}`);
-      localStorage.removeItem(`audit_meta_${actualLocationId}_${actualChecklistId}`);
-      localStorage.removeItem('last_active_audit');
+      await clearCurrentDraft().catch(() => {});
 
       alert('Аудит успешно завершен!');
       return true; // Возвращаем true, чтобы run.tsx понял, что можно уходить со страницы
@@ -233,7 +226,8 @@ export function useAuditRun(actualLocationId: string | null, actualChecklistId: 
   };
 
   return {
-    isLoading: locLoading || chkLoading,
+    isLoading: locLoading || chkLoading || (!!checklist && !draftReady && !draftError),
+    draftError,
     location,
     checklist,
     questions,
@@ -254,6 +248,7 @@ export function useAuditRun(actualLocationId: string | null, actualChecklistId: 
     firstUnansweredIndex,
     isAllAnswered,
     handlers: {
+      restartDraft,
       handleCancel,
       handleAnswer,
       handleCommentChange,

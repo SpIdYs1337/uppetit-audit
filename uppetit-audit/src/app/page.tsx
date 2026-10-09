@@ -1,15 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { signIn } from "next-auth/react"; 
+import { signIn, getSession } from "next-auth/react";
 import Image from 'next/image';
 import { useRouter } from 'next/navigation'; 
 import { PrivacyModal } from '@/components/PrivacyModal'; 
+import { normalizeOneTimeCode } from '@/lib/oneTimeCode';
 
 export default function LoginPage() {
   const router = useRouter(); 
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -28,18 +30,20 @@ export default function LoginPage() {
       const result = await signIn("credentials", {
         login,
         password,
+        code,
         redirect: false, 
       });
 
       if (result?.error) {
-        setError("Неверный логин или пароль");
+        setError("Проверьте логин, пароль и код входа. После нескольких попыток подождите 15 минут.");
         setIsLoading(false);
       } else if (result?.ok) {
-        const sessionRes = await fetch('/api/auth/session');
-        const sessionData = await sessionRes.json();
+        const sessionData = await getSession();
         const userRole = sessionData?.user?.role;
 
-        if (userRole === 'ADMIN') {
+        if (!sessionData?.user) { setError('Не удалось открыть сессию'); setIsLoading(false); return; }
+        if (sessionData.user.mfaRequired) { router.push('/setup-mfa'); }
+        else if (userRole === 'ADMIN') {
           router.push('/admin/users');
         } else {
           router.push('/audit');
@@ -87,6 +91,7 @@ export default function LoginPage() {
             <label className="block text-[11px] font-bold text-zinc-400 mb-2 ml-1 uppercase tracking-wider">Логин или телефон</label>
             <input 
               type="text"
+              autoComplete="username" maxLength={200}
               value={login}
               onChange={(e) => setLogin(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleLoginClick()}
@@ -100,6 +105,7 @@ export default function LoginPage() {
             <div className="relative">
               <input 
                 type={showPassword ? "text" : "password"}
+                autoComplete="current-password" maxLength={128}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleLoginClick()}
@@ -121,8 +127,13 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Контейнер для ошибки фиксированной высоты */}
-          <div className="h-4 flex items-center justify-center">
+          <div>
+            <label className="block text-[11px] font-bold text-zinc-400 mb-2">Код аутентификатора или резервный код</label>
+            <input autoComplete="one-time-code" maxLength={32} value={code} onChange={e => setCode(normalizeOneTimeCode(e.target.value))} onKeyDown={e => e.key === 'Enter' && handleLoginClick()} className="w-full px-4 py-3 rounded-2xl border border-zinc-800 bg-zinc-950/50 text-white" />
+            <p className="mt-2 text-xs text-zinc-500">Для администраторов с настроенным двухфакторным входом.</p>
+          </div>
+          {/* Контейнер для ошибки */}
+          <div className="min-h-4 flex items-center justify-center">
             {error && <span className="text-red-500 text-xs font-bold animate-in fade-in slide-in-from-bottom-1">{error}</span>}
           </div>
 

@@ -3,35 +3,37 @@ import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/requireAuth';
 import ExcelJS from 'exceljs';
 import { Role } from '@prisma/client';
+import { auditAccessWhere, publicUserSelect } from '@/lib/accessControl';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   // ИСПРАВЛЕНИЕ: Убрали ограничение по ролям. Теперь скачивать могут все (Аудиторы в том числе).
-  const { error } = await requireAuth();
+  const { error, session } = await requireAuth();
   if (error) return error;
 
   try {
     const { auditIds } = await req.json();
 
-    if (!auditIds || !Array.isArray(auditIds) || auditIds.length === 0) {
+    if (!auditIds || !Array.isArray(auditIds) || auditIds.length === 0 || auditIds.length > 200 || auditIds.some(id => typeof id !== 'string')) {
       return NextResponse.json({ error: 'Нет данных для выгрузки' }, { status: 400 });
     }
 
     const audits = await prisma.audit.findMany({
-      where: { id: { in: auditIds } },
+      where: { id: { in: auditIds }, ...auditAccessWhere(session!.user) },
       include: {
         checklistVersion: {
           include: { checklist: true }
         },
         location: {
-          include: { tus: true }
+          include: { tus: { select: publicUserSelect } }
         },
-        user: true, 
+        user: { select: publicUserSelect },
       },
       orderBy: { date: 'desc' }
     });
 
+    if (audits.length !== new Set(auditIds).size) return NextResponse.json({ error: 'Один или несколько аудитов недоступны' }, { status: 403 });
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Аудиты');
 

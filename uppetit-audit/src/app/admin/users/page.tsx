@@ -31,7 +31,7 @@ export default function AdminUsersPage() {
     try {
       const data = await resetPassword(user.id);
       const link = `${window.location.origin}/setup-password?token=${data.token}`;
-      prompt('СБРОС ВЫПОЛНЕН! Скопируйте новую ссылку и отправьте сотруднику:', link);
+      prompt('Сеансы завершены. Ссылка действует 15 минут. Скопируйте и отправьте сотруднику:', link);
     } catch {
       alert('Ошибка при сбросе');
     }
@@ -48,11 +48,17 @@ export default function AdminUsersPage() {
     catch { alert('Ошибка при удалении'); }
   };
 
-  const copyInviteLink = (token?: string | null) => {
-    if (!token) return alert('Токен не найден. Попробуйте сбросить пароль.');
-    const link = `${window.location.origin}/setup-password?token=${token}`;
-    navigator.clipboard.writeText(link);
-    alert('Ссылка скопирована в буфер обмена!');
+  const reissueInvite = async (user: EnrichedUser) => {
+    if (!confirm('Выпустить новую ссылку? Предыдущая ссылка перестанет работать.')) return;
+    try {
+      const data = await saveUser({ id: user.id, reissueInvite: true }, true);
+      prompt(`Ссылка действует до ${new Date(data.expiresAt).toLocaleString()}. Скопируйте и отправьте сотруднику:`, `${window.location.origin}/setup-password?token=${data.token}`);
+    } catch (error) { alert(error instanceof Error ? error.message : 'Ошибка'); }
+  };
+  const changeAccess = async (user: EnrichedUser, revokeOnly = false) => {
+    if (!confirm(revokeOnly ? 'Завершить все сеансы сотрудника?' : (user.isActive ? 'Заблокировать сотрудника и завершить его сеансы?' : 'Разблокировать сотрудника?'))) return;
+    try { await saveUser({ id: user.id, ...(revokeOnly ? { revokeSessions: true } : { isActive: !user.isActive }) }, true); }
+    catch (error) { alert(error instanceof Error ? error.message : 'Ошибка'); }
   };
 
   const { activeUsers, invitedUsers } = useMemo(() => {
@@ -82,7 +88,7 @@ export default function AdminUsersPage() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6 md:mb-8">
         <div>
           <h1 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-zinc-100 tracking-tight transition-colors">Администрирование</h1>
-          <p className="text-sm md:text-base text-gray-500 dark:text-zinc-400 mt-1 md:mt-2 transition-colors">Управление персоналом и доступами</p>
+          <p className="text-sm md:text-base text-gray-500 dark:text-zinc-400 mt-1 md:mt-2 transition-colors">Управление персоналом и доступами</p><a href="/setup-mfa" className="text-sm text-orange-600 underline">Настроить аутентификатор</a>
         </div>
         {!isEditorOpen && (
           <button 
@@ -165,6 +171,8 @@ export default function AdminUsersPage() {
                       <button onClick={() => handleResetPassword(user)} className="w-full bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 py-2.5 md:py-2 rounded-xl font-bold text-xs hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors">
                         Сбросить пароль
                       </button>
+                      <button onClick={() => changeAccess(user, true)} className="py-2 text-xs font-bold text-gray-500">Завершить сеансы</button>
+                      <button onClick={() => changeAccess(user)} className="py-2 text-xs font-bold text-red-500">{user.isActive ? 'Заблокировать' : 'Разблокировать'}</button>
                     </div>
                   </div>
                 ))
@@ -197,13 +205,13 @@ export default function AdminUsersPage() {
 
                     <div className="mt-auto flex flex-col gap-2 pt-4 border-t border-gray-50 dark:border-zinc-800/50 transition-colors">
                       <button 
-                        onClick={() => copyInviteLink(user.inviteToken)} 
+                        onClick={() => reissueInvite(user)}
                         className="w-full bg-[#F25C05] dark:bg-[#E65604] text-white py-3 md:py-2.5 rounded-xl font-bold text-xs hover:bg-orange-600 dark:hover:bg-[#CC4D03] transition-colors shadow-md shadow-orange-500/20 dark:shadow-orange-900/20 flex justify-center items-center gap-2"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
                         </svg>
-                        Скопировать ссылку
+                        Выпустить новую ссылку
                       </button>
                       <button 
                         onClick={() => handleDelete(user.id, true)} 

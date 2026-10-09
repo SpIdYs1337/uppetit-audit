@@ -1,3 +1,4 @@
+import { publicUserSelect } from '@/lib/accessControl';
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/requireAuth';
@@ -27,7 +28,7 @@ export async function POST(req: Request) {
     const allAudits = await prisma.audit.findMany({
       where: whereClause,
       include: {
-        location: { include: { tus: true } },
+        location: { include: { tus: { select: publicUserSelect } } },
         checklistVersion: { include: { checklist: true } }
       },
       orderBy: { date: 'asc' }

@@ -20,7 +20,15 @@ model User {
   login            String      @unique
   phone            String?     @unique
   passwordHash     String?  
-  inviteToken      String?     @unique 
+  inviteTokenHash  String?     @unique
+  inviteExpiresAt  DateTime?
+  invitePurpose    String?
+  isActive         Boolean     @default(true)
+  authVersion      Int         @default(0)
+  totpEnabled      Boolean     @default(false)
+  totpSecret       String?
+  totpLastUsedStep BigInt?
+  recoveryHashes   String[]    @default([])
   role             Role        @default(AUDITOR)
   pushSubscription String?
 
@@ -29,6 +37,31 @@ model User {
   assignedTasks    VisitPlan[] @relation("PlanAssigner")
   managedLocations Location[]  @relation("LocationToTU")
   locations        Location[]  @relation("LocationTus")
+  authSessions     AuthSession[]
+}
+
+model AuthSession {
+  id               String   @id
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  authVersion      Int
+  createdAt        DateTime @default(now())
+  expiresAt        DateTime
+  lastActivityAt   DateTime @default(now())
+  mfaVerified      Boolean  @default(false)
+  pendingTotp      String?
+  pendingTotpUntil DateTime?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuthRateLimit {
+  key       String   @id
+  count     Int
+  expiresAt DateTime
+
+  @@index([expiresAt])
 }
 
 model Location {

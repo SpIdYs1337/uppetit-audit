@@ -1,54 +1,34 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { hash } from 'bcryptjs';
 import { z } from 'zod';
+import { hashPassword, hashToken } from '@/lib/security';
+import { MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH } from '@/lib/sessionPolicy';
+import { clientAddress, consumeRateLimit } from '@/lib/rateLimit';
 
-// --- ZOD СХЕМА ДЛЯ ВАЛИДАЦИИ ---
-// Гарантируем, что пароль будет не пустым и не слишком коротким
-const setupPasswordSchema = z.object({
-  token: z.string().min(1, 'Токен отсутствует'),
-  password: z.string().min(6, 'Пароль должен быть не менее 6 символов'),
+const schema = z.object({
+  token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  password: z.string().min(MIN_PASSWORD_LENGTH, 'Пароль должен содержать не менее 15 символов').max(MAX_PASSWORD_LENGTH),
 });
-
 export async function POST(request: Request) {
-  // ⚠️ ВНИМАНИЕ: Здесь НЕТ requireAuth, так как пользователь еще не имеет пароля и не может войти
-  
-  try {
-    const body = await request.json();
-    
-    // 1. ВАЛИДАЦИЯ ВХОДЯЩИХ ДАННЫХ
-    const parsedData = setupPasswordSchema.parse(body);
-
-    // 2. ИЗМЕНЕНО: Ищем пользователя через findUnique (быстрее, т.к. токен @unique в схеме)
-    const user = await prisma.user.findUnique({ 
-      where: { inviteToken: parsedData.token } 
-    });
-    
-    if (!user) {
-      // Отдаем общую ошибку, чтобы злоумышленник не мог "перебирать" токены
-      return NextResponse.json({ error: 'Неверный или устаревший токен' }, { status: 400 });
-    }
-
-    // 3. ШИФРОВАНИЕ (10 - оптимальный уровень соли)
-    const hashedPassword = await hash(parsedData.password, 10);
-
-    // 4. СОХРАНЕНИЕ
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        passwordHash: hashedPassword,
-        // БЕЗОПАСНОСТЬ: Надежнее всего просто стереть токен (null),
-        // чтобы он физически больше не существовал в базе.
-        inviteToken: null 
-      }
-    });
-
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Неверные данные', details: error.issues }, { status: 400 });
-    }
-    console.error("Системная ошибка при сохранении пароля:", error);
-    return NextResponse.json({ error: 'Ошибка сохранения' }, { status: 500 });
+  if (!await consumeRateLimit('setup-password-ip', clientAddress(request), 50)) {
+    return NextResponse.json({ error: 'Слишком много попыток. Повторите через 15 минут.' }, { status: 429 });
   }
+  const parsed = schema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: 'Проверьте пароль и ссылку: минимум 15, максимум 128 символов' }, { status: 400 });
+  const inviteTokenHash = hashToken(parsed.data.token);
+  if (!await consumeRateLimit('setup-password-token', inviteTokenHash, 10)) {
+    return NextResponse.json({ error: 'Слишком много попыток' }, { status: 429 });
+  }
+  const user = await prisma.user.findFirst({ where: { inviteTokenHash, inviteExpiresAt: { gt: new Date() }, isActive: true } });
+  if (!user) return NextResponse.json({ error: 'Неверная или просроченная ссылка' }, { status: 400 });
+  const passwordHash = await hashPassword(parsed.data.password);
+  const changed = await prisma.$transaction(async tx => {
+    const result = await tx.user.updateMany({ where: {
+      id: user.id, inviteTokenHash, inviteExpiresAt: { gt: new Date() }, isActive: true,
+    }, data: { passwordHash, inviteTokenHash: null, inviteExpiresAt: null, invitePurpose: null, authVersion: { increment: 1 } } });
+    if (result.count === 1) await tx.authSession.deleteMany({ where: { userId: user.id } });
+    return result.count;
+  });
+  return changed === 1 ? NextResponse.json({ success: true })
+    : NextResponse.json({ error: 'Неверная или просроченная ссылка' }, { status: 400 });
 }

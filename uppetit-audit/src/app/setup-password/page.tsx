@@ -3,6 +3,7 @@
 import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
+import { MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH } from '@/lib/sessionPolicy';
 import { PrivacyModal } from '@/components/PrivacyModal';
 
 function SetupPasswordContent() {
@@ -22,7 +23,7 @@ function SetupPasswordContent() {
   const handleSave = async () => {
     setError('');
 
-    if (password.length < 4) return setError('Пароль слишком короткий (мин. 4 символа)');
+    if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) return setError('Пароль должен содержать от 15 до 128 символов. Можно использовать длинную фразу.');
     if (password !== confirmPassword) return setError('Пароли не совпадают');
     if (!token) return setError('Неверная ссылка');
     if (!isPolicyAccepted) return setError('Необходимо принять политику');
@@ -71,10 +72,11 @@ function SetupPasswordContent() {
         <div className="space-y-5">
           {/* Новый пароль */}
           <div>
-            <label className="block text-[11px] font-bold text-zinc-400 mb-2 ml-1 uppercase">Новый пароль</label>
+            <label className="block text-[11px] font-bold text-zinc-400 mb-2 ml-1 uppercase">Новый пароль (15–128 символов)</label>
             <div className="relative">
               <input 
                 type={showPassword ? "text" : "password"}
+                autoComplete="new-password" minLength={MIN_PASSWORD_LENGTH} maxLength={MAX_PASSWORD_LENGTH}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full pl-4 pr-12 py-4 rounded-2xl border border-zinc-800 bg-zinc-950/50 text-white outline-none focus:border-[#F25C05] transition-all font-bold font-mono placeholder-zinc-600"
@@ -101,6 +103,7 @@ function SetupPasswordContent() {
             <div className="relative">
               <input 
                 type={showPassword ? "text" : "password"}
+                autoComplete="new-password" maxLength={MAX_PASSWORD_LENGTH}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full pl-4 pr-12 py-4 rounded-2xl border border-zinc-800 bg-zinc-950/50 text-white outline-none focus:border-[#F25C05] transition-all font-bold font-mono placeholder-zinc-600"

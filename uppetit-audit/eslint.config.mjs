@@ -6,6 +6,11 @@ export default defineConfig([
   ...nextVitals,
   ...nextTs,
   {
+    files: ["tests/**/*.cjs"],
+    // Node's built-in test runner and isolated CommonJS module loader.
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
+  {
     ignores: [
       ".next/**",
       "node_modules/**",

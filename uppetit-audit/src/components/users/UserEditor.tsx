@@ -24,10 +24,10 @@ export function UserEditor({ initialData, onClose, onSave }: UserEditorProps) {
       const data = await onSave({ id: initialData?.id, name, email, login, phone, role }, isUpdate);
       if (!isUpdate && data?.inviteToken) {
         const link = `${window.location.origin}/setup-password?token=${data.inviteToken}`;
-        prompt('СОТРУДНИК СОЗДАН! Скопируйте эту ссылку и отправьте ему для установки пароля:', link);
+        prompt('Сотрудник создан. Ссылка действует 24 часа. Скопируйте и отправьте её для установки пароля:', link);
       }
       onClose();
-    } catch { alert('Системная ошибка при сохранении.'); } finally { setIsSubmitting(false); }
+    } catch (error) { alert(error instanceof Error ? error.message : 'Ошибка при сохранении'); } finally { setIsSubmitting(false); }
   };
 
   return (

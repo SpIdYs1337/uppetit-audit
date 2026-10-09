@@ -3,161 +3,107 @@ import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import { requireAuth } from '@/lib/requireAuth';
 import { Role } from '@prisma/client';
+import { issueInvite } from '@/lib/security';
 
 export const dynamic = 'force-dynamic';
-
-// --- ZOD СХЕМЫ ДЛЯ ВАЛИДАЦИИ ---
-const userPostSchema = z.object({
-  name: z.string().nullable().optional(),
-  email: z.string().email('Неверный формат email').optional().or(z.literal('')),
-  login: z.string().min(2, 'Логин должен быть длиннее 2 символов'),
-  phone: z.string().nullable().optional(),
-  role: z.nativeEnum(Role).default(Role.AUDITOR),
-});
-
-const userPutSchema = z.object({
-  id: z.string().min(1, 'ID обязателен'),
-  name: z.string().nullable().optional(),
-  email: z.string().email('Неверный формат email').optional().or(z.literal('')),
-  login: z.string().min(2).optional(),
-  phone: z.string().nullable().optional(),
-  role: z.nativeEnum(Role).optional(),
-  resetPassword: z.boolean().optional(),
-});
-
-// ДОБАВЛЕНО: Схема для валидации удаления
-const userDeleteSchema = z.object({
-  id: z.string().min(1, 'ID обязателен'),
-});
-
+const fields = {
+  name: z.string().max(200).nullable().optional(),
+  email: z.string().email().max(254).optional().or(z.literal('')),
+  login: z.string().trim().min(2).max(200),
+  phone: z.string().trim().max(32).nullable().optional(),
+  role: z.nativeEnum(Role),
+};
+const postSchema = z.object({ ...fields, role: fields.role.default(Role.AUDITOR) });
+const putSchema = z.object({ ...fields, id: z.string().min(1), login: fields.login.optional(),
+  role: fields.role.optional(), resetPassword: z.boolean().optional(),
+  reissueInvite: z.boolean().optional(), revokeSessions: z.boolean().optional(), isActive: z.boolean().optional() });
+const select = { id: true, name: true, email: true, login: true, phone: true, role: true,
+  isActive: true, passwordHash: true, inviteExpiresAt: true };
+function safeUser(user: { passwordHash: string | null; [key: string]: unknown }) {
+  const { passwordHash, ...safe } = user;
+  return { ...safe, hasPassword: !!passwordHash };
+}
+async function aliasTaken(login?: string, phone?: string | null, excludeId?: string) {
+  const aliases = [login, phone].filter((value): value is string => !!value);
+  if (!aliases.length) return false;
+  return !!await prisma.user.findFirst({ where: {
+    ...(excludeId ? { id: { not: excludeId } } : {}),
+    OR: [{ login: { in: aliases } }, { phone: { in: aliases } }],
+  }, select: { id: true } });
+}
 export async function GET() {
   const { error, session } = await requireAuth();
-  if (error) return error;
-
-  try {
-    const users = await prisma.user.findMany({ orderBy: { login: 'asc' } });
-    
-    const isAdmin = (session?.user as any)?.role === Role.ADMIN;
-
-    const safeUsers = users.map(u => ({
-      id: u.id,
-      name: u.name,      
-      email: u.email,    
-      login: u.login,
-      phone: u.phone,
-      role: u.role,
-      inviteToken: isAdmin ? u.inviteToken : null,
-      hasPassword: !!u.passwordHash 
-    }));
-
-    return NextResponse.json(safeUsers);
-  } catch { 
-    return NextResponse.json({ error: 'Ошибка' }, { status: 500 }); 
+  if (error || !session) return error;
+  if (session.user.role !== Role.ADMIN) {
+    return NextResponse.json(await prisma.user.findMany({ where: { role: Role.TU, isActive: true },
+      select: { id: true, name: true, login: true, role: true }, orderBy: { login: 'asc' } }));
   }
+  return NextResponse.json((await prisma.user.findMany({ select, orderBy: { login: 'asc' } })).map(safeUser));
 }
-
 export async function POST(request: Request) {
   const { error } = await requireAuth([Role.ADMIN]);
   if (error) return error;
-
   try {
-    const body = await request.json();
-    const parsedData = userPostSchema.parse(body);
-    const token = crypto.randomUUID();
-
-    const newUser = await prisma.user.create({
-      data: {
-        name: parsedData.name || null,
-        email: parsedData.email?.trim() || null, 
-        login: parsedData.login,
-        phone: parsedData.phone || null,
-        role: parsedData.role,
-        passwordHash: null,
-        inviteToken: token,
-      }
-    });
-    return NextResponse.json(newUser);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Неверные данные', details: error.issues }, { status: 400 });
-    }
-    if ((error as any).code === 'P2002') {
-      return NextResponse.json({ error: 'Пользователь с таким логином или email уже существует' }, { status: 400 });
-    }
-    return NextResponse.json({ error: 'Ошибка сохранения' }, { status: 500 }); 
-  }
+    const data = postSchema.parse(await request.json());
+    if (await aliasTaken(data.login, data.phone)) return NextResponse.json({ error: 'Логин или телефон уже используются' }, { status: 409 });
+    const { token, ...invitation } = issueInvite('INVITE');
+    const user = await prisma.user.create({ data: { ...data, email: data.email || null, phone: data.phone || null, ...invitation }, select });
+    return NextResponse.json({ ...safeUser(user), inviteToken: token });
+  } catch (error) { return userError(error); }
 }
-
 export async function PUT(request: Request) {
-  // ИЗМЕНЕНО: Извлекаем session, чтобы знать, кто делает запрос
   const { error, session } = await requireAuth([Role.ADMIN]);
-  if (error) return error;
-
+  if (error || !session) return error;
   try {
-    const body = await request.json();
-    const parsedData = userPutSchema.parse(body);
-    const currentUserId = session?.user?.id;
-
-    // ЗАЩИТА: Запрещаем администратору понижать свою собственную роль
-    if (parsedData.id === currentUserId && parsedData.role && parsedData.role !== Role.ADMIN) {
-      return NextResponse.json({ error: 'Вы не можете лишить себя прав администратора' }, { status: 403 });
+    const data = putSchema.parse(await request.json());
+    if (data.id === session.user.id && ((data.role && data.role !== Role.ADMIN) || data.isActive === false)) {
+      return NextResponse.json({ error: 'Нельзя заблокировать себя или изменить свою роль' }, { status: 403 });
     }
-
-    if (parsedData.resetPassword) {
-      const token = crypto.randomUUID();
-      const updated = await prisma.user.update({
-        where: { id: parsedData.id },
-        data: { passwordHash: null, inviteToken: token } 
+    const current = await prisma.user.findUnique({ where: { id: data.id } });
+    if (!current) return NextResponse.json({ error: 'Пользователь не найден' }, { status: 404 });
+    if (data.reissueInvite && current.passwordHash) return NextResponse.json({ error: 'Для сотрудника используйте сброс пароля' }, { status: 400 });
+    if (data.resetPassword || data.reissueInvite) {
+      const purpose = data.resetPassword || current.invitePurpose === 'RESET' ? 'RESET' : 'INVITE';
+      const { token, ...invitation } = issueInvite(purpose);
+      await prisma.$transaction(async tx => {
+        await tx.user.update({ where: { id: data.id }, data: { ...invitation, passwordHash: null, authVersion: { increment: 1 } } });
+        await tx.authSession.deleteMany({ where: { userId: data.id } });
       });
-      return NextResponse.json({ token });
+      return NextResponse.json({ token, expiresAt: invitation.inviteExpiresAt });
     }
-
-    const updatedUser = await prisma.user.update({
-      where: { id: parsedData.id },
-      data: { 
-        name: parsedData.name || null,
-        email: parsedData.email?.trim() || null,
-        login: parsedData.login, 
-        phone: parsedData.phone || null, 
-        role: parsedData.role 
-      }
+    if (await aliasTaken(data.login, data.phone, data.id)) return NextResponse.json({ error: 'Логин или телефон уже используются' }, { status: 409 });
+    const revoke = data.revokeSessions || (data.role !== undefined && data.role !== current.role)
+      || (data.isActive !== undefined && data.isActive !== current.isActive)
+      || (data.login !== undefined && data.login !== current.login)
+      || (data.phone !== undefined && data.phone !== current.phone);
+    const user = await prisma.$transaction(async tx => {
+      const updated = await tx.user.update({ where: { id: data.id }, data: {
+        ...(data.name !== undefined ? { name: data.name || null } : {}),
+        ...(data.email !== undefined ? { email: data.email || null } : {}),
+        ...(data.login !== undefined ? { login: data.login } : {}),
+        ...(data.phone !== undefined ? { phone: data.phone || null } : {}),
+        ...(data.role !== undefined ? { role: data.role } : {}),
+        ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+        ...(revoke ? { authVersion: { increment: 1 } } : {}),
+      }, select });
+      if (revoke) await tx.authSession.deleteMany({ where: { userId: data.id } });
+      return updated;
     });
-    return NextResponse.json(updatedUser);
-  } catch (error) { 
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Неверные данные', details: error.issues }, { status: 400 });
-    }
-    if ((error as any).code === 'P2002') {
-      return NextResponse.json({ error: 'Такой логин или email уже занят другим пользователем' }, { status: 400 });
-    }
-    return NextResponse.json({ error: 'Ошибка обновления' }, { status: 500 }); 
-  }
+    return NextResponse.json(safeUser(user));
+  } catch (error) { return userError(error); }
 }
-
 export async function DELETE(request: Request) {
-  // ИЗМЕНЕНО: Извлекаем session
   const { error, session } = await requireAuth([Role.ADMIN]);
-  if (error) return error;
-
-  try {
-    const { searchParams } = new URL(request.url);
-    const idParam = searchParams.get('id');
-    
-    // ИЗМЕНЕНО: Прогоняем ID через Zod-схему
-    const { id } = userDeleteSchema.parse({ id: idParam || '' });
-    const currentUserId = session?.user?.id;
-
-    // ЗАЩИТА: Запрещаем администратору удалять самого себя
-    if (id === currentUserId) {
-      return NextResponse.json({ error: 'Невозможно удалить собственную учетную запись' }, { status: 403 });
-    }
-
-    await prisma.user.delete({ where: { id } });
-    return NextResponse.json({ success: true });
-  } catch (error) { 
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Неверные данные', details: error.issues }, { status: 400 });
-    }
-    return NextResponse.json({ error: 'Ошибка удаления' }, { status: 500 }); 
-  }
+  if (error || !session) return error;
+  const id = new URL(request.url).searchParams.get('id');
+  if (!id) return NextResponse.json({ error: 'ID обязателен' }, { status: 400 });
+  if (id === session.user.id) return NextResponse.json({ error: 'Нельзя удалить себя' }, { status: 403 });
+  try { await prisma.user.delete({ where: { id } }); return NextResponse.json({ success: true }); }
+  catch (error) { return userError(error); }
+}
+function userError(error: unknown) {
+  if (error instanceof z.ZodError) return NextResponse.json({ error: 'Неверные данные', details: error.issues }, { status: 400 });
+  if ((error as { code?: string }).code === 'P2002') return NextResponse.json({ error: 'Логин, телефон или email уже заняты' }, { status: 409 });
+  console.error('Ошибка управления пользователем');
+  return NextResponse.json({ error: 'Ошибка управления пользователем' }, { status: 500 });
 }
