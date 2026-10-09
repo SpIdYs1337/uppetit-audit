@@ -48,6 +48,16 @@ const session = { user: { ...actor, mfaRequired: false }, sessionId: 'session' }
 const authenticated = async () => ({ error: null, session });
 function post(url, data) { return new Request(`http://localhost${url}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); }
 
+test('installed NextAuth rejects malformed Bearer headers without throwing', async () => {
+  const { getToken } = await import('next-auth/jwt');
+  for (const value of ['%', '%ZZ', '%E0%A4%A', '%2', 'not-a-token']) {
+    const req = new Request('https://app.example/api/users', {
+      headers: { Authorization: `Bearer ${value}` },
+    });
+    assert.equal(await getToken({ req, secret: 'security-test-secret-not-for-production' }), null);
+  }
+});
+
 test('scrypt passwords round-trip, reject tampering, and preserve legacy bcrypt', async () => {
   const password = 'correct horse battery staple';
   const hash = await security.hashPassword(password);
