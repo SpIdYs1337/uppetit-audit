@@ -102,7 +102,7 @@ export function QuestionCard({ currentQ, currentAnswer, audit }: QuestionCardPro
             placeholder="Оставьте комментарий (обязательно при нарушении)..."
             value={currentAnswer?.comment || ''}
             onChange={(e) => handlers.handleCommentChange(e.target.value)}
-            className="w-full p-4 rounded-2xl bg-gray-50 dark:bg-zinc-950/50 focus:bg-white dark:focus:bg-zinc-950 border border-gray-200 dark:border-zinc-800 text-gray-900 dark:text-zinc-100 focus:border-[#F25C05] dark:focus:border-[#F25C05] text-sm font-medium outline-none resize-none transition-colors"
+            className="w-full p-4 rounded-2xl bg-gray-50 dark:bg-zinc-950/50 focus:bg-white dark:focus:bg-zinc-950 border border-gray-200 dark:border-zinc-800 text-gray-900 dark:text-zinc-100 focus:border-[#F25C05] dark:focus:border-[#F25C05] text-[16px] font-medium outline-none resize-none transition-colors"
             rows={4}
           />
         </div>

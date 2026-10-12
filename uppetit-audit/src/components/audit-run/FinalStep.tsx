@@ -25,7 +25,7 @@ export function FinalStep({ audit }: FinalStepProps) {
                 value={emp}
                 onChange={(e) => audit.handleEmployeeChange(idx, e.target.value)}
                 placeholder="Имя Фамилия"
-                className="min-w-0 flex-1 px-4 py-3 rounded-xl border border-transparent dark:border-zinc-700 bg-gray-50 dark:bg-zinc-950/50 focus:bg-white dark:focus:bg-zinc-950 text-sm outline-none font-bold text-gray-700 dark:text-zinc-300 transition-colors focus:border-[#F25C05] dark:focus:border-[#F25C05]"
+                className="min-w-0 flex-1 px-4 py-3 rounded-xl border border-transparent dark:border-zinc-700 bg-gray-50 dark:bg-zinc-950/50 focus:bg-white dark:focus:bg-zinc-950 text-[16px] outline-none font-bold text-gray-700 dark:text-zinc-300 transition-colors focus:border-[#F25C05] dark:focus:border-[#F25C05]"
               />
               {audit.employees.length > 1 && (
                 <button
@@ -54,7 +54,7 @@ export function FinalStep({ audit }: FinalStepProps) {
           value={audit.generalComment}
           onChange={(e) => audit.setGeneralComment(e.target.value)}
           placeholder="Впечатления от смены..."
-          className="w-full p-4 rounded-2xl bg-gray-50 dark:bg-zinc-950/50 border border-gray-100 dark:border-zinc-700 text-sm font-medium text-gray-900 dark:text-zinc-200 outline-none resize-none focus:bg-white dark:focus:bg-zinc-950 focus:border-[#F25C05] dark:focus:border-[#F25C05] transition-colors"
+          className="w-full p-4 rounded-2xl bg-gray-50 dark:bg-zinc-950/50 border border-gray-100 dark:border-zinc-700 text-[16px] font-medium text-gray-900 dark:text-zinc-200 outline-none resize-none focus:bg-white dark:focus:bg-zinc-950 focus:border-[#F25C05] dark:focus:border-[#F25C05] transition-colors"
           rows={3}
         />
       </div>
