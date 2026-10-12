@@ -58,7 +58,7 @@ export default function LoginPage() {
     <div aria-hidden="true" className="auth-ambient" />
     <div className="auth-theme"><ThemeToggle /></div>
     <section className="auth-card animate-page-fade" aria-labelledby="login-title">
-      <div className="auth-brand"><Image src="/logo3.png" alt="UP PETIT" width={1705} height={500} style={{ width: 220, height: 'auto' }} className="auth-logo-light dark:hidden" priority unoptimized /><Image src="/logo.jpg" alt="UP PETIT" width={1705} height={500} style={{ width: 220, height: 'auto' }} className="auth-logo-dark hidden dark:block" priority unoptimized /><p className="auth-brand-caption">Аудит качества</p></div>
+      <div className="auth-brand"><Image src="/logo3.png" alt="UPPETIT" width={1705} height={500} style={{ width: 220, height: 'auto' }} className="auth-logo-light dark:hidden" priority unoptimized /><Image src="/logo.jpg" alt="UPPETIT" width={1705} height={500} style={{ width: 220, height: 'auto' }} className="auth-logo-dark hidden dark:block" priority unoptimized /><p className="auth-brand-caption">Аудит качества</p></div>
       <div key={challenge ? 'mfa' : 'password'} className="animate-page-fade">
         {challenge && <div className="auth-mfa-mark"><span className="auth-shield"><Icon name="shield" className="h-6 w-6" /></span><span>Подтверждение личности</span></div>}
         <h1 id="login-title" className="auth-title">{challenge ? 'Подтверждение входа' : 'Вход в систему'}</h1>

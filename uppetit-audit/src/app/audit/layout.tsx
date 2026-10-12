@@ -26,7 +26,7 @@ export default function AuditLayout({ children }: { children: React.ReactNode })
   }
   return <div className="min-h-dvh bg-[var(--background)] text-[var(--foreground)] relative">
     <div className="fixed inset-0 pointer-events-none bg-dotted opacity-60" />
-    {!running && <header className="relative z-20 border-b border-[var(--border)] bg-[var(--surface)]"><div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex justify-between items-center gap-3"><Link href="/audit" aria-label="UP PETIT — главная"><Brand /></Link><div className="flex items-center gap-2"><ThemeToggle /><Button variant="ghost" className="!p-2" aria-label="Выйти" title="Выйти" onClick={() => void secureSignOut()}><Icon name="logout" /></Button></div></div><div className="hidden lg:block max-w-7xl mx-auto px-4 pb-2">{nav()}</div></header>}
+    {!running && <header className="relative z-20 border-b border-[var(--border)] bg-[var(--surface)]"><div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex justify-between items-center gap-3"><Link href="/audit" aria-label="UPPETIT — главная"><Brand /></Link><div className="flex items-center gap-2"><ThemeToggle /><Button variant="ghost" className="!p-2" aria-label="Выйти" title="Выйти" onClick={() => void secureSignOut()}><Icon name="logout" /></Button></div></div><div className="hidden lg:block max-w-7xl mx-auto px-4 pb-2">{nav()}</div></header>}
     <main key={pathname} className={'relative z-10 max-w-7xl mx-auto min-w-0 animate-page-fade ' + (running ? '' : 'pb-24 lg:pb-6')}>{children}</main>
     {!running && <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-[var(--border)] bg-[var(--surface)] pb-[env(safe-area-inset-bottom)]">{nav(true)}</div>}
   </div>;

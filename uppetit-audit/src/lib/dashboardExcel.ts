@@ -4,7 +4,7 @@ import { type loadDashboardReport, type DashboardFilters } from '@/lib/dashboard
 
 export async function dashboardExcel(source: Awaited<ReturnType<typeof loadDashboardReport>>, filters: DashboardFilters) {
   const { report, audits, allRecords } = source;
-  const workbook = new ExcelJS.Workbook(); workbook.creator = 'UP PETIT';
+  const workbook = new ExcelJS.Workbook(); workbook.creator = 'UPPETIT';
   const sheet = (name: string, columns: { header: string; key: string; width: number }[], rows: object[]) => {
     const page = workbook.addWorksheet(name); page.columns = columns; page.views = [{ state: 'frozen', ySplit: 1 }];
     rows.forEach(row => page.addRow(row));

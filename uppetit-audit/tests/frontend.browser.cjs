@@ -1,4 +1,4 @@
-// Real components and hooks in Chrome, with fixture APIs and no .env/database access.
+// Actual layouts, components and hooks in Chromium/WebKit, with fixture APIs and no .env/database access.
 // Dependencies live outside the application: npm install --prefix %TEMP%/uppetit-frontend-tools playwright esbuild
 const fs = require('node:fs');
 const path = require('node:path');
@@ -9,7 +9,8 @@ const { createRequire } = require('node:module');
 const root = path.resolve(__dirname, '..');
 const localRequire = createRequire(path.join(root, 'package.json'));
 const toolRequire = createRequire(path.join(process.env.FRONTEND_TEST_TOOLS || path.join(os.tmpdir(), 'uppetit-frontend-tools'), 'package.json'));
-const { chromium } = toolRequire('playwright');
+const { chromium, webkit } = toolRequire('playwright');
+const engine = process.env.FRONTEND_TEST_ENGINE || 'chromium';
 const esbuild = toolRequire('esbuild');
 const preview = path.join(root, '.preview', 'frontend');
 fs.mkdirSync(preview, { recursive: true });
@@ -20,21 +21,26 @@ async function main() {
     import { ThemeProvider } from 'next-themes'; import { ThemeToggle } from '@/components/ThemeToggle';
     import { AuditHistoryView } from '@/components/audits/AuditHistoryView';
     import AdminDashboard from '@/app/admin/page'; import TuDashboard from '@/app/audit/dashboard/page';
+    import AdminLayout from '@/app/admin/layout'; import AuditLayout from '@/app/audit/layout';
+    import Guide from '@/app/audit/guide/page';
+    const guide = location.pathname.includes('guide');
     const dashboard = location.pathname.includes('dashboard');
     const auditor = location.pathname.includes('auditor');
     createRoot(document.getElementById('root')).render(<ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-      <div className="mx-auto max-w-7xl px-4 pt-4 flex items-center justify-between"><span className="text-sm font-bold">UPPETIT · Локальная проверка интерфейса</span><ThemeToggle /></div>
-      {dashboard ? location.pathname.includes('tu-') ? <TuDashboard /> : <AdminDashboard /> : <AuditHistoryView admin={!auditor} />}
+      {!dashboard && !guide && <div className="mx-auto max-w-7xl px-4 pt-4 flex items-center justify-between"><span className="text-sm font-bold">UPPETIT · Локальная проверка интерфейса</span><ThemeToggle /></div>}
+      {guide ? <AuditLayout><Guide /></AuditLayout> : dashboard ? location.pathname.includes('tu-') ? <AuditLayout><TuDashboard /></AuditLayout> : <AdminLayout><AdminDashboard /></AdminLayout> : <AuditHistoryView admin={!auditor} />}
     </ThemeProvider>);`;
   const result = await esbuild.build({ stdin: { contents: app, resolveDir: root, loader: 'tsx' }, bundle: true, write: false,
     absWorkingDir: root, tsconfig: path.join(root, 'tsconfig.json'), jsx: 'automatic', nodePaths: [path.join(root, 'node_modules')],
     define: { 'process.env.NODE_ENV': '"development"' },
     plugins: [{ name: 'fixture-framework', setup(build) {
-      build.onResolve({ filter: /^(next\/image|next\/link|next-auth\/react)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
-      build.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ resolveDir: root, loader: 'jsx', contents: args.path === 'next-auth/react'
-        ? `export function useSession(){return {status:'authenticated',data:{user:{id:'tester',role:new URLSearchParams(location.search).get('role')||'ADMIN'}}}}`
+      build.onResolve({ filter: /^(next\/image|next\/link|next\/navigation|next-auth\/react|.*\/PushSubscribe)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
+      build.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ resolveDir: root, loader: 'jsx', contents: args.path.includes('PushSubscribe') ? `export default function Push(){return null;}`
+        : args.path === 'next/navigation' ? `export const usePathname=()=>location.pathname.includes('admin-dashboard')?'/admin':location.pathname.includes('tu-dashboard')?'/audit/dashboard':location.pathname.includes('guide')?'/audit/guide':location.pathname; export const useRouter=()=>({push:p=>window.__navigation=p,replace:p=>window.__navigation=p});`
+        : args.path === 'next-auth/react'
+        ? `export function useSession(){return {status:'authenticated',data:{user:{id:'tester',role:new URLSearchParams(location.search).get('role')||'ADMIN'}}}}; export async function signOut(){}; export async function getSession(){return {user:{id:"tester",role:"ADMIN"}}}`
         : args.path === 'next/link' ? `import React from 'react'; export default function Link(p){return <a {...p}/>}`
-          : `import React from 'react'; export default function Image({src,alt,className,width,height,onClick}){return <img src={src} alt={alt} className={className} width={width} height={height} onClick={onClick}/>} ` }));
+          : `import React from 'react'; export default function Image({src,alt,className,width,height,onClick,style}){return <img src={src} alt={alt} className={className} width={width} height={height} onClick={onClick} style={style}/>} ` }));
     } }],
   });
   const css = await localRequire('postcss')([localRequire('@tailwindcss/postcss')({ base: root })]).process(fs.readFileSync(path.join(root, 'src/app/globals.css'), 'utf8'), { from: path.join(root, 'src/app/globals.css') });
@@ -51,6 +57,7 @@ async function main() {
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     const json = (body, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
+    if (url.pathname === '/logo.jpg' || url.pathname === '/logo3.png') { res.setHeader('Content-Type', 'image/' + (url.pathname.endsWith('png') ? 'png' : 'jpeg')); return res.end(fs.readFileSync(path.join(root, 'public', url.pathname.slice(1)))); }
     if (url.pathname === '/bundle.js') { res.setHeader('Content-Type', 'text/javascript'); return res.end(result.outputFiles[0].contents); }
     if (url.pathname === '/style.css') { res.setHeader('Content-Type', 'text/css'); return res.end(css.css); }
     if (url.pathname.startsWith('/api/')) {
@@ -79,9 +86,9 @@ async function main() {
         await new Promise(resolve => setTimeout(resolve, count === 111 ? 350 : 30));
         const input = Array.from({ length: count }, (_, i) => {
           const base = audits[i], mode = i % 3;
-          const items = [{ id: 'hygiene', text: 'Чистота оборудования', zone: 'Кухня', score: 50, isCritical: true, photoRequirement: 'VIOLATION' }, { id: 'service', text: 'Приветствие гостя', zone: 'Сервис', score: 30, isCritical: false, photoRequirement: 'OPTIONAL' }, { id: 'display', text: 'Витрина и выкладка', zone: 'Зал', score: 20, isCritical: false, photoRequirement: 'VIOLATION' }];
+          const items = [{ id: 'hygiene', text: 'Чистота оборудования', zone: 'Кухня', score: 50, isCritical: true, photoRequirement: 'VIOLATION' }, { id: 'service', text: 'Приветствие гостя', zone: 'Сервис', score: 30, isCritical: false, photoRequirement: 'OPTIONAL' }, { id: 'display', text: 'Витрина и выкладка ' + 'ПодробноеОписаниеПункта'.repeat(10), zone: 'Зал', score: 20, isCritical: false, photoRequirement: 'VIOLATION' }];
           return { ...base, date: new Date(Date.UTC(2026, 9, 1 + i % 10, 9)), locationId: `loc-${i % 8}`, locationName: `Точка ${i % 8 + 1}`, score: mode === 0 ? 100 : mode === 1 ? 80 : 30,
-            location: { name: `Точка ${i % 8 + 1}`, address: 'ул. Торговая, ' + (i % 8 + 1), tus: [{ id: 'tu', name: 'Анна Управляющая', login: 'manager' }] },
+            location: { name: `Точка ${i % 8 + 1}`, address: i % 8 === 7 ? 'Длинный адрес: ' + 'ОченьДлинноеНазваниеБезПробелов'.repeat(10) : 'ул. Торговая, ' + (i % 8 + 1), tus: [{ id: 'tu', name: 'Анна Управляющая', login: 'manager' }] },
             user: { id: 'tester', name: 'Иван Проверяющий', login: 'reviewer' },
             checklistVersion: { checklistId: 'checklist', version: 1, checklist: { title: 'Качество обслуживания', redThreshold: 70, yellowThreshold: 90 }, items },
             answers: items.map((item, n) => ({ id: `answer-${i}-${n}`, itemId: item.id, question: item.text, zone: item.zone, isOk: mode === 0 || n === 1 || (mode === 1 && n === 0), penalty: mode === 0 || n === 1 || (mode === 1 && n === 0) ? 0 : item.score, comment: 'Нужно исправить', photos: n === 0 ? [photo] : [] })) };
@@ -101,8 +108,8 @@ async function main() {
   const url = `http://127.0.0.1:${server.address().port}`;
   let browser;
   try {
-    browser = await chromium.launch({ headless: true, executablePath: process.env.FRONTEND_TEST_BROWSER || 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
-    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, colorScheme: 'dark', timezoneId: 'Europe/Moscow' });
+    browser = engine === 'webkit' ? await webkit.launch({ headless: true }) : await chromium.launch({ headless: true, executablePath: process.env.FRONTEND_TEST_BROWSER || 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, colorScheme: 'dark', timezoneId: 'Europe/Moscow', hasTouch: engine === 'webkit' });
     const page = await context.newPage(); const errors = []; page.on('pageerror', error => errors.push(error.message));
     await page.goto(url + '/history'); await page.getByText('917', { exact: true }).first().waitFor();
     assert.equal(await page.getByRole('switch', { name: 'Тёмная тема' }).getAttribute('aria-checked'), 'true');
@@ -183,7 +190,32 @@ async function main() {
         assert.ok(box.x >= -1 && box.x + box.width <= width + 1, 'Dashboard filter dropdown must fit the viewport at ' + width);
         await page.keyboard.press('Escape'); assert.equal(await filter.evaluate(node => node.open), false);
       }
-      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Dashboard must fit ' + width);
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate(theme => localStorage.setItem('theme', theme), theme);
+        if (await page.evaluate(theme => document.documentElement.classList.contains('dark') !== (theme === 'dark'), theme)) await page.getByRole('switch').click();
+        for (const tab of ['Точки', 'Нарушения', 'Проверки', 'Обзор']) {
+          await sections.getByRole('button', { name: new RegExp('^' + tab) }).click();
+          assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), engine + ': ' + tab + ' must fit ' + width + ' in ' + theme);
+          if (tab !== 'Обзор') {
+            assert.equal(await page.locator('.dashboard-mobile-list').isVisible(), width < 768);
+            assert.equal(await page.locator('.dashboard-table-desktop').isVisible(), width >= 768);
+          }
+          for (const input of await dates.all()) {
+            const box = await input.boundingBox();
+            assert.ok(box.x >= 0 && box.x + box.width <= width, 'Date input must fit ' + width);
+          }
+          if (width === 390 && theme === 'dark') {
+            if (tab !== 'Обзор') {
+              const cards = page.locator('.dashboard-mobile-list');
+              await cards.getByRole('button').first().click();
+              await page.getByRole('dialog', { name: 'Подробности проверки', exact: true }).getByText('Сотрудник смены', { exact: true }).waitFor();
+              await page.keyboard.press('Escape');
+            }
+            await sections.scrollIntoViewIfNeeded();
+            await page.screenshot({ path: path.join(preview, engine + '-mobile-' + tab + '.png') });
+          }
+        }
+      }
     }
     failing = true; await page.getByRole('button', { name: 'Обновить', exact: true }).click(); await page.getByRole('alert').waitFor();
     assert.equal(await page.getByRole('button', { name: /Выгрузить в Excel/ }).isDisabled(), true);
@@ -193,8 +225,28 @@ async function main() {
     if (!(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))) console.log('overflow', await page.evaluate(() => [...document.querySelectorAll('body *')].filter(e => { const r=e.getBoundingClientRect(); return r.right > innerWidth+1 && r.width > 0; }).slice(0,12).map(e=>({tag:e.tagName,class:e.className,text:e.textContent.slice(0,65),width:e.getBoundingClientRect().width,right:e.getBoundingClientRect().right}))));
     await page.screenshot({path:path.join(preview,'dashboard-mobile.png'),fullPage:true});
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Mobile dashboard must not overflow');
+    for (const tab of ['Точки', 'Нарушения', 'Проверки']) {
+      await page.getByRole('navigation', { name: 'Разделы аналитики' }).getByRole('button', { name: new RegExp('^' + tab) }).click();
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'TU mobile ' + tab + ' must fit');
+    }
+    await page.getByRole('button', { name: /^Открыть аудит/ }).first().click();
+    await page.getByRole('dialog', { name: 'Подробности проверки', exact: true }).getByText('Сотрудник смены', { exact: true }).waitFor();
+    await page.keyboard.press('Escape');
+    await page.goto(url + '/audit-guide?role=AUDITOR');
+    await page.getByRole('heading', { name: 'Как пользоваться приложением' }).waitFor();
+    assert.equal(await page.locator('section[id^="guide-"]').count(), 9);
+    assert.equal(await page.getByRole('link', { name: 'Открыть аналитику' }).count(), 0);
+    assert.equal(await page.getByText(/каждую секунду|UP PETIT/).count(), 0);
+    for (const width of [320, 390, 768, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Guide must fit ' + width);
+    }
+    await page.goto(url + '/audit-guide?role=TU');
+    assert.equal(await page.getByRole('link', { name: 'Открыть аналитику' }).getAttribute('href'), '/audit/dashboard');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: path.join(preview, engine + '-guide-mobile.png'), fullPage: true });
     assert.deepEqual(errors, []);
-    console.log('OK: Chrome — themes, history of 917 audits, dashboard metrics, sections/coverage details, violations, nested photo/Escape, full paging, filtered Excel request, request race, API error, dropdowns at 320–1440px, TU dashboard.');
+    console.log('OK: ' + engine + ' — actual layouts, mobile tabs and guide, themes, history of 917 audits, dashboard metrics, sections/coverage details, violations, nested photo/Escape, full paging, filtered Excel request, request race, API error, dropdowns at 320–1440px, TU dashboard.');
     await context.close();
   } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
 }

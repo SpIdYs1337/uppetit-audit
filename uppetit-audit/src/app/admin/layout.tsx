@@ -41,7 +41,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {collapsed && <Button variant="ghost" className="mx-3 !p-2" onClick={() => setPreference('expanded')} title="Развернуть меню" aria-label="Развернуть меню"><Icon name="panel" /></Button>}
       <div className="px-3 py-3"><Link className={'ui-button ui-button-primary w-full ' + (collapsed ? '!p-2' : '')} href="/audit/new?backTo=/admin/audits" title="Провести аудит"><Icon name="plus" /><span className={collapsed ? 'sr-only' : ''}>Провести аудит</span></Link></div>
       <div className="flex-1 overflow-y-auto px-3">{navigation(collapsed)}</div>
-      <div className="border-t border-[var(--border)] p-3 space-y-3">{!collapsed && <PushSubscribe />}<div className={'flex items-center gap-2 ' + (collapsed ? 'flex-col' : 'justify-between')}><ThemeToggle /><Button variant="ghost" className="!p-2" onClick={() => void secureSignOut()} title="Выйти" aria-label="Выйти"><Icon name="logout" /></Button></div>{!collapsed && <p className="ui-muted px-1 text-[11px]">UP PETIT · {APP_VERSION}</p>}</div>
+      <div className="border-t border-[var(--border)] p-3 space-y-3">{!collapsed && <PushSubscribe />}<div className={'flex items-center gap-2 ' + (collapsed ? 'flex-col' : 'justify-between')}><ThemeToggle /><Button variant="ghost" className="!p-2" onClick={() => void secureSignOut()} title="Выйти" aria-label="Выйти"><Icon name="logout" /></Button></div>{!collapsed && <p className="ui-muted px-1 text-[11px]">UPPETIT · {APP_VERSION}</p>}</div>
     </aside>
     <div className="min-w-0 flex-1 relative z-10">
       <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface)]/95 px-4 sm:px-6 backdrop-blur">
