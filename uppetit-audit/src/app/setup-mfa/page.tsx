@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { secureSignOut } from '@/lib/clientSignOut';
 import { MfaEnrollmentQr } from '@/components/MfaEnrollmentQr';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { normalizeOneTimeCode } from '@/lib/oneTimeCode';
 
 export default function SetupMfaPage() {
@@ -42,44 +43,44 @@ export default function SetupMfaPage() {
   }
 
   if (session?.user.role !== 'ADMIN') return <p className="p-8">Настройка доступна администраторам.</p>;
-  return <main className="min-h-screen bg-zinc-950 text-white flex items-center justify-center p-6">
-    <section className="w-full max-w-lg rounded-3xl border border-zinc-800 p-6 space-y-5">
+  return <main className="min-h-screen bg-dotted bg-[var(--background)] text-[var(--foreground)] flex items-center justify-center p-4 sm:p-6 relative">
+    <section className="ui-panel w-full max-w-lg p-5 sm:p-6 space-y-5"><div className="flex justify-end"><ThemeToggle /></div>
       <h1 className="text-2xl font-bold">Двухфакторный вход</h1>
       {recoveryCodes.length ? <>
         <p>Защита включена. Сохраните резервные коды: они понадобятся при потере телефона. Каждый код действует один раз и показывается только сейчас.</p>
-        <div className="grid grid-cols-2 gap-2 font-mono text-sm select-all">{recoveryCodes.map(value => <code key={value}>{value}</code>)}</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-sm select-all">{recoveryCodes.map(value => <code key={value}>{value}</code>)}</div>
         <button className="underline" onClick={downloadCodes}>Скачать коды</button>
         <label className="flex gap-3"><input type="checkbox" checked={saved} onChange={e => setSaved(e.target.checked)} />Я сохранил коды в безопасном месте</label>
-        <button disabled={!saved || busy} className="w-full bg-orange-600 rounded-xl p-3 disabled:opacity-40" onClick={async () => {
+        <button disabled={!saved || busy} className="w-full bg-orange-600 text-white rounded-xl p-3 disabled:opacity-40" onClick={async () => {
           setBusy(true);
           try { await update(); window.location.replace('/admin/users'); }
           catch { setError('Не удалось обновить сессию. Сохраните коды и войдите заново.'); setBusy(false); }
         }}>Продолжить</button>
       </> : <>
         <p>{session.user.mfaRequired ? 'Для доступа администратора требуется приложение-аутентификатор.' : 'Здесь можно заменить аутентификатор и получить новые резервные коды.'}</p>
-        <label className="block">Текущий пароль<input autoComplete="current-password" type="password" maxLength={128} value={password} onChange={e => setPassword(e.target.value)} className="mt-2 w-full bg-zinc-900 border border-zinc-700 rounded-xl p-3" /></label>
+        <label className="block">Текущий пароль<input autoComplete="current-password" type="password" maxLength={128} value={password} onChange={e => setPassword(e.target.value)} className="mt-2 w-full bg-[var(--surface-muted)] border border-[var(--border)] rounded-xl p-3" /></label>
         {!secret && <>
-          {!session.user.mfaRequired && <label className="block">Код текущего аутентификатора или резервный код<input autoComplete="one-time-code" maxLength={32} value={code} onChange={e => setCode(normalizeOneTimeCode(e.target.value))} className="mt-2 w-full bg-zinc-900 rounded-xl p-3" /></label>}
-          <button disabled={busy || !password} className="w-full bg-orange-600 rounded-xl p-3 disabled:opacity-40" onClick={() => submit('start')}>Начать настройку</button>
+          {!session.user.mfaRequired && <label className="block">Код текущего аутентификатора или резервный код<input autoComplete="one-time-code" maxLength={32} value={code} onChange={e => setCode(normalizeOneTimeCode(e.target.value))} className="mt-2 w-full bg-[var(--surface-muted)] rounded-xl p-3" /></label>}
+          <button disabled={busy || !password} className="w-full bg-orange-600 text-white rounded-xl p-3 disabled:opacity-40" onClick={() => submit('start')}>Начать настройку</button>
         </>}
         {secret && <>
           <p>В приложении-аутентификаторе нажмите «Добавить аккаунт» → «Сканировать QR-код» и наведите камеру на код ниже.</p>
           <MfaEnrollmentQr secret={secret} issuer={issuer} account={account} />
           <p className="text-center text-sm break-all">{issuer} / {account}</p>
-          <details className="rounded-xl border border-zinc-700 p-3">
+          <details className="rounded-xl border border-[var(--border)] p-3">
             <summary className="cursor-pointer">Не получается отсканировать? Ввести ключ вручную</summary>
-            <p className="mt-3 text-sm text-zinc-400">Название аккаунта: {issuer} / {account}. Тип кода: по времени (TOTP).</p>
-            <code className="mt-3 block break-all select-all bg-zinc-900 rounded-xl p-3">{secret}</code>
+            <p className="mt-3 text-sm ui-muted">Название аккаунта: {issuer} / {account}. Тип кода: по времени (TOTP).</p>
+            <code className="mt-3 block break-all select-all bg-[var(--surface-muted)] rounded-xl p-3">{secret}</code>
           </details>
-          <p className="text-sm text-zinc-400">Не передавайте QR-код и секретный ключ другим людям. Настройка действует 15 минут.</p>
-          <label className="block">Код нового аутентификатора<input autoComplete="one-time-code" inputMode="numeric" maxLength={32} value={code} onChange={e => setCode(normalizeOneTimeCode(e.target.value))} className="mt-2 w-full bg-zinc-900 rounded-xl p-3" /></label>
-          <button disabled={busy || code.length !== 6 || !password} className="w-full bg-orange-600 rounded-xl p-3 disabled:opacity-40" onClick={() => submit('confirm')}>Подтвердить</button>
+          <p className="text-sm ui-muted">Не передавайте QR-код и секретный ключ другим людям. Настройка действует 15 минут.</p>
+          <label className="block">Код нового аутентификатора<input autoComplete="one-time-code" inputMode="numeric" maxLength={32} value={code} onChange={e => setCode(normalizeOneTimeCode(e.target.value))} className="mt-2 w-full bg-[var(--surface-muted)] rounded-xl p-3" /></label>
+          <button disabled={busy || code.length !== 6 || !password} className="w-full bg-orange-600 text-white rounded-xl p-3 disabled:opacity-40" onClick={() => submit('confirm')}>Подтвердить</button>
           <button disabled={busy} onClick={() => { setSecret(''); setCode(''); }} className="underline">Начать заново</button>
         </>}
       </>}
-      {error && <p role="alert" className="text-red-400">{error}</p>}
-      {error && codeErrorTime && <p className="text-sm text-zinc-400">Время сервера при проверке: {new Date(codeErrorTime).toLocaleString('ru-RU')}. Сверьте с датой и временем на телефоне.</p>}
-      <button onClick={() => secureSignOut()} className="text-zinc-400 underline">Выйти</button>
+      {error && <p role="alert" className="text-red-600 dark:text-red-400">{error}</p>}
+      {error && codeErrorTime && <p className="text-sm ui-muted">Время сервера при проверке: {new Date(codeErrorTime).toLocaleString('ru-RU')}. Сверьте с датой и временем на телефоне.</p>}
+      <button onClick={() => secureSignOut()} className="ui-muted underline">Выйти</button>
     </section>
   </main>;
 }

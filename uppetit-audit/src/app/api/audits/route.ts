@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/requireAuth';
 import { z } from 'zod';
-import { Role } from '@prisma/client'; 
-import { auditAccessWhere, locationAccessWhere, calculateAudit } from '@/lib/accessControl';
+import { Role } from '@prisma/client';
+import { locationAccessWhere, calculateAudit } from '@/lib/accessControl';
 import { isAuditPhotoUrl } from '@/lib/photoPolicy';
 import webpush from 'web-push';
 import { s3Client } from '@/lib/s3'; // <-- Единый клиент S3
+import { filtersFromParams, historyWhere, historyInclude, formatHistoryAudit } from '@/lib/auditHistory';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +28,7 @@ function getS3Key(urlStr: string): string | null {
     } else {
       pathPart = decodeURIComponent(urlStr);
     }
-    
+
     if (pathPart.startsWith('/')) {
       pathPart = pathPart.substring(1);
     }
@@ -87,10 +88,10 @@ export async function POST(req: Request) {
       prisma.user.findUnique({ where: { id: session!.user.id }, select: { login: true, name: true } }),
       prisma.location.findFirst({
         where: { id: data.locationId, ...locationAccessWhere(session!.user) },
-        include: { 
+        include: {
           tu: { select: { id: true, name: true, login: true } },
-          tus: { select: { id: true, name: true, login: true } } 
-        } 
+          tus: { select: { id: true, name: true, login: true } }
+        }
       })
     ]);
     if (!location || !location.isActive) return NextResponse.json({ error: 'Точка недоступна' }, { status: 403 });
@@ -114,14 +115,14 @@ export async function POST(req: Request) {
         userId: session!.user.id,
         locationId: data.locationId,
         auditorName: actingAuditorName,
-        locationName: location?.name || 'Неизвестная точка', 
-        tuName: actingTuName, 
-        checklistVersionId: activeVersion.id, 
+        locationName: location?.name || 'Неизвестная точка',
+        tuName: actingTuName,
+        checklistVersionId: activeVersion.id,
         score: calculated.score,
         maxScore: calculated.maxScore,
         shiftEmployees: data.shiftEmployees,
         generalComment: data.generalComment,
-        
+
         answers: {
           create: calculated.answers
         }
@@ -175,9 +176,9 @@ export async function POST(req: Request) {
           try {
             const subscriptionObj = JSON.parse(targetUser.pushSubscription);
             await webpush.sendNotification(subscriptionObj, notificationPayload);
-          } catch (pushSendErr: any) {
+          } catch (pushSendErr) {
             console.error(`Ошибка отправки пуша пользователю ${targetUser.id}:`, pushSendErr);
-            if (pushSendErr.statusCode === 410 || pushSendErr.statusCode === 404) {
+            if (typeof pushSendErr === 'object' && pushSendErr !== null && 'statusCode' in pushSendErr && (pushSendErr.statusCode === 410 || pushSendErr.statusCode === 404)) {
               await prisma.user.update({
                 where: { id: targetUser.id },
                 data: { pushSubscription: null }
@@ -200,56 +201,43 @@ export async function POST(req: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const { error, session } = await requireAuth();
   if (error) return error;
 
   try {
-    const whereClause = auditAccessWhere(session!.user);
+    const params = new URL(req.url).searchParams;
+    const paginated = params.has('page');
+    const page = Number(params.get('page') ?? 1);
+    const pageSize = Number(params.get('pageSize') ?? 25);
+    if (!Number.isSafeInteger(page) || page < 1 || page > 1_000_000 || ![10, 25, 50, 100].includes(pageSize)) {
+      return NextResponse.json({ error: 'Некорректная страница истории' }, { status: 400 });
+    }
+    const filters = filtersFromParams(params);
+    let whereClause;
+    try { whereClause = historyWhere(session!.user, filters); }
+    catch { return NextResponse.json({ error: 'Проверьте выбранный период' }, { status: 400 }); }
+    const sort = params.get('sort') ?? 'desc';
+    if (!['asc', 'desc'].includes(sort)) return NextResponse.json({ error: 'Некорректная сортировка' }, { status: 400 });
 
-    const audits = await prisma.audit.findMany({
-      where: whereClause, 
-      take: 200, 
-      include: {
-        user: { select: { id: true, login: true, name: true } },
-        location: { 
-          select: { 
-            id: true, 
-            name: true,
-            tus: { select: { id: true, name: true, login: true } } 
-          } 
-        },
-        checklistVersion: {
-          include: {
-            checklist: { select: { id: true, title: true } }
-          }
-        },
-        answers: true
-      },
-      orderBy: { date: 'desc' }
-    });
-
-    const formattedAudits = audits.map(audit => ({
-      ...audit,
-      location: audit.location ? audit.location : { id: 'deleted', name: audit.locationName || 'Удаленная точка', tus: [] },
-      
-      user: audit.user ? {
-        id: audit.user.id,
-        login: audit.user.name || audit.user.login
-      } : { 
-        id: 'deleted', 
-        login: audit.auditorName || 'Удаленный аудитор' 
-      },
-      
-      checklist: {
-        id: audit.checklistVersion.checklist.id,
-        title: audit.checklistVersion.checklist.title,
-        version: audit.checklistVersion.version
-      }
-    }));
-
-    return NextResponse.json(formattedAudits);
+    // Array responses remain compatible with older installed PWA clients.
+    if (!paginated) {
+      const audits = await prisma.audit.findMany({ where: whereClause, take: 200, include: historyInclude, orderBy: [{ date: 'desc' }, { id: 'desc' }] });
+      return NextResponse.json(audits.map(formatHistoryAudit), { headers: { 'Cache-Control': 'no-store' } });
+    }
+    const result = await prisma.$transaction(async tx => {
+      const total = await tx.audit.count({ where: whereClause });
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const effectivePage = Math.min(page, totalPages);
+      const audits = await tx.audit.findMany({
+        where: whereClause, take: pageSize, skip: (effectivePage - 1) * pageSize,
+        include: historyInclude, orderBy: [{ date: sort as 'asc' | 'desc' }, { id: sort as 'asc' | 'desc' }],
+      });
+      return { audits: audits.map(formatHistoryAudit), total, page: effectivePage, pageSize, totalPages };
+    }, { isolationLevel: 'RepeatableRead' });
+    return NextResponse.json(result, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
+    if (err instanceof z.ZodError) return NextResponse.json({ error: 'Некорректные фильтры истории' }, { status: 400 });
     console.error('Ошибка GET /api/audits:', err);
     return NextResponse.json({ error: 'Ошибка загрузки аудитов' }, { status: 500 });
   }
@@ -265,7 +253,7 @@ export async function DELETE(req: Request) {
       id: searchParams.get('id'),
       clearAll: searchParams.get('clearAll')
     });
-    
+
     const bucketName = (process.env.S3_BUCKET_NAME || '').trim();
     const objectsToDelete: string[] = [];
 
@@ -284,7 +272,7 @@ export async function DELETE(req: Request) {
         await Promise.all(objectsToDelete.map(async (key) => {
           try {
             await s3Client.deleteObject({ Bucket: bucketName, Key: key }).promise();
-          } catch (e) {
+          } catch {
              // Игнорируем ошибки при массовой очистке
           }
         }));
@@ -328,11 +316,11 @@ export async function DELETE(req: Request) {
       }
 
       await prisma.audit.delete({ where: { id: queryData.id } });
-      
+
     } else {
       return NextResponse.json({ error: 'Нет ID для удаления' }, { status: 400 });
     }
-    
+
     return NextResponse.json({ success: true, deletedPhotosCount: objectsToDelete.length });
   } catch (err) {
     if (err instanceof z.ZodError) {

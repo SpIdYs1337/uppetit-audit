@@ -113,6 +113,7 @@ test('MFA setup preserves all six digits when pasting formatted authenticator co
     'next-auth/react': { useSession: () => ({ data: { user: { role: 'ADMIN', mfaRequired: true } }, update: async () => {} }) },
     '@/lib/clientSignOut': { secureSignOut() {} },
     '@/components/MfaEnrollmentQr': { MfaEnrollmentQr() {} },
+    '@/components/ThemeToggle': { ThemeToggle() {} },
   })('src/app/setup-mfa/page.tsx').default;
   function render() { cursor = 0; return page(); }
   function find(node, predicate) {

@@ -4,16 +4,12 @@ import { z } from 'zod';
 import { requireAuth } from '@/lib/requireAuth';
 import { Role } from '@prisma/client'; 
 import { locationAccessWhere, auditAccessWhere } from '@/lib/accessControl';
+import { locationCreateSchema, validateLocationPeriod, validateManagers, LocationInputError } from '@/lib/locationManagement';
 
 export const dynamic = 'force-dynamic';
 
 // --- ZOD СХЕМЫ ВАЛИДАЦИИ ---
-const locationPostSchema = z.object({
-  name: z.string().min(1, 'Название обязательно'),
-  address: z.string().optional().nullable(),
-  tuIds: z.array(z.string()).optional().default([]),
-  isActive: z.boolean().optional().default(true),
-});
+const locationPostSchema = locationCreateSchema;
 
 const locationDeleteSchema = z.object({
   id: z.string().min(1, 'ID обязателен'),
@@ -55,12 +51,16 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const parsedData = locationPostSchema.parse(body);
-
-    const newLocation = await prisma.location.create({
+    validateLocationPeriod(parsedData.activeFrom, parsedData.activeTo);
+    const newLocation = await prisma.$transaction(async tx => {
+      await validateManagers(tx, parsedData.tuIds);
+      return tx.location.create({
       data: {
         name: parsedData.name,
         address: parsedData.address,
         isActive: parsedData.isActive,
+        activeFrom: parsedData.activeFrom ? new Date(parsedData.activeFrom) : null,
+        activeTo: parsedData.activeTo ? new Date(parsedData.activeTo) : null,
         // Атомарно подключаем всех переданных ТУ через промежуточную таблицу
         ...(parsedData.tuIds.length > 0 ? {
           tus: {
@@ -71,10 +71,12 @@ export async function POST(req: Request) {
       include: {
         tus: { select: { id: true, name: true, login: true } }
       }
+      });
     });
 
     return NextResponse.json(newLocation);
   } catch (err) {
+    if (err instanceof LocationInputError) return NextResponse.json({ error: err.message }, { status: 400 });
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: 'Неверные данные формы', details: err.issues }, { status: 400 });
     }

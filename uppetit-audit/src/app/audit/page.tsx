@@ -2,150 +2,64 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import useSWR from 'swr';
 import { useSession } from 'next-auth/react';
-import { secureSignOut } from '@/lib/clientSignOut';
 import { readDraft } from '@/lib/draftStorage';
-import Image from 'next/image';
+import { fetcher } from '@/lib/fetcher';
+import { localDateInput, serializeReportRange } from '@/lib/reportDates';
+import { locationIsAvailable } from '@/lib/locationAvailability';
+import type { EnrichedLocation } from '@/hooks/useLocations';
+import { Badge, EmptyState, Icon, LoadingState, Notice, SearchInput } from '@/components/ui';
 import PushSubscribe from '@/components/PushSubscribe';
-import { ThemeToggle } from '@/components/ThemeToggle';
 
-export default function AuditDashboard() {
+type Overview = { total: number; periodCount: number; remarks: number; avgPct: number | null; measured: number;
+  recent: { id: string; date: string; score: number; maxScore: number | null; locationName: string | null; location: { name: string } | null; checklistVersion: { checklist: { title: string } }; _count: { answers: number } }[];
+  plans: { id: string; date: string; locationId: string; location: { name: string; address: string | null } }[] };
+
+export default function AuditorHome() {
   const { data: session } = useSession();
-  const [hasDraft, setHasDraft] = useState(false);
-  const userRole = session?.user.role;
+  const [draft, setDraft] = useState<{ loc: string; chk: string } | null>(null);
+  const [period, setPeriod] = useState('30');
+  const [search, setSearch] = useState('');
+  const now = new Date();
+  const from = new Date(now); from.setDate(now.getDate() - ((Number(period) || 30) - 1));
+  const range = serializeReportRange(period === 'all' ? '' : localDateInput(from), period === 'all' ? '' : localDateInput(now));
+  const today = serializeReportRange(localDateInput(now), '').from;
+  const params = new URLSearchParams({ ...range, today });
+  const identity = session?.user ? session.user.id + ':' + session.user.role : null;
+  const overview = useSWR<Overview>(identity ? ['/api/auditor/overview?' + params, identity] : null, ([url]: [string, string]) => fetcher(url));
+  const locations = useSWR<EnrichedLocation[]>(identity ? ['/api/locations', identity] : null, ([url]: [string, string]) => fetcher(url));
   useEffect(() => {
     let cancelled = false;
-    if (session?.draftKey) void readDraft(session.user.id, 'last-active', session.draftKey)
-      .then(value => { if (!cancelled) setHasDraft(!!value); }).catch(() => { if (!cancelled) setHasDraft(false); });
+    if (!session?.draftKey) return;
+    void readDraft<{ loc: string; chk: string }>(session.user.id, 'last-active', session.draftKey)
+      .then(value => { if (!cancelled) setDraft(value?.loc && value?.chk ? value : null); })
+      .catch(() => { if (!cancelled) setDraft(null); });
     return () => { cancelled = true; };
   }, [session?.user.id, session?.draftKey]);
-
-  return (
-    <div className="flex-1 flex flex-col p-4 sm:p-6 md:p-8 w-full bg-transparent transition-colors duration-300 relative z-10">
-      
-      {/* ШАПКА: На мобилках простая, на ПК в виде плашки с эффектом стекла */}
-      <header className="flex justify-between items-center mb-8 md:mb-10 mt-2 md:mt-4 md:bg-white/80 dark:md:bg-zinc-900/80 md:backdrop-blur-xl md:p-6 rounded-3xl md:rounded-[2rem] md:shadow-sm md:border border-transparent md:border-white/50 dark:md:border-zinc-800/50 transition-colors duration-300 z-20 relative">
-        <div>
-          {/* ЛОГОТИП */}
-          <div className="relative inline-block mb-1">
-            {/* Черный лого для светлой темы */}
-            <Image 
-              src="/logo3.png" 
-              alt="UPPETIT" 
-              width={140} 
-              height={34} 
-              className="object-contain relative z-10 dark:hidden" 
-              priority 
-              unoptimized 
-            />
-            {/* Белый лого для темной темы */}
-            <Image 
-              src="/logo.jpg" 
-              alt="UPPETIT" 
-              width={140} 
-              height={34} 
-              className="object-contain hidden dark:block relative z-10" 
-              priority 
-              unoptimized 
-            />
-          </div>
-          <div className="text-[10px] uppercase tracking-[0.2em] text-gray-400 dark:text-zinc-500 font-bold mt-1 md:ml-1 transition-colors relative z-10">
-            Аудит качества
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-3 md:gap-4">
-          <ThemeToggle />
-          
-          <button 
-            onClick={() => secureSignOut()}
-            className="w-10 h-10 md:w-auto md:px-5 md:py-2.5 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md md:bg-white/50 dark:md:bg-zinc-800/50 border border-gray-200/50 dark:border-zinc-700/50 rounded-full md:rounded-xl flex items-center justify-center gap-2 text-gray-700 dark:text-zinc-300 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-200 dark:hover:border-red-900/50 transition-all shadow-sm active:scale-95"
-          >
-            <span className="hidden md:block text-sm font-bold">Выйти</span>
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.825" />
-            </svg>
-          </button>
-        </div>
-      </header>
-
-      {/* ПРИВЕТСТВИЕ */}
-      <div className="mb-8 md:mb-10 relative z-10">
-        <h1 className="text-3xl md:text-4xl font-black text-gray-900 dark:text-zinc-100 tracking-tight transition-colors">Привет! 👋</h1>
-        <p className="text-gray-500 dark:text-zinc-400 font-medium mt-2 text-sm md:text-base transition-colors">Выбери, что хочешь сделать</p>
-      </div>
-
-      {/* СЕТКА КНОПОК */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 relative z-10">
-        
-        {hasDraft && (
-          <Link href="/audit/run" className="col-span-1 md:col-span-2 block w-full bg-blue-600/90 dark:bg-blue-600/80 backdrop-blur-xl border border-blue-500/50 dark:border-blue-500/30 text-white p-6 md:p-8 rounded-[2rem] shadow-lg shadow-blue-500/20 dark:shadow-blue-900/30 active:scale-[0.98] hover:-translate-y-1 hover:shadow-xl transition-all duration-300 relative overflow-hidden group">
-            <div className="relative z-10">
-              <h2 className="text-xl md:text-2xl font-black mb-1">Продолжить аудит</h2>
-              <p className="text-blue-100/90 text-sm md:text-base font-medium">У вас есть незавершенная проверка</p>
-            </div>
-            <div className="absolute -right-4 -bottom-4 w-24 h-24 md:w-48 md:h-48 bg-white/20 rounded-full blur-2xl group-hover:bg-white/30 transition-all"></div>
-          </Link>
-        )}
-
-        <Link href="/audit/new" className="block w-full bg-[#F25C05]/95 dark:bg-[#E65604]/90 backdrop-blur-xl border border-orange-400/50 dark:border-orange-500/30 text-white p-6 md:p-8 rounded-[2rem] shadow-lg shadow-orange-500/20 dark:shadow-orange-900/30 active:scale-[0.98] hover:-translate-y-1 hover:shadow-xl transition-all duration-300 relative overflow-hidden group">
-          <div className="relative z-10">
-            <h2 className="text-xl md:text-2xl font-black mb-1">Начать проверку</h2>
-            <p className="text-orange-100/90 text-sm font-medium">Новый аудит точки</p>
-          </div>
-          <div className="absolute -right-4 -bottom-4 w-24 h-24 md:w-32 md:h-32 bg-white/20 rounded-full blur-2xl group-hover:bg-white/30 transition-all"></div>
-        </Link>
-
-        {/* БЛОК КНОПОК ТОЛЬКО ДЛЯ ТУ (И АДМИНОВ) */}
-        {(userRole === 'TU' || userRole === 'ADMIN') && (
-          <>
-            <Link href="/audit/tu" className="block w-full bg-zinc-900/90 dark:bg-zinc-800/80 backdrop-blur-xl text-white p-6 md:p-8 rounded-[2rem] shadow-lg active:scale-[0.98] hover:-translate-y-1 hover:shadow-xl transition-all duration-300 relative overflow-hidden group border border-zinc-700/50">
-              <div className="relative z-10">
-                <h2 className="text-xl md:text-2xl font-black mb-1 flex items-center gap-2">
-                  <span>🏢</span> Мои точки
-                </h2>
-                <p className="text-zinc-400 text-sm font-medium">Отчеты по вашей территории</p>
-              </div>
-              <div className="absolute -right-4 -bottom-4 w-24 h-24 md:w-32 md:h-32 bg-white/10 rounded-full blur-2xl group-hover:bg-white/20 transition-all"></div>
-            </Link>
-
-            <Link href="/audit/dashboard" className="block w-full bg-indigo-600/90 dark:bg-indigo-600/80 backdrop-blur-xl border border-indigo-500/50 dark:border-indigo-500/30 text-white p-6 md:p-8 rounded-[2rem] shadow-lg shadow-indigo-500/20 dark:shadow-indigo-900/30 active:scale-[0.98] hover:-translate-y-1 hover:shadow-xl transition-all duration-300 relative overflow-hidden group">
-              <div className="relative z-10">
-                <h2 className="text-xl md:text-2xl font-black mb-1 flex items-center gap-2">
-                  <span>📈</span> Аналитика
-                </h2>
-                <p className="text-indigo-100/90 text-sm font-medium">Статистика по вашим точкам</p>
-              </div>
-              <div className="absolute -right-4 -bottom-4 w-24 h-24 md:w-32 md:h-32 bg-white/20 rounded-full blur-2xl group-hover:bg-white/30 transition-all"></div>
-            </Link>
-          </>
-        )}
-
-        <Link href="/audit/schedule" className="block w-full bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl p-6 md:p-8 rounded-[2rem] shadow-sm border border-white/50 dark:border-zinc-800/50 active:scale-[0.98] hover:-translate-y-1 hover:shadow-md transition-all duration-300 group">
-          <h2 className="text-xl md:text-2xl font-black text-gray-900 dark:text-zinc-100 mb-1 transition-colors">Мой план</h2>
-          <p className="text-sm text-gray-500 dark:text-zinc-400 font-medium transition-colors">Календарь будущих проверок</p>
-        </Link>
-
-        <Link href="/audit/history" className="block w-full bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border border-white/50 dark:border-zinc-800/50 text-gray-900 dark:text-zinc-100 p-6 md:p-8 rounded-[2rem] shadow-sm active:scale-[0.98] hover:-translate-y-1 hover:shadow-md transition-all duration-300">
-          <h2 className="text-xl md:text-2xl font-black mb-1 transition-colors">История проверок</h2>
-          <p className="text-gray-500 dark:text-zinc-400 text-sm font-medium transition-colors">Посмотреть прошлые аудиты</p>
-        </Link>
-        
-        <Link href="/audit/guide" className="block w-full bg-blue-50/80 dark:bg-blue-900/20 backdrop-blur-xl border border-blue-100/50 dark:border-blue-900/30 text-gray-900 dark:text-zinc-100 p-6 md:p-8 rounded-[2rem] shadow-sm active:scale-[0.98] hover:-translate-y-1 hover:shadow-md transition-all duration-300 group">
-          <h2 className="text-xl md:text-2xl font-black text-blue-700 dark:text-blue-400 md:text-gray-900 dark:md:text-zinc-100 mb-1 flex items-center gap-2 transition-colors">
-            <span>📖</span> Инструкция
-          </h2>
-          <p className="text-blue-600/80 dark:text-blue-400/80 md:text-gray-500 dark:md:text-zinc-400 text-sm font-medium group-hover:text-blue-600 dark:group-hover:text-blue-300 transition-colors">Как правильно проводить аудит</p>
-        </Link>
-
-      </div>
-
-      {(userRole === 'TU' || userRole === 'ADMIN') && (
-        <div className="mt-8 md:mt-12 pt-6 border-t border-gray-200/50 dark:border-zinc-800/50 flex justify-center md:justify-start transition-colors duration-300 relative z-10">
-          <PushSubscribe />
-        </div>
-      )}
-
+  const available = (locations.data || []).filter(l => locationIsAvailable(l));
+  const visible = available.filter(l => [l.name, l.address].some(v => (v || '').toLowerCase().includes(search.trim().toLowerCase()))).slice(0, search ? 30 : 6);
+  const stats = overview.data;
+  return <div className="ui-page space-y-6">
+    <header className="ui-heading"><div><h1>{session?.user.name ? 'Здравствуйте, ' + session.user.name.split(' ')[0] : 'Рабочий день'}</h1><p>Начните проверку или продолжите работу с сохранённым черновиком.</p></div><Link href="/audit/new" className="ui-button ui-button-primary w-full sm:w-auto"><Icon name="plus" />Начать аудит</Link></header>
+    {draft && <section className="ui-panel p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 border-orange-500/40"><div><Badge tone="brand">Черновик на этом устройстве</Badge><h2 className="font-semibold mt-2">Продолжить незавершённый аудит</h2><p className="ui-muted text-sm mt-1">{locations.data?.find(l => l.id === draft.loc)?.name || 'Сохранённая проверка'}</p></div><Link className="ui-button ui-button-primary w-full sm:w-auto" href="/audit/run">Продолжить</Link></section>}
+    <section aria-label="Мои результаты" className="space-y-3">
+      <div className="flex flex-wrap justify-between items-center gap-3"><h2 className="font-semibold">Мои результаты</h2><div className="ui-tabs">{[['7', '7 дней'], ['30', '30 дней'], ['all', 'Всё время']].map(([value, label]) => <button key={value} aria-pressed={period === value} onClick={() => setPeriod(value)}>{label}</button>)}</div></div>
+      {overview.error ? <Notice error>Не удалось загрузить результаты. <button className="underline" onClick={() => void overview.mutate()}>Повторить</button></Notice> : overview.isLoading || !stats ? <LoadingState label="Загружаем результаты…" /> : <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">{[
+        ['Всего проверок', stats.total.toLocaleString('ru')],
+        ['За выбранный период', stats.periodCount.toLocaleString('ru')],
+        ['Средний результат', stats.avgPct === null ? '—' : Math.round(stats.avgPct) + '%'],
+        ['С замечаниями', stats.remarks.toLocaleString('ru')],
+      ].map(([label, value]) => <div key={label} className="ui-panel p-4 sm:p-5"><p className="ui-muted text-xs sm:text-sm">{label}</p><p className="text-2xl sm:text-3xl font-semibold mt-2 tracking-tight">{value}</p></div>)}</div>}
+      {stats && stats.measured < stats.periodCount && <p className="ui-muted text-xs">Средний процент рассчитан по {stats.measured} проверкам с известным максимальным баллом.</p>}
+    </section>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <section className="ui-panel p-4 sm:p-5 space-y-4"><div className="flex flex-wrap justify-between items-center gap-2"><h2 className="font-semibold">Доступные точки <span className="ui-muted font-normal">· {available.length}</span></h2><Link className="ui-muted text-xs underline" href="/audit/new">Все точки</Link></div><SearchInput value={search} onChange={e => setSearch(e.target.value)} placeholder="Точка или адрес" />
+        {locations.error ? <Notice error>Не удалось загрузить точки. <button className="underline" onClick={() => void locations.mutate()}>Повторить</button></Notice> : locations.isLoading ? <LoadingState /> : !visible.length ? <EmptyState title="Нет доступных точек" description={search ? 'Измените поисковый запрос.' : 'Обратитесь к администратору, чтобы проверить назначения и период активности.'} /> : <div className="divide-y divide-[var(--border)]">{visible.map(l => <Link key={l.id} href={'/audit/new?location=' + encodeURIComponent(l.id)} className="flex items-center gap-3 py-3 rounded-lg hover:bg-[var(--surface-muted)]"><span className="shrink-0 p-2 rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]"><Icon name="location" /></span><span className="min-w-0 flex-1"><span className="font-semibold text-sm block">{l.name}</span><span className="ui-muted text-xs block mt-1 break-words">{l.address || 'Адрес не указан'}</span></span><Icon name="plus" className="h-4 w-4 ui-muted shrink-0" /></Link>)}</div>}
+      </section>
+      <section className="ui-panel p-4 sm:p-5 space-y-4"><div className="flex justify-between items-center gap-2"><h2 className="font-semibold">Ближайшие проверки</h2><Link href="/audit/schedule" className="ui-muted text-xs underline">Мой план</Link></div>{overview.error ? <p className="ui-muted text-sm">План временно недоступен.</p> : overview.isLoading ? <LoadingState /> : !stats?.plans.length ? <EmptyState title="Плановых проверок пока нет" description="Запланировать проверку можно в разделе «План»." /> : <div className="divide-y divide-[var(--border)]">{stats.plans.map(plan => <Link key={plan.id} href={'/audit/new?location=' + encodeURIComponent(plan.locationId)} className="flex items-center gap-3 py-3 hover:bg-[var(--surface-muted)] rounded-lg"><span className="ui-muted text-xs w-16 shrink-0">{new Date(plan.date).toLocaleDateString('ru', { day: 'numeric', month: 'short' })}</span><span className="font-semibold text-sm">{plan.location.name}</span></Link>)}</div>}</section>
     </div>
-  );
+    <section className="ui-panel p-4 sm:p-5"><div className="flex justify-between items-center gap-3 mb-4"><h2 className="font-semibold">Недавние проверки</h2><Link href="/audit/history" className="ui-muted text-xs underline">Вся история</Link></div>{overview.error ? <p className="ui-muted text-sm">История временно недоступна.</p> : overview.isLoading ? <LoadingState /> : !stats?.recent.length ? <EmptyState title="За этот период проверок нет" action={<Link href="/audit/new" className="ui-button ui-button-secondary">Начать первую проверку</Link>} /> : <div className="divide-y divide-[var(--border)]">{stats.recent.map(audit => <Link href={'/audit/history?audit=' + encodeURIComponent(audit.id)} key={audit.id} className="flex flex-wrap items-center justify-between gap-3 py-3 hover:bg-[var(--surface-muted)] rounded-lg"><span><span className="block text-sm font-semibold">{audit.locationName || audit.location?.name || 'Удалённая точка'}</span><span className="ui-muted block text-xs mt-1">{new Date(audit.date).toLocaleDateString('ru')} · {audit.checklistVersion.checklist.title}</span></span><span className="flex gap-2 items-center"><Badge tone={audit._count.answers ? 'warning' : 'success'}>{audit._count.answers ? 'Есть замечания' : 'Без замечаний'}</Badge><span className="text-sm font-semibold">{audit.maxScore ? Math.round(audit.score / audit.maxScore * 100) + '%' : audit.score + ' б.'}</span></span></Link>)}</div>}</section>
+    <div className="flex flex-wrap gap-2"><Link className="ui-button ui-button-secondary" href="/audit/guide"><Icon name="book" />Инструкция</Link>{(session?.user.role === 'TU' || session?.user.role === 'ADMIN') && <><Link className="ui-button ui-button-secondary" href="/audit/tu"><Icon name="location" />Моя территория</Link><Link className="ui-button ui-button-secondary" href="/audit/dashboard"><Icon name="dashboard" />Аналитика территории</Link><PushSubscribe /></>}{session?.user.role === 'ADMIN' && <Link className="ui-button ui-button-secondary" href="/admin">Админ-панель</Link>}</div>
+  </div>;
 }

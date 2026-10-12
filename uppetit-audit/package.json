@@ -9,7 +9,10 @@
     "lint": "eslint . --cache",
     "test:security": "node --test tests/security.test.cjs",
     "test:pwa": "node --test tests/pwa-build.test.cjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:frontend": "node --test tests/frontend.test.cjs",
+    "test:redesign": "node --test tests/redesign.test.cjs",
+    "test:dashboard": "node --test tests/dashboard.test.cjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -1,99 +1,37 @@
-import { useState, useMemo, useEffect } from 'react';
+'use client';
+
+import { useState } from 'react';
 import useSWR from 'swr';
 import { useSession } from 'next-auth/react';
 import { fetcher } from '@/lib/fetcher';
-import { Checklist, User } from '@prisma/client';
-import { EnrichedLocation } from '@/hooks/useAdminAudits';
+import { locationIsAvailable } from '@/lib/locationAvailability';
+import type { EnrichedLocation } from './useLocations';
+import type { PublicUser } from './useUsers';
+import type { ExtendedChecklist } from './useAuditRun';
 
-export function useNewAudit() {
-  const { data: session, status: sessionStatus } = useSession();
-  const currentUserId = session?.user?.id;
-  const currentUserRole = (session?.user as any)?.role;
-
-  const { data: locations, isLoading: locLoading } = useSWR<EnrichedLocation[]>('/api/locations', fetcher);
-  const { data: checklists, isLoading: chkLoading } = useSWR<Checklist[]>('/api/checklists', fetcher);
-  const { data: users, isLoading: usersLoading } = useSWR<User[]>('/api/users', fetcher);
-
-  const [selectedTu, setSelectedTu] = useState('');
-  const [selectedLocation, setSelectedLocation] = useState('');
+export function useNewAudit(initialLocation = '') {
+  const { data: session, status } = useSession();
+  const identity = session?.user ? session.user.id + ':' + session.user.role : null;
+  const key = (url: string) => identity ? [url, identity] : null;
+  const get = ([url]: [string, string]) => fetcher(url);
+  const locations = useSWR<EnrichedLocation[]>(key('/api/locations'), get);
+  const checklists = useSWR<ExtendedChecklist[]>(key('/api/checklists'), get);
+  const users = useSWR<PublicUser[]>(key('/api/users'), get);
+  const [territory, setTerritory] = useState('');
+  const [selectedLocation, setSelectedLocation] = useState(initialLocation);
   const [selectedChecklist, setSelectedChecklist] = useState('');
-
-  const isLoading = locLoading || chkLoading || usersLoading || sessionStatus === 'loading';
-
-  // Фильтрация списка ТУ: ТУ видит только себя, ADMIN видит виртуальную кнопку + всех остальных
-  const tus = useMemo(() => {
-    const allTus = users?.filter(u => u.role === 'TU') || [];
-    if (currentUserRole === 'TU' && currentUserId) {
-      return allTus.filter(u => u.id === currentUserId);
-    }
-    if (currentUserRole === 'ADMIN') {
-      // Инжектируем виртуального управляющего для оверрайда фильтров
-      return [
-        { id: 'all_admin_locations', name: '✨ ВСЕ ТОЧКИ системы', login: 'admin', role: 'ADMIN' } as any,
-        ...allTus
-      ];
-    }
-    return allTus;
-  }, [users, currentUserRole, currentUserId]);
-
-  // Автоматический выбор: ТУ выбирает себя, ADMIN по умолчанию переходит в режим сквозного аудита
-  useEffect(() => {
-    if (currentUserRole === 'TU' && currentUserId && !selectedTu) {
-      setSelectedTu(currentUserId);
-    } else if (currentUserRole === 'ADMIN' && !selectedTu) {
-      setSelectedTu('all_admin_locations');
-    }
-  }, [currentUserRole, currentUserId, selectedTu]);
-
-  const filteredLocations = useMemo(() => {
-    if (!locations || !selectedTu) return [];
-
-    return locations.filter(loc => {
-      // Если выбран режим администратора — привязка к ТУ игнорируется (isMyTu всегда true)
-      const isMyTu = selectedTu === 'all_admin_locations'
-        ? true
-        : (Array.isArray(loc.tus) && loc.tus.some((tu: any) => tu.id === selectedTu)) || loc.tuId === selectedTu;
-
-      // Проверка активности торговой точки
-      const isStatusActive = loc.isActive !== false;
-
-      const now = new Date();
-      now.setHours(0, 0, 0, 0);
-
-      let isAfterStart = true;
-      if (loc.activeFrom) {
-        const startDate = new Date(loc.activeFrom);
-        startDate.setHours(0, 0, 0, 0);
-        isAfterStart = startDate <= now;
-      }
-
-      let isBeforeEnd = true;
-      if (loc.activeTo) {
-        const endDate = new Date(loc.activeTo);
-        endDate.setHours(23, 59, 59, 999);
-        isBeforeEnd = endDate >= now;
-      }
-
-      return isMyTu && isStatusActive && isAfterStart && isBeforeEnd;
-    });
-  }, [locations, selectedTu]);
-
-  const handleTuSelect = (id: string) => {
-    if (currentUserRole === 'TU' && id !== currentUserId) return;
-    setSelectedTu(id);
-    setSelectedLocation(''); 
-  };
-
+  const currentUserRole = session?.user.role;
+  const selectedTu = currentUserRole === 'TU' ? session?.user.id || '' : territory;
+  const tus = (users.data || []).filter(u => u.role === 'TU' && u.isActive !== false);
+  const filteredLocations = (locations.data || []).filter(l => locationIsAvailable(l) && (!selectedTu || l.tuId === selectedTu || l.tus?.some(t => t.id === selectedTu)));
+  const allowedChecklists = (checklists.data || []).filter(c => !c.isArchived && c.activeVersionId && (currentUserRole === 'ADMIN' || c.allowedRoles.includes(currentUserRole!)));
   return {
-    tus,
-    checklists: checklists || [],
-    filteredLocations,
-    selectedTu,
-    selectedLocation,
-    selectedChecklist,
-    isLoading,
-    handleTuSelect,
-    setSelectedLocation,
-    setSelectedChecklist
+    tus, filteredLocations, checklists: allowedChecklists, selectedTu, selectedLocation, selectedChecklist,
+    isLoading: status === 'loading' || locations.isLoading || checklists.isLoading || users.isLoading,
+    error: locations.error || checklists.error || users.error,
+    refresh: () => Promise.all([locations.mutate(), checklists.mutate(), users.mutate()]),
+    currentUserRole,
+    handleTuSelect: (id: string) => { if (currentUserRole === 'TU') return; setTerritory(id); setSelectedLocation(''); },
+    setSelectedLocation, setSelectedChecklist,
   };
 }

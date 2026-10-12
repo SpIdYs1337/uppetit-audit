@@ -6,26 +6,42 @@ import { verifyPassword } from './security';
 import { clientAddress, consumeRateLimit } from './rateLimit';
 import { consumeSecondFactor } from './mfa';
 import { sessionIsValid, sessionPolicy, SESSION_MAX_SECONDS, MAX_PASSWORD_LENGTH } from './sessionPolicy';
+import { readLoginChallenge } from './loginChallenge';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [CredentialsProvider({
-    credentials: { login: {}, password: {}, code: {} },
+    credentials: { login: {}, password: {}, code: {}, challenge: {} },
     async authorize(credentials, request) {
       const login = typeof credentials.login === 'string' ? credentials.login.trim() : '';
       const password = typeof credentials.password === 'string' ? credentials.password : '';
       const code = typeof credentials.code === 'string' ? credentials.code.trim() : '';
-      if (!login || login.length > 200 || !password || password.length > MAX_PASSWORD_LENGTH || code.length > 32) return null;
-      const ipAllowed = await consumeRateLimit('login-ip', clientAddress(request), 100);
-      const accountAllowed = await consumeRateLimit('login-account', login, 10);
-      if (!ipAllowed || !accountAllowed) return null;
-      const users = await prisma.user.findMany({ where: { OR: [{ login }, { phone: login }] }, take: 2 });
-      const user = users.length === 1 ? users[0] : null;
-      if (!user?.isActive || !user.passwordHash) {
-        await verifyPassword(password, '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy');
-        return null;
+      if (code.length > 32) return null;
+      let user;
+      let proof;
+      if (credentials.challenge !== undefined) {
+        proof = readLoginChallenge(credentials.challenge);
+        if (!proof) return null;
+        const ipAllowed = await consumeRateLimit('login-mfa-ip', clientAddress(request), 100);
+        const accountAllowed = await consumeRateLimit('login-mfa-account', proof.userId, 10);
+        if (!ipAllowed || !accountAllowed) return null;
+        user = await prisma.user.findUnique({ where: { id: proof.userId } });
+        if (!user?.isActive || !user.passwordHash || user.authVersion !== proof.authVersion || user.totpEnabled !== proof.mfaRequired) return null;
+      } else {
+        // Retain the existing Credentials contract for compatible clients.
+        if (!login || login.length > 200 || !password || password.length > MAX_PASSWORD_LENGTH) return null;
+        const ipAllowed = await consumeRateLimit('login-ip', clientAddress(request), 100);
+        const accountAllowed = await consumeRateLimit('login-account', login, 10);
+        if (!ipAllowed || !accountAllowed) return null;
+        const users = await prisma.user.findMany({ where: { OR: [{ login }, { phone: login }] }, take: 2 });
+        user = users.length === 1 ? users[0] : null;
+        if (!user?.isActive || !user.passwordHash) {
+          await verifyPassword(password, '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy');
+          return null;
+        }
+        if (!await verifyPassword(password, user.passwordHash)) return null;
       }
-      if (!await verifyPassword(password, user.passwordHash)) return null;
       if (user.totpEnabled && !await consumeSecondFactor(user, code)) return null;
+      if (proof && !await consumeRateLimit('login-challenge-used', proof.nonce, 1, 300)) return null;
       const id = randomUUID();
       const now = new Date();
       await prisma.authSession.create({ data: {

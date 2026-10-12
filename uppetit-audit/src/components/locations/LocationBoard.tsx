@@ -1,4 +1,4 @@
-import { Location, User } from '@prisma/client';
+import { Location } from '@prisma/client';
 import { EnrichedLocation } from '@/hooks/useLocations';
 
 interface LocationCardProps {
@@ -35,7 +35,7 @@ export function LocationCard({ loc, updateLocation, handleDelete, handleEdit }: 
 
       <div className="flex flex-wrap gap-1.5 mt-1">
         {assignedTus.length > 0 ? (
-          assignedTus.map((t: User) => (
+          assignedTus.map(t => (
             <span key={t.id} className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-2.5 py-1 rounded-lg text-[10px] font-bold border border-blue-100 dark:border-blue-900/30 transition-colors">
               {t.name || t.login}
             </span>

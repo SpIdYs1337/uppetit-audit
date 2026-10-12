@@ -18,7 +18,8 @@ const putSchema = z.object({ ...fields, id: z.string().min(1), login: fields.log
   role: fields.role.optional(), resetPassword: z.boolean().optional(),
   reissueInvite: z.boolean().optional(), revokeSessions: z.boolean().optional(), isActive: z.boolean().optional() });
 const select = { id: true, name: true, email: true, login: true, phone: true, role: true,
-  isActive: true, passwordHash: true, inviteExpiresAt: true };
+  isActive: true, passwordHash: true, inviteExpiresAt: true, totpEnabled: true,
+  locations: { select: { id: true, name: true } }, managedLocations: { select: { id: true, name: true } } };
 function safeUser(user: { passwordHash: string | null; [key: string]: unknown }) {
   const { passwordHash, ...safe } = user;
   return { ...safe, hasPassword: !!passwordHash };
@@ -66,9 +67,13 @@ export async function PUT(request: Request) {
       const purpose = data.resetPassword || current.invitePurpose === 'RESET' ? 'RESET' : 'INVITE';
       const { token, ...invitation } = issueInvite(purpose);
       await prisma.$transaction(async tx => {
+        if (current.role === Role.ADMIN && current.isActive && current.passwordHash
+          && await tx.user.count({ where: { role: Role.ADMIN, isActive: true, passwordHash: { not: null } } }) <= 1) {
+          throw new Error('LAST_ADMIN');
+        }
         await tx.user.update({ where: { id: data.id }, data: { ...invitation, passwordHash: null, authVersion: { increment: 1 } } });
         await tx.authSession.deleteMany({ where: { userId: data.id } });
-      });
+      }, { isolationLevel: 'Serializable' });
       return NextResponse.json({ token, expiresAt: invitation.inviteExpiresAt });
     }
     if (await aliasTaken(data.login, data.phone, data.id)) return NextResponse.json({ error: 'Логин или телефон уже используются' }, { status: 409 });
@@ -102,6 +107,8 @@ export async function DELETE(request: Request) {
   catch (error) { return userError(error); }
 }
 function userError(error: unknown) {
+  if (error instanceof Error && error.message === 'LAST_ADMIN') return NextResponse.json({ error: 'Нельзя сбросить пароль последнего активного администратора. Сначала подготовьте вторую учётную запись администратора.' }, { status: 409 });
+  if ((error as { code?: string }).code === 'P2034') return NextResponse.json({ error: 'Данные изменились одновременно. Обновите список и повторите действие.' }, { status: 409 });
   if (error instanceof z.ZodError) return NextResponse.json({ error: 'Неверные данные', details: error.issues }, { status: 400 });
   if ((error as { code?: string }).code === 'P2002') return NextResponse.json({ error: 'Логин, телефон или email уже заняты' }, { status: 409 });
   console.error('Ошибка управления пользователем');

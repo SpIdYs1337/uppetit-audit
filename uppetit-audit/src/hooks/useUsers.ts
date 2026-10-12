@@ -1,55 +1,35 @@
+'use client';
+
 import useSWR from 'swr';
+import { useSession } from 'next-auth/react';
 import { fetcher } from '@/lib/fetcher';
-import { User } from '@prisma/client';
+import type { Role } from '@prisma/client';
+
+export type PublicUser = {
+  id: string; name: string | null; login: string; email?: string | null; phone?: string | null;
+  role: Role; isActive?: boolean; hasPassword?: boolean; inviteExpiresAt?: string | null; totpEnabled?: boolean;
+  locations?: { id: string; name: string }[]; managedLocations?: { id: string; name: string }[];
+};
+export type UserChanges = { id?: string; name?: string; login?: string; email?: string; phone?: string | null;
+  role?: Role; isActive?: boolean; reissueInvite?: boolean; revokeSessions?: boolean };
+export type UserSaveResult = Partial<PublicUser> & { inviteToken?: string; token?: string; expiresAt?: string };
 
 export function useUsers() {
-  const { data: users, error, isLoading, mutate } = useSWR<User[]>('/api/users', fetcher);
-
-  const saveUser = async (body: Partial<User> & { reissueInvite?: boolean; revokeSessions?: boolean }, isUpdate: boolean) => {
-    const res = await fetch('/api/users', {
-      method: isUpdate ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+  const { data: session } = useSession();
+  const { data, error, isLoading, mutate } = useSWR<PublicUser[]>(
+    session?.user ? ['/api/users', session.user.id, session.user.role] : null, ([url]: [string, string, string]) => fetcher(url));
+  async function change(method: string, body?: object, id?: string): Promise<UserSaveResult> {
+    const res = await fetch('/api/users' + (id ? '?id=' + encodeURIComponent(id) : ''), {
+      method, ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
     });
-    
-    if (!res.ok) { const error = await res.json().catch(() => ({})); throw new Error(error.error || 'Ошибка при сохранении'); }
-    
-    const data = await res.json();
-    await mutate(); // Убеждаемся, что кэш обновился
-    return data;
-  };
-
-  const deleteUser = async (id: string) => {
-    // Безопасное отсечение undefined и новый синтаксис SWR
-    const currentUsers = users || [];
-    mutate(currentUsers.filter(u => u.id !== id), { revalidate: false });
-    
-    const res = await fetch(`/api/users?id=${id}`, { method: 'DELETE' });
-    if (!res.ok) {
-      await mutate(); // Откат при ошибке
-      throw new Error('Ошибка удаления');
-    }
-  };
-
-  const resetPassword = async (id: string) => {
-    const res = await fetch('/api/users', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, resetPassword: true })
-    });
-
-    if (!res.ok) throw new Error('Ошибка при сбросе');
-    const data = await res.json();
-    await mutate();
-    return data;
-  };
-
+    const result = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(result.error || 'Не удалось сохранить изменения');
+    await mutate(); return result;
+  }
   return {
-    users: users || [],
-    isLoading,
-    isError: !!error,
-    saveUser,
-    deleteUser,
-    resetPassword
+    users: data || [], isLoading, isError: !!error, error, refresh: mutate,
+    saveUser: (body: UserChanges, isUpdate: boolean) => change(isUpdate ? 'PUT' : 'POST', body),
+    deleteUser: (id: string) => change('DELETE', undefined, id),
+    resetPassword: (id: string) => change('PUT', { id, resetPassword: true }),
   };
 }

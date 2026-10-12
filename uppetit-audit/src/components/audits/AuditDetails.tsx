@@ -3,15 +3,18 @@
 import React, { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { EnrichedAudit, ParsedAnswer } from '@/hooks/useAdminAudits';
+import Image from 'next/image';
 
 interface AuditDetailsProps {
   audit: EnrichedAudit;
   onZoomPhoto: (url: string) => void;
+  onUpdated?: () => void;
 }
 
-export function AuditDetails({ audit: initialAudit, onZoomPhoto }: AuditDetailsProps) {
+export function AuditDetails({ audit: initialAudit, onZoomPhoto, onUpdated }: AuditDetailsProps) {
   const { data: session } = useSession();
-  const [audit, setAudit] = useState<EnrichedAudit>(initialAudit);
+  const [edited, setEdited] = useState<{ base: EnrichedAudit; audit: EnrichedAudit } | null>(null);
+  const audit = edited?.base === initialAudit ? edited.audit : initialAudit;
   const [isDownloading, setIsDownloading] = useState(false);
   const [updatingAnswerId, setUpdatingAnswerId] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ isOpen: boolean; ansId: string; currentIsOk: boolean; } | null>(null);
@@ -20,7 +23,7 @@ export function AuditDetails({ audit: initialAudit, onZoomPhoto }: AuditDetailsP
 
   const exportToPDF = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isDownloading) return; 
+    if (isDownloading) return;
     try {
       setIsDownloading(true);
       const response = await fetch(`/api/pdf/${audit.id}`);
@@ -56,16 +59,13 @@ export function AuditDetails({ audit: initialAudit, onZoomPhoto }: AuditDetailsP
       });
       if (!response.ok) throw new Error('Ошибка при изменении статуса пункта');
       const data = await response.json();
-      setAudit((prev) => ({
-        ...prev,
-        score: data.newScore,
-        answers: prev.answers.map((ans) => ans.id === ansId ? { ...ans, isOk: !currentIsOk, penalty: !currentIsOk ? 0 : data.answers.find((a: any) => a.id === ansId)?.penalty || ans.penalty } : ans)
-      }));
-    } catch (err: any) { alert(err.message || 'Не удалось обновить балл пункта.'); } finally { setUpdatingAnswerId(null); }
+      setEdited({ base: initialAudit, audit: { ...audit, score: data.newScore, answers: data.answers } });
+      onUpdated?.();
+    } catch (err) { alert(err instanceof Error ? err.message : 'Не удалось обновить балл пункта.'); } finally { setUpdatingAnswerId(null); }
   };
 
   return (
-    <td colSpan={6} className="bg-gray-50 dark:bg-zinc-950/50 p-4 sm:p-6 shadow-inner border-b border-gray-200 dark:border-zinc-800 transition-colors duration-300">
+    <div className="bg-gray-50 dark:bg-zinc-950/50 p-4 sm:p-6 shadow-inner border-b border-gray-200 dark:border-zinc-800 transition-colors duration-300">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h3 className="font-black text-gray-800 dark:text-zinc-200 uppercase text-sm tracking-wide transition-colors">Подробности проверки</h3>
@@ -101,7 +101,7 @@ export function AuditDetails({ audit: initialAudit, onZoomPhoto }: AuditDetailsP
           <div>
             <h4 className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-2 transition-colors">Общий комментарий</h4>
             <p className="text-sm text-gray-700 dark:text-zinc-300 bg-gray-50 dark:bg-zinc-800 p-4 rounded-xl border border-gray-100 dark:border-zinc-700 italic transition-colors">
-              "{audit.generalComment}"
+              &quot;{audit.generalComment}&quot;
             </p>
           </div>
         )}
@@ -136,17 +136,17 @@ export function AuditDetails({ audit: initialAudit, onZoomPhoto }: AuditDetailsP
                       <span className="text-xs font-black text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded-md h-fit whitespace-nowrap transition-colors">-{ans.penalty} б.</span>
                     )}
                   </div>
-                  
+
                   {photosToRender.length > 0 && (
                     <div className="mt-3 flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
                       {photosToRender.map((photo: string, idx: number) => (
-                        <div key={idx} className="overflow-hidden rounded-lg border border-gray-200 dark:border-zinc-700 flex-shrink-0 w-24 h-24 sm:w-32 sm:h-32 cursor-zoom-in hover:opacity-80 transition-all" onClick={(e) => { e.stopPropagation(); onZoomPhoto(photo); }}>
-                          <img src={photo} alt={`Фото ${idx + 1}`} loading="lazy" decoding="async" className="w-full h-full object-cover" />                        
-                        </div>
+                        <button type="button" aria-label={`Открыть фото ${idx + 1}`} key={idx} className="overflow-hidden rounded-lg border border-gray-200 dark:border-zinc-700 flex-shrink-0 w-24 h-24 sm:w-32 sm:h-32 cursor-zoom-in hover:opacity-80 transition-all" onClick={(e) => { e.stopPropagation(); onZoomPhoto(photo); }}>
+                          <Image src={photo} alt={`Фото ${idx + 1}`} width={128} height={128} unoptimized className="w-full h-full object-cover" />
+                        </button>
                       ))}
                     </div>
                   )}
-                  
+
                   {ans.comment && (
                     <div className="mt-2 text-sm text-gray-700 dark:text-zinc-300 bg-gray-50/50 dark:bg-zinc-800/50 p-3 rounded-lg border border-gray-200 dark:border-zinc-700 transition-colors">
                       <span className="font-bold text-gray-500 dark:text-zinc-500 mr-1">Комментарий:</span> {ans.comment}
@@ -157,7 +157,7 @@ export function AuditDetails({ audit: initialAudit, onZoomPhoto }: AuditDetailsP
                 {isAdmin && (
                   <div className="mt-4 pt-3 border-t border-gray-100 dark:border-zinc-800/50 flex justify-end transition-colors">
                     <button
-                      disabled={isLoadingThis}
+                      disabled={Boolean(updatingAnswerId)}
                       onClick={(e) => openConfirmModal(e, ans.id, ans.isOk)}
                       className={`text-[10px] uppercase tracking-wider font-black px-3 py-2 rounded-xl transition-all shadow-sm active:scale-95 border disabled:opacity-50 disabled:cursor-not-allowed ${
                         ans.isOk
@@ -200,6 +200,6 @@ export function AuditDetails({ audit: initialAudit, onZoomPhoto }: AuditDetailsP
           </div>
         </div>
       )}
-    </td>
+    </div>
   );
 }

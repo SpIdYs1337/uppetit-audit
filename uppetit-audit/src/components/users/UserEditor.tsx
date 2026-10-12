@@ -1,75 +1,54 @@
+'use client';
+
 import { useState } from 'react';
-import { User, Role } from '@prisma/client';
+import { useSession } from 'next-auth/react';
+import Link from 'next/link';
+import type { Role } from '@prisma/client';
+import type { PublicUser, UserChanges, UserSaveResult } from '@/hooks/useUsers';
+import { Button, Dialog, Field, Notice, Switch, Badge } from '@/components/ui';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
-interface UserEditorProps {
-  initialData: User | null;
-  onClose: () => void;
-  onSave: (body: Partial<User>, isUpdate: boolean) => Promise<any>;
-}
-
-export function UserEditor({ initialData, onClose, onSave }: UserEditorProps) {
-  const isUpdate = !!initialData;
-  const [name, setName] = useState(initialData?.name || '');
-  const [email, setEmail] = useState(initialData?.email || '');
-  const [login, setLogin] = useState(initialData?.login || '');
-  const [phone, setPhone] = useState(initialData?.phone || '');
-  const [role, setRole] = useState<Role>(initialData?.role || 'AUDITOR');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleSubmit = async () => {
-    if (!name.trim()) return alert('Пожалуйста, укажите Имя и Фамилию сотрудника');
-    if (!login.trim()) return alert('Пожалуйста, укажите системный логин');
-    setIsSubmitting(true);
+export function UserEditor({ initialData, onClose, onSave, onSaved }: {
+  initialData: PublicUser | null; onClose: () => void;
+  onSave: (body: UserChanges, isUpdate: boolean) => Promise<UserSaveResult>;
+  onSaved: (result: UserSaveResult) => void;
+}) {
+  const { data: session } = useSession();
+  const initial = { name: initialData?.name || '', login: initialData?.login || '', email: initialData?.email || '',
+    phone: initialData?.phone || '', role: initialData?.role || 'AUDITOR' as Role, isActive: initialData?.isActive !== false };
+  const [form, setForm] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const dirty = JSON.stringify(form) !== JSON.stringify(initial);
+  useUnsavedChanges(dirty);
+  const own = initialData?.id === session?.user.id;
+  const locations = [...new Map([...(initialData?.locations || []), ...(initialData?.managedLocations || [])].map(l => [l.id, l])).values()];
+  function close() { if (!busy && (!dirty || window.confirm('Закрыть форму и потерять несохранённые изменения?'))) onClose(); }
+  async function submit(event: React.FormEvent) {
+    event.preventDefault(); setError('');
+    if (!form.name.trim()) { setError('Укажите имя сотрудника.'); return; }
+    setBusy(true);
     try {
-      const data = await onSave({ id: initialData?.id, name, email, login, phone, role }, isUpdate);
-      if (!isUpdate && data?.inviteToken) {
-        const link = `${window.location.origin}/setup-password?token=${data.inviteToken}`;
-        prompt('Сотрудник создан. Ссылка действует 24 часа. Скопируйте и отправьте её для установки пароля:', link);
-      }
-      onClose();
-    } catch (error) { alert(error instanceof Error ? error.message : 'Ошибка при сохранении'); } finally { setIsSubmitting(false); }
-  };
-
-  return (
-    <div className="bg-white dark:bg-zinc-900 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-zinc-800 mb-8 max-w-2xl transition-colors duration-300">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-black text-gray-900 dark:text-zinc-100 transition-colors">{isUpdate ? 'Редактирование сотрудника' : 'Новый сотрудник'}</h2>
-        <button onClick={onClose} className="text-gray-400 dark:text-zinc-500 font-bold hover:text-gray-600 dark:hover:text-zinc-300 transition-colors">✕ Закрыть</button>
+      const result = await onSave({ ...form, id: initialData?.id, name: form.name.trim(), login: form.login.trim(), email: form.email.trim(), phone: form.phone.trim() || null }, !!initialData);
+      onSaved(result); onClose();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Ошибка сохранения'); }
+    finally { setBusy(false); }
+  }
+  return <Dialog title={initialData ? 'Редактировать сотрудника' : 'Новый сотрудник'} onClose={close} drawer busy={busy}>
+    <form onSubmit={submit} className="space-y-5">
+      <Field label="Имя и фамилия"><input className="ui-field" autoFocus required maxLength={200} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} disabled={busy} /></Field>
+      <Field label="Логин"><input className="ui-field" required minLength={2} maxLength={200} value={form.login} onChange={e => setForm({ ...form, login: e.target.value })} disabled={busy} /></Field>
+      <Field label="Роль"><select className="ui-field" value={form.role} onChange={e => setForm({ ...form, role: e.target.value as Role })} disabled={busy || own}><option value="AUDITOR">Аудитор</option><option value="TU">Территориальный управляющий</option><option value="ADMIN">Администратор</option></select></Field>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Электронная почта"><input className="ui-field" type="email" maxLength={254} value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} disabled={busy} /></Field>
+        <Field label="Телефон"><input className="ui-field" type="tel" maxLength={32} value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} disabled={busy} /></Field>
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="md:col-span-2">
-          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase mb-2 transition-colors">Имя и Фамилия</label>
-          <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-950/50 text-gray-900 dark:text-zinc-100 font-bold outline-none focus:border-[#F25C05] dark:focus:border-[#F25C05] transition-colors" placeholder="Иван Иванов" />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase mb-2 transition-colors">Системный логин</label>
-          <input type="text" value={login} onChange={e => setLogin(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-950/50 text-gray-900 dark:text-zinc-100 font-bold outline-none focus:border-[#F25C05] dark:focus:border-[#F25C05] transition-colors" placeholder="ivanov" />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase mb-2 transition-colors">Роль</label>
-          <select value={role} onChange={e => setRole(e.target.value as Role)} className="w-full p-3 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-950/50 text-gray-900 dark:text-zinc-100 font-bold outline-none focus:border-[#F25C05] dark:focus:border-[#F25C05] transition-colors">
-            <option value="AUDITOR">Аудитор (Мобильное приложение)</option>
-            <option value="TU">Территориальный управляющий (ТУ)</option>
-            <option value="ADMIN">Администратор (Веб-панель)</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase mb-2 transition-colors">E-mail (для систем)</label>
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-950/50 text-gray-900 dark:text-zinc-100 font-bold outline-none focus:border-[#F25C05] dark:focus:border-[#F25C05] transition-colors" placeholder="ivanov@example.com" />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase mb-2 transition-colors">Номер телефона</label>
-          <input type="text" value={phone} onChange={e => setPhone(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-950/50 text-gray-900 dark:text-zinc-100 font-bold outline-none focus:border-[#F25C05] dark:focus:border-[#F25C05] transition-colors" placeholder="+7 999 000-00-00" />
-        </div>
-      </div>
-
-      <div className="mt-6 border-t border-gray-100 dark:border-zinc-800 pt-6 transition-colors">
-        <button onClick={handleSubmit} disabled={isSubmitting} className="w-full bg-[#F25C05] dark:bg-[#E65604] text-white py-4 rounded-xl font-bold shadow-lg shadow-orange-500/20 dark:shadow-orange-900/30 disabled:opacity-50 transition-all active:scale-[0.98] hover:bg-[#e05504]">
-          {isSubmitting ? 'Сохранение...' : 'Сохранить профиль'}
-        </button>
-        {!isUpdate && <p className="text-xs text-gray-400 dark:text-zinc-500 text-center mt-3 font-bold transition-colors">После сохранения вы получите ссылку для установки пароля</p>}
-      </div>
-    </div>
-  );
+      <div className="ui-panel flex items-center justify-between gap-3 p-4"><div><p className="text-sm font-semibold">Доступ в приложение</p><p className="ui-muted mt-1 text-xs">{form.isActive ? 'Сотрудник может входить' : 'Вход заблокирован'}</p></div><Switch checked={form.isActive} label="Доступ сотрудника" disabled={busy || own} onChange={() => setForm({ ...form, isActive: !form.isActive })} /></div>
+      {initialData && <div className="flex flex-wrap gap-2"><Badge tone={initialData.totpEnabled ? 'success' : 'neutral'}>{initialData.totpEnabled ? 'MFA настроена' : 'MFA не настроена'}</Badge>{own && <Badge>Ваша учётная запись</Badge>}</div>}
+      {initialData?.role === 'TU' && <section><h3 className="text-sm font-semibold mb-2">Назначенные точки · {locations.length}</h3><div className="flex flex-wrap gap-2">{locations.map(l => <Badge key={l.id}>{l.name}</Badge>)}</div><Link onClick={event => { if (dirty && !window.confirm('Перейти к точкам и потерять несохранённые изменения?')) event.preventDefault(); }} className="inline-block mt-3 text-sm underline underline-offset-4 text-orange-600 dark:text-orange-400" href="/admin/locations">Изменить назначения в разделе «Точки»</Link></section>}
+      {error && <Notice error>{error}</Notice>}
+      <div className="flex flex-wrap justify-end gap-2 border-t pt-5" style={{ borderColor: 'var(--border)' }}><Button variant="secondary" disabled={busy} onClick={close}>Отмена</Button><Button type="submit" loading={busy}>Сохранить профиль</Button></div>
+      {!initialData && <p className="ui-muted text-xs">После создания появится ссылка для установки пароля. Она действует 24 часа.</p>}
+    </form>
+  </Dialog>;
 }

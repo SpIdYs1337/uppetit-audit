@@ -118,15 +118,15 @@ function AuditRunForm() {
 
       {/* HEADER: Добавили эффект стекла (backdrop-blur-xl) */}
       <header className="shrink-0 bg-white/80 dark:bg-zinc-900/70 backdrop-blur-xl p-5 z-20 relative transition-colors border-b border-gray-200/50 dark:border-zinc-800/50 shadow-sm">
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex items-center gap-4">
-            <button onClick={handleInterceptCancel} className="w-10 h-10 bg-gray-100/80 dark:bg-zinc-800/80 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-500 dark:hover:text-red-400 rounded-full font-bold transition-all text-gray-900 dark:text-zinc-100 shrink-0">✕</button>
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <button aria-label="Выйти из проверки, сохранив черновик" onClick={handleInterceptCancel} className="w-11 h-11 bg-gray-100/80 dark:bg-zinc-800/80 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-500 dark:hover:text-red-400 rounded-full font-bold transition-all text-gray-900 dark:text-zinc-100 shrink-0">✕</button>
             <div className="min-w-0">
               <h1 className="text-sm font-black text-gray-900 dark:text-zinc-100 leading-tight transition-colors truncate">{audit.location?.name || 'Загрузка...'}</h1>
               <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-zinc-500 font-bold mt-1 transition-colors truncate">{audit.checklist?.title}</p>
             </div>
           </div>
-          <div className="text-[10px] font-bold text-green-500 dark:text-green-400 h-4 transition-colors shrink-0">{audit.saveStatus}</div>
+          <div role="status" className="text-[10px] font-bold text-green-700 dark:text-green-400 transition-colors max-w-full break-words">{audit.saveStatus}</div>
         </div>
         <div className="flex items-center justify-between text-xs font-bold mb-2">
           <span className="text-gray-400 dark:text-zinc-500 transition-colors">{audit.isFinalStep ? 'Завершение' : `Вопрос ${audit.currentIndex + 1} из ${audit.questions.length}`}</span>
@@ -139,7 +139,7 @@ function AuditRunForm() {
 
       {/* MAIN */}
       <main className="flex-1 overflow-y-auto p-4 custom-scrollbar relative z-10">
-        <div className={`max-w-3xl mx-auto flex flex-col ${audit.isFinalStep ? '' : 'h-full justify-center'}`}>
+        <div className={`max-w-3xl mx-auto flex flex-col ${audit.isFinalStep ? '' : 'min-h-full justify-center'}`}>
           {audit.isFinalStep ? (
             <FinalStep audit={audit} />
           ) : (

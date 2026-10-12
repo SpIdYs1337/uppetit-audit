@@ -1,7 +1,6 @@
 // app/layout.tsx
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import UpdateChecker from "@/components/UpdateChecker";
 import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
@@ -17,7 +16,7 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: "/icon-192x192.png",
-    apple: "/icon-512x512.png", 
+    apple: "/icon-512x512.png",
   },
 };
 
@@ -25,8 +24,6 @@ export const viewport: Viewport = {
   themeColor: "#F5F6F8",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
 };
 
@@ -38,6 +35,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           {children}
         </Providers>
       </body>
-    </html>  
+    </html>
   );
 }

@@ -1,6 +1,6 @@
 import useSWR from 'swr';
 import { fetcher } from '@/lib/fetcher';
-import { Audit, Location, User, Checklist } from '@prisma/client';
+import { Audit, Location } from '@prisma/client';
 
 export interface ParsedAnswer {
   id: string;
@@ -24,7 +24,7 @@ export type EnrichedLocation = Location & {
 export type EnrichedAudit = Audit & {
   location?: EnrichedLocation | null;
   user?: { id: string; login: string } | null;
-  checklist?: { id: string; title: string; version: number } | null;
+  checklist?: { id: string; title: string; version: number; redThreshold?: number; yellowThreshold?: number } | null;
   answers: ParsedAnswer[];
 };
 

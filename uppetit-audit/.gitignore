@@ -49,3 +49,5 @@ next-env.d.ts
 /public/worker-*.js.map
 /public/sw.js.map
 /.security-build-backup/
+# Local browser previews and screenshots
+/.preview/

@@ -1,204 +1,45 @@
 'use client';
 
-import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { getSession } from 'next-auth/react';
 import { useNewAudit } from '@/hooks/useNewAudit';
-import { EnrichedLocation } from '@/hooks/useAdminAudits';
-import { User, Checklist } from '@prisma/client'; 
-import { ThemeToggle } from '@/components/ThemeToggle'; 
+import { Badge, Button, EmptyState, Field, Icon, LoadingState, Notice, SearchInput } from '@/components/ui';
 
 function NewAuditContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  
-  const backToUrl = searchParams.get('backTo') || '/audit';
-
-  const {
-    tus,
-    checklists,
-    filteredLocations,
-    selectedTu,
-    selectedLocation,
-    selectedChecklist,
-    isLoading,
-    handleTuSelect,
-    setSelectedLocation,
-    setSelectedChecklist
-  } = useNewAudit();
-
-  const [userRole, setUserRole] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchSession = async () => {
-      const session = await getSession();
-      setUserRole((session?.user as any)?.role || null);
-    };
-    fetchSession();
-  }, []);
-
-  const filteredChecklists = useMemo(() => {
-    if (!checklists) return [];
-    const activeChecklists = (checklists as any[]).filter(chk => !chk.isArchived);
-    if (!userRole) return activeChecklists;
-    if (userRole === 'ADMIN') return activeChecklists;
-
-    return activeChecklists.filter((chk) => {
-      try {
-        const allowedRoles = typeof chk.allowedRoles === 'string' 
-          ? JSON.parse(chk.allowedRoles) 
-          : (chk.allowedRoles || []);
-        return allowedRoles.includes(userRole);
-      } catch (e) {
-        return false;
-      }
-    });
-  }, [checklists, userRole]);
-
-  const handleContinue = () => {
-    if (!selectedLocation || !selectedChecklist) return;
-    router.push(`/audit/run?location=${selectedLocation}&checklist=${selectedChecklist}&backTo=${encodeURIComponent(backToUrl)}`);
-  };
-
-  if (isLoading) {
-    return <div className="flex-1 flex items-center justify-center text-gray-400 dark:text-zinc-500 font-bold min-h-screen transition-colors bg-transparent">Загрузка...</div>;
+  const params = useSearchParams();
+  const backTo = params.get('backTo') === '/admin/audits' ? '/admin/audits' : '/audit';
+  const audit = useNewAudit(params.get('location') || '');
+  const [search, setSearch] = useState('');
+  const [starting, setStarting] = useState(false);
+  const locations = audit.filteredLocations.filter(l => [l.name, l.address].some(v => (v || '').toLowerCase().includes(search.trim().toLowerCase())));
+  const selected = audit.filteredLocations.find(l => l.id === audit.selectedLocation);
+  const checklist = audit.checklists.find(c => c.id === audit.selectedChecklist);
+  function begin() {
+    if (!selected || !checklist) return;
+    setStarting(true);
+    router.push('/audit/run?' + new URLSearchParams({ location: selected.id, checklist: checklist.id, backTo }));
   }
-
-  return (
-    <div className="flex-1 flex flex-col p-4 sm:p-6 md:p-8 bg-transparent min-h-screen transition-colors duration-300">
-      
-      {/* HEADER мобильный */}
-      <header className="flex items-center justify-between mb-8 mt-4 md:hidden">
-        <Link href={backToUrl} className="w-10 h-10 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md rounded-full flex items-center justify-center text-gray-900 dark:text-zinc-100 shadow-sm border border-white/50 dark:border-zinc-800/50 hover:scale-105 active:scale-95 transition-all">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
-        </Link>
-        <h1 className="font-black text-gray-900 dark:text-zinc-100">Новая проверка</h1>
-        <ThemeToggle />
-      </header>
-
-      {/* HEADER ПК */}
-      <div className="hidden md:flex justify-between items-center mb-8 relative z-10">
-        <div>
-          <h1 className="text-3xl font-black text-gray-900 dark:text-zinc-100 tracking-tight transition-colors">Новая проверка</h1>
-          <p className="text-sm text-gray-500 dark:text-zinc-400 font-medium mt-1 transition-colors">Выберите параметры для старта аудита</p>
-        </div>
-        <div className="flex items-center gap-4">
-          <ThemeToggle />
-          <Link href={backToUrl} className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border border-white/50 dark:border-zinc-800/50 text-gray-700 dark:text-zinc-300 px-5 py-2.5 rounded-xl font-bold hover:bg-white dark:hover:bg-zinc-800 shadow-sm transition-all hover:scale-[1.02] active:scale-95">
-            {backToUrl.includes('admin') ? 'Назад в админку' : 'Назад на главную'}
-          </Link>
-        </div>
-      </div>
-
-      <div className="flex-1 flex flex-col space-y-6 md:space-y-8 md:max-w-4xl relative z-10">
-        
-        {/* 1. ВЫБОР ТУ */}
-        <div className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl p-6 sm:p-8 rounded-[2rem] shadow-sm border border-white/50 dark:border-zinc-800/50 transition-colors">
-          <h2 className="text-xs font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-5 ml-1 transition-colors">
-            {userRole === 'TU' ? '1. Ваша учетная запись (ТУ)' : '1. Выберите территорию (ТУ)'}
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-            {tus.map((tu: User) => {
-              const isAllAdminMode = tu.id === 'all_admin_locations';
-              const isSelected = selectedTu === tu.id;
-              return (
-                <div 
-                  key={tu.id}
-                  onClick={() => handleTuSelect(tu.id)}
-                  className={`p-4 md:p-5 rounded-[1.5rem] cursor-pointer border-2 transition-all duration-200 ${
-                    isSelected 
-                      ? isAllAdminMode
-                        ? 'border-[#F25C05] bg-[#F25C05] text-white shadow-lg shadow-orange-500/20'
-                        : 'border-gray-900 dark:border-zinc-500 bg-gray-900 dark:bg-zinc-700 text-white shadow-lg' 
-                      : 'border-transparent bg-gray-50/80 dark:bg-zinc-950/50 hover:border-gray-200 dark:hover:border-zinc-700 hover:bg-white dark:hover:bg-zinc-800 text-gray-900 dark:text-zinc-300'
-                  }`}
-                >
-                  <div className="text-[10px] md:text-xs uppercase font-bold opacity-60 mb-1">{isAllAdminMode ? 'Режим superficial' : 'Управляющий'}</div>
-                  <div className="font-black text-sm md:text-base truncate">{tu.name || tu.login}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* 2. ВЫБОР ТОЧКИ */}
-        <div className={`transition-all duration-500 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl p-6 sm:p-8 rounded-[2rem] shadow-sm border border-white/50 dark:border-zinc-800/50 ${selectedTu ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none hidden md:block'}`}>
-          <h2 className="text-xs font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-5 ml-1 transition-colors">
-            {selectedTu === 'all_admin_locations' ? '2. Выберите любую точку всей сети' : '2. Выберите точку'}
-          </h2>
-          {filteredLocations.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
-              {filteredLocations.map((loc: EnrichedLocation) => (
-                <div 
-                  key={loc.id}
-                  onClick={() => setSelectedLocation(loc.id)}
-                  className={`relative p-4 md:p-5 rounded-[1.5rem] cursor-pointer border-2 transition-all duration-200 overflow-hidden flex items-start gap-4 ${
-                    selectedLocation === loc.id 
-                      ? 'border-[#F25C05] bg-orange-50/80 dark:bg-orange-900/20 shadow-md' 
-                      : 'border-transparent bg-gray-50/80 dark:bg-zinc-950/50 hover:border-orange-200 dark:hover:border-orange-900/50 hover:bg-white dark:hover:bg-zinc-800'
-                  }`}
-                >
-                  <div className={`w-10 h-10 md:w-12 md:h-12 shrink-0 rounded-full flex items-center justify-center text-white font-bold text-lg md:text-xl transition-colors ${selectedLocation === loc.id ? 'bg-[#F25C05]' : 'bg-gray-800 dark:bg-zinc-700'}`}>📍</div>
-                  <div className="flex-1 min-w-0 pt-0.5">
-                    <div className={`font-black text-sm md:text-base leading-tight truncate ${selectedLocation === loc.id ? 'text-[#F25C05]' : 'text-gray-900 dark:text-zinc-200'}`}>{loc.name}</div>
-                    {loc.address && <div className={`text-xs mt-1 truncate ${selectedLocation === loc.id ? 'text-orange-600/80' : 'text-gray-400 dark:text-zinc-500 font-bold'}`}>{loc.address}</div>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="p-8 md:p-12 bg-gray-50/50 dark:bg-zinc-950/50 rounded-3xl text-center text-gray-400 dark:text-zinc-600 font-bold border-2 border-dashed border-gray-200 dark:border-zinc-800 transition-colors">
-              На этой территории пока нет доступных точек
-            </div>
-          )}
-        </div>
-
-        {/* 3. ВЫБОР ЧЕК-ЛИСТА */}
-        <div className={`transition-all duration-500 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl p-6 sm:p-8 rounded-[2rem] shadow-sm border border-white/50 dark:border-zinc-800/50 ${selectedLocation ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none hidden md:block'}`}>
-          <h2 className="text-xs font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-5 ml-1 transition-colors">3. Выберите чек-лист</h2>
-          {filteredChecklists.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-              {filteredChecklists.map((chk: any) => (
-                <div 
-                  key={chk.id}
-                  onClick={() => setSelectedChecklist(chk.id)}
-                  className={`flex items-center p-4 md:p-5 rounded-[1.5rem] cursor-pointer border-2 transition-all duration-200 ${
-                    selectedChecklist === chk.id 
-                      ? 'border-blue-500 bg-blue-50/80 dark:bg-blue-900/20 shadow-md' 
-                      : 'border-transparent bg-gray-50/80 dark:bg-zinc-950/50 hover:border-blue-200 dark:hover:border-blue-900/50 hover:bg-white dark:hover:bg-zinc-800'
-                  }`}
-                >
-                  <div className={`w-12 h-12 md:w-14 md:h-14 shrink-0 rounded-2xl mr-4 flex items-center justify-center text-xl md:text-2xl shadow-inner transition-colors ${selectedChecklist === chk.id ? 'bg-blue-500 text-white' : 'bg-white dark:bg-zinc-800 text-gray-400 dark:text-zinc-500 border border-gray-100 dark:border-zinc-700'}`}>📋</div>
-                  <div className="flex-1 min-w-0">
-                    <div className={`font-black text-lg md:text-xl leading-tight truncate ${selectedChecklist === chk.id ? 'text-blue-700 dark:text-blue-400' : 'text-gray-900 dark:text-zinc-200'}`}>{chk.title}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="p-8 md:p-12 bg-gray-50/50 dark:bg-zinc-950/50 rounded-3xl text-center text-gray-400 dark:text-zinc-600 font-bold border-2 border-dashed border-gray-200 dark:border-zinc-800 transition-colors">
-              Для вашей роли нет доступных чек-листов
-            </div>
-          )}
-        </div>
-
-        <button 
-          onClick={handleContinue}
-          disabled={!selectedLocation || !selectedChecklist}
-          className="w-full md:w-auto md:min-w-[300px] bg-[#F25C05] text-white py-5 md:py-4 md:px-10 rounded-2xl font-black text-lg md:text-base active:scale-[0.98] transition-all shadow-lg shadow-orange-500/20 dark:shadow-orange-900/30 hover:bg-orange-600 dark:hover:bg-[#CC4D03] disabled:bg-gray-300 dark:disabled:bg-zinc-800 disabled:shadow-none"
-        >
-          Начать заполнение
-        </button>
-      </div>
-    </div>
-  );
+  return <div className="ui-page max-w-4xl space-y-5">
+    <header className="ui-heading"><div><Link className="ui-muted inline-flex items-center gap-1 text-sm mb-3 hover:text-orange-600" href={backTo}><Icon name="arrow" className="h-4 w-4" />Назад</Link><h1>Новая проверка</h1><p>Выберите точку и действующий чек-лист.</p></div></header>
+    {audit.error && <Notice error>Не удалось загрузить параметры проверки. <button className="underline" onClick={() => void audit.refresh()}>Повторить</button></Notice>}
+    {audit.isLoading ? <LoadingState /> : !audit.error && <>
+      <section className="ui-panel p-4 sm:p-6 space-y-4">
+        <h2 className="font-semibold"><span className="text-[var(--brand)] mr-2">01</span>Точка</h2>
+        {audit.currentUserRole !== 'TU' && <Field label="Территория"><select className="ui-field" value={audit.selectedTu} onChange={e => audit.handleTuSelect(e.target.value)}><option value="">Все доступные точки</option>{audit.tus.map(t => <option key={t.id} value={t.id}>{t.name || t.login}</option>)}</select></Field>}
+        <SearchInput placeholder="Название, код или адрес" value={search} onChange={e => setSearch(e.target.value)} />
+        {audit.selectedLocation && !selected && <Notice error>Выбранная точка больше недоступна. Выберите другую.</Notice>}
+        {!locations.length ? <EmptyState title="Нет доступных точек" description="Измените поиск или обратитесь к администратору." /> : <div className="max-h-[360px] overflow-y-auto space-y-2 pr-1">{locations.map(l => <button key={l.id} type="button" aria-pressed={selected?.id === l.id} onClick={() => audit.setSelectedLocation(l.id)} className={'w-full flex items-center gap-3 text-left p-3 min-h-16 rounded-xl border ' + (selected?.id === l.id ? 'border-orange-500 bg-[var(--brand-soft)]' : 'border-[var(--border)] hover:bg-[var(--surface-muted)]')}><Icon name="location" className="h-5 w-5 shrink-0 ui-muted" /><span className="flex-1 min-w-0"><span className="block text-sm font-semibold">{l.name}</span>{l.address && <span className="block text-xs mt-1 ui-muted break-words">{l.address}</span>}</span>{selected?.id === l.id && <Icon name="check" className="h-5 w-5 text-[var(--brand)] shrink-0" />}</button>)}</div>}
+      </section>
+      <section className="ui-panel p-4 sm:p-6 space-y-4">
+        <h2 className="font-semibold"><span className="text-[var(--brand)] mr-2">02</span>Чек-лист</h2>
+        {!audit.checklists.length ? <EmptyState title="Нет доступных чек-листов" description="Администратор должен опубликовать чек-лист для вашей роли." /> : <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{audit.checklists.map(c => <button key={c.id} type="button" aria-pressed={checklist?.id === c.id} onClick={() => audit.setSelectedChecklist(c.id)} className={'text-left p-4 rounded-xl border ' + (checklist?.id === c.id ? 'border-orange-500 bg-[var(--brand-soft)]' : 'border-[var(--border)] hover:bg-[var(--surface-muted)]')}><span className="block font-semibold">{c.title}</span><span className="ui-muted text-xs mt-2 block">{Array.isArray(c.items) ? c.items.length : ''} вопросов</span></button>)}</div>}
+      </section>
+      <section className="ui-panel p-4 sm:p-5"><div className="flex flex-wrap items-center justify-between gap-4"><div><p className="text-sm font-semibold">{selected?.name || 'Выберите точку'}</p><p className="ui-muted text-xs mt-1">{checklist?.title || 'Выберите чек-лист'}</p>{selected && checklist && <div className="mt-2"><Badge tone="success">Готово к началу</Badge></div>}</div><Button disabled={!selected || !checklist} loading={starting} onClick={begin} className="w-full sm:w-auto"><Icon name="plus" />Начать заполнение</Button></div></section>
+    </>}
+  </div>;
 }
-
 export default function NewAuditPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-transparent flex items-center justify-center font-bold text-zinc-500">Загрузка...</div>}>
-      <NewAuditContent />
-    </Suspense>
-  );
+  return <Suspense fallback={<LoadingState />}><NewAuditContent /></Suspense>;
 }

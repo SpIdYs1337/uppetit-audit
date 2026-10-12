@@ -1,232 +1,103 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { useUsers } from '@/hooks/useUsers';
+import { useMemo, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { useUsers, type PublicUser, type UserSaveResult } from '@/hooks/useUsers';
+import { usePreference } from '@/hooks/usePreference';
 import { UserEditor } from '@/components/users/UserEditor';
-import { User } from '@prisma/client';
+import { ActionMenu, Badge, Button, ConfirmDialog, Dialog, EmptyState, Field, Icon, LoadingState, Notice, Pagination, SearchInput } from '@/components/ui';
 
-export type EnrichedUser = User & { 
-  hasPassword?: boolean;
-  inviteToken?: string | null;
-};
-
-type TabType = 'EMPLOYEES' | 'INVITES';
+export type EnrichedUser = PublicUser;
+const roles = { ADMIN: 'Администратор', TU: 'ТУ', AUDITOR: 'Аудитор' };
+const views = ['table', 'cards'] as const;
+const sizes = ['25', '50', '100'] as const;
+type Action = { user: PublicUser; type: 'delete' | 'reset' | 'revoke' | 'block' | 'invite' };
 
 export default function AdminUsersPage() {
-  const { users, isLoading, saveUser, deleteUser, resetPassword } = useUsers();
-  
-  const [editingUser, setEditingUser] = useState<EnrichedUser | null>(null);
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
-  
-  const [activeTab, setActiveTab] = useState<TabType>('EMPLOYEES');
-  const [searchQuery, setSearchQuery] = useState('');
-
-  const openEditor = (user: EnrichedUser | null = null) => {
-    setEditingUser(user);
-    setIsEditorOpen(true);
-  };
-
-  const handleResetPassword = async (user: EnrichedUser) => {
-    if (!confirm(`Точно сбросить пароль для сотрудника ${user.login}? Старый пароль перестанет работать.`)) return;
+  const { users, isLoading, error: loadError, refresh, saveUser, deleteUser, resetPassword } = useUsers();
+  const { data: session } = useSession();
+  const [editor, setEditor] = useState<{ user: PublicUser | null } | null>(null);
+  const [tab, setTab] = useState('employees');
+  const [search, setSearch] = useState('');
+  const [role, setRole] = useState('');
+  const [status, setStatus] = useState('');
+  const [view, setView] = usePreference('users-view', 'table', views);
+  const [size, setSize] = usePreference('users-size', '25', sizes);
+  const [page, setPage] = useState(1);
+  const [action, setAction] = useState<Action | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [link, setLink] = useState<{ url: string; title: string; expires?: string } | null>(null);
+  const employees = users.filter(u => u.hasPassword).length;
+  const filtered = useMemo(() => users.filter(u =>
+    (tab === 'employees' ? u.hasPassword : !u.hasPassword)
+    && (!role || u.role === role)
+    && (!status || (status === 'active' ? u.isActive !== false : u.isActive === false))
+    && [u.name, u.login, u.email, u.phone].some(v => (v || '').toLocaleLowerCase('ru').includes(search.trim().toLocaleLowerCase('ru')))),
+  [users, tab, role, status, search]);
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / Number(size))));
+  const rows = filtered.slice((currentPage - 1) * Number(size), currentPage * Number(size));
+  function startAction(user: PublicUser, type: Action['type']) { setActionError(''); setAction({ user, type }); }
+  function saved(result: UserSaveResult) {
+    setNotice('Профиль сотрудника сохранён.');
+    if (result.inviteToken) setLink({ url: window.location.origin + '/setup-password?token=' + encodeURIComponent(result.inviteToken), title: 'Приглашение сотрудника', expires: result.inviteExpiresAt || undefined });
+  }
+  async function confirmAction() {
+    if (!action) return; setBusy(true); setActionError('');
     try {
-      const data = await resetPassword(user.id);
-      const link = `${window.location.origin}/setup-password?token=${data.token}`;
-      prompt('Сеансы завершены. Ссылка действует 15 минут. Скопируйте и отправьте сотруднику:', link);
-    } catch {
-      alert('Ошибка при сбросе');
-    }
-  };
-
-  const handleDelete = async (id: string, isInvite = false) => {
-    const msg = isInvite 
-      ? 'Точно отменить приглашение? Пользователь будет удален.' 
-      : 'Точно удалить сотрудника? Его аудиты тоже удалятся!';
-      
-    if (!confirm(msg)) return;
-    
-    try { await deleteUser(id); } 
-    catch { alert('Ошибка при удалении'); }
-  };
-
-  const reissueInvite = async (user: EnrichedUser) => {
-    if (!confirm('Выпустить новую ссылку? Предыдущая ссылка перестанет работать.')) return;
-    try {
-      const data = await saveUser({ id: user.id, reissueInvite: true }, true);
-      prompt(`Ссылка действует до ${new Date(data.expiresAt).toLocaleString()}. Скопируйте и отправьте сотруднику:`, `${window.location.origin}/setup-password?token=${data.token}`);
-    } catch (error) { alert(error instanceof Error ? error.message : 'Ошибка'); }
-  };
-  const changeAccess = async (user: EnrichedUser, revokeOnly = false) => {
-    if (!confirm(revokeOnly ? 'Завершить все сеансы сотрудника?' : (user.isActive ? 'Заблокировать сотрудника и завершить его сеансы?' : 'Разблокировать сотрудника?'))) return;
-    try { await saveUser({ id: user.id, ...(revokeOnly ? { revokeSessions: true } : { isActive: !user.isActive }) }, true); }
-    catch (error) { alert(error instanceof Error ? error.message : 'Ошибка'); }
-  };
-
-  const { activeUsers, invitedUsers } = useMemo(() => {
-    const query = searchQuery.toLowerCase().trim();
-    
-    const filtered = users.filter(u => {
-      if (!query) return true;
-      return (
-        (u.name || '').toLowerCase().includes(query) ||
-        (u.login || '').toLowerCase().includes(query) ||
-        (u.phone || '').includes(query) ||
-        (u.email || '').toLowerCase().includes(query)
-      );
-    }) as EnrichedUser[];
-
-    return {
-      activeUsers: filtered.filter(u => u.hasPassword),
-      invitedUsers: filtered.filter(u => !u.hasPassword),
-    };
-  }, [users, searchQuery]);
-
-  if (isLoading) return <div className="p-4 md:p-8 text-gray-500 dark:text-zinc-500 font-bold">Загрузка...</div>;
-
-  return (
-    <div className="p-4 md:p-8 max-w-6xl mx-auto pb-24 md:pb-20 transition-colors duration-300">
-      
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6 md:mb-8">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-zinc-100 tracking-tight transition-colors">Администрирование</h1>
-          <p className="text-sm md:text-base text-gray-500 dark:text-zinc-400 mt-1 md:mt-2 transition-colors">Управление персоналом и доступами</p><a href="/setup-mfa" className="text-sm text-orange-600 underline">Настроить аутентификатор</a>
-        </div>
-        {!isEditorOpen && (
-          <button 
-            onClick={() => openEditor()} 
-            className="w-full md:w-auto bg-black dark:bg-white text-white dark:text-black px-6 py-3.5 md:py-3 rounded-xl font-bold shadow-lg transition-all hover:bg-gray-800 dark:hover:bg-gray-200 active:scale-95 text-sm"
-          >
-            + Добавить сотрудника
-          </button>
-        )}
-      </div>
-
-      {isEditorOpen ? (
-        <UserEditor 
-          initialData={editingUser} 
-          onClose={() => setIsEditorOpen(false)} 
-          onSave={saveUser} 
-        />
-      ) : (
-        <>
-          <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 mb-6 md:mb-8 transition-colors duration-300">
-            
-            <div className="flex bg-gray-100/50 dark:bg-zinc-900 p-1 rounded-2xl border border-gray-200/50 dark:border-zinc-800 w-full md:w-auto transition-colors">
-              <button 
-                onClick={() => setActiveTab('EMPLOYEES')}
-                className={`flex-1 md:flex-none px-4 md:px-6 py-3 md:py-2.5 rounded-xl font-bold text-xs md:text-sm transition-all whitespace-nowrap ${activeTab === 'EMPLOYEES' ? 'bg-[#F25C05] text-white shadow-md' : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-100 hover:bg-white/50 dark:hover:bg-zinc-800'}`}
-              >
-                Сотрудники ({activeUsers.length})
-              </button>
-              <button 
-                onClick={() => setActiveTab('INVITES')}
-                className={`flex-1 md:flex-none px-4 md:px-6 py-3 md:py-2.5 rounded-xl font-bold text-xs md:text-sm transition-all whitespace-nowrap ${activeTab === 'INVITES' ? 'bg-[#F25C05] text-white shadow-md' : 'text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-100 hover:bg-white/50 dark:hover:bg-zinc-800'}`}
-              >
-                Приглашения ({invitedUsers.length})
-              </button>
-            </div>
-
-            <div className="w-full md:w-72 relative">
-              <input 
-                type="text" 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Поиск по ФИО, логину..." 
-                className="w-full pl-10 pr-4 py-3 md:py-2.5 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-bold text-gray-900 dark:text-zinc-100 placeholder-gray-400 dark:placeholder-zinc-500 outline-none focus:border-[#F25C05] dark:focus:border-[#F25C05] transition-colors shadow-sm"
-              />
-              <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-zinc-500">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          {activeTab === 'EMPLOYEES' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-              {activeUsers.length === 0 ? (
-                <div className="col-span-full py-10 text-center text-gray-400 dark:text-zinc-600 font-bold transition-colors">Сотрудники не найдены</div>
-              ) : (
-                activeUsers.map(user => (
-                  <div key={user.id} className="bg-white dark:bg-zinc-900 p-5 md:p-6 rounded-3xl shadow-sm hover:-translate-y-1 hover:shadow-md border border-gray-100 dark:border-zinc-800 flex flex-col transition-all duration-300">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="pr-2">
-                        <h3 className="text-lg md:text-xl font-black text-gray-900 dark:text-zinc-100 leading-tight break-words transition-colors">{user.name || 'Имя не указано'}</h3>
-                        <p className="text-xs md:text-sm font-bold text-gray-400 dark:text-zinc-500 mt-1 transition-colors">@{user.login}</p>
-                      </div>
-                      <span className={`flex-shrink-0 text-[10px] font-bold uppercase px-2 py-1 rounded-md transition-colors ${user.role === 'ADMIN' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'}`}>
-                        {user.role}
-                      </span>
-                    </div>
-                    
-                    <div className="mb-4 space-y-1">
-                      {user.email && <div className="text-xs md:text-sm text-gray-500 dark:text-zinc-400 font-bold truncate transition-colors">📧 {user.email}</div>}
-                      {user.phone && <div className="text-xs md:text-sm text-gray-500 dark:text-zinc-400 font-bold transition-colors">📞 {user.phone}</div>}
-                    </div>
-
-                    <div className="mt-auto flex flex-col gap-2 pt-4 border-t border-gray-50 dark:border-zinc-800/50 transition-colors">
-                      <div className="flex gap-2">
-                        <button onClick={() => openEditor(user)} className="flex-1 bg-gray-50 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 py-2.5 md:py-2 rounded-xl font-bold text-xs hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors">Изменить</button>
-                        <button onClick={() => handleDelete(user.id)} className="px-4 bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 rounded-xl font-bold text-xs hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">Удалить</button>
-                      </div>
-                      <button onClick={() => handleResetPassword(user)} className="w-full bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 py-2.5 md:py-2 rounded-xl font-bold text-xs hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors">
-                        Сбросить пароль
-                      </button>
-                      <button onClick={() => changeAccess(user, true)} className="py-2 text-xs font-bold text-gray-500">Завершить сеансы</button>
-                      <button onClick={() => changeAccess(user)} className="py-2 text-xs font-bold text-red-500">{user.isActive ? 'Заблокировать' : 'Разблокировать'}</button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-
-          {activeTab === 'INVITES' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-              {invitedUsers.length === 0 ? (
-                <div className="col-span-full py-10 text-center text-gray-400 dark:text-zinc-600 font-bold transition-colors">Нет активных приглашений</div>
-              ) : (
-                invitedUsers.map(user => (
-                  <div key={user.id} className="bg-white dark:bg-zinc-900 p-5 md:p-6 rounded-3xl shadow-sm hover:-translate-y-1 hover:shadow-md border border-orange-100 dark:border-orange-900/30 flex flex-col relative overflow-hidden transition-all duration-300">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-orange-400 dark:bg-orange-500/50"></div>
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="pr-2">
-                        <h3 className="text-lg md:text-xl font-black text-gray-900 dark:text-zinc-100 leading-tight break-words transition-colors">{user.name || 'Без имени'}</h3>
-                        <p className="text-xs md:text-sm font-bold text-gray-400 dark:text-zinc-500 mt-1 transition-colors">@{user.login}</p>
-                      </div>
-                      <span className="flex-shrink-0 text-[10px] font-bold uppercase px-2 py-1 rounded-md bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 transition-colors">
-                        Ожидает
-                      </span>
-                    </div>
-                    
-                    <div className="mb-4 space-y-1">
-                      {user.email && <div className="text-xs md:text-sm text-gray-500 dark:text-zinc-400 font-bold truncate transition-colors">📧 {user.email}</div>}
-                      {user.role && <div className="text-xs md:text-sm text-gray-500 dark:text-zinc-400 font-bold transition-colors">👤 Роль: {user.role}</div>}
-                    </div>
-
-                    <div className="mt-auto flex flex-col gap-2 pt-4 border-t border-gray-50 dark:border-zinc-800/50 transition-colors">
-                      <button 
-                        onClick={() => reissueInvite(user)}
-                        className="w-full bg-[#F25C05] dark:bg-[#E65604] text-white py-3 md:py-2.5 rounded-xl font-bold text-xs hover:bg-orange-600 dark:hover:bg-[#CC4D03] transition-colors shadow-md shadow-orange-500/20 dark:shadow-orange-900/20 flex justify-center items-center gap-2"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
-                        </svg>
-                        Выпустить новую ссылку
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(user.id, true)} 
-                        className="w-full bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 py-3 md:py-2.5 rounded-xl font-bold text-xs hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
-                      >
-                        Отменить приглашение
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-        </>
-      )}
+      let result: UserSaveResult = {};
+      if (action.type === 'delete') await deleteUser(action.user.id);
+      else if (action.type === 'reset') result = await resetPassword(action.user.id);
+      else result = await saveUser({ id: action.user.id, ...(action.type === 'invite' ? { reissueInvite: true } : action.type === 'revoke' ? { revokeSessions: true } : { isActive: action.user.isActive === false }) }, true);
+      if (result.token) setLink({ url: window.location.origin + '/setup-password?token=' + encodeURIComponent(result.token), title: action.type === 'reset' ? 'Установка нового пароля' : 'Новое приглашение', expires: result.expiresAt });
+      setNotice('Изменения сохранены.'); setAction(null);
+    } catch (cause) { setActionError(cause instanceof Error ? cause.message : 'Не удалось выполнить действие'); }
+    finally { setBusy(false); }
+  }
+  function actions(user: PublicUser) {
+    const own = user.id === session?.user.id;
+    return <div className="flex items-center justify-end gap-1"><Button variant="ghost" onClick={() => setEditor({ user })} aria-label={'Редактировать ' + (user.name || user.login)} title="Редактировать"><Icon name="edit" /></Button><ActionMenu label={'Действия для ' + user.login}>
+      <button onClick={() => setEditor({ user })}>Редактировать профиль</button>
+      {!user.hasPassword && <button onClick={() => startAction(user, 'invite')}>Выпустить приглашение</button>}
+      {user.hasPassword && <button onClick={() => startAction(user, 'reset')}>Сбросить пароль</button>}
+      <button onClick={() => startAction(user, 'revoke')}>Завершить сеансы</button>
+      <button disabled={own} onClick={() => startAction(user, 'block')}>{user.isActive === false ? 'Разблокировать' : 'Заблокировать'}</button>
+      <button disabled={own} className="text-red-600 dark:text-red-400" onClick={() => startAction(user, 'delete')}>{user.hasPassword ? 'Удалить сотрудника' : 'Отменить приглашение'}</button>
+    </ActionMenu></div>;
+  }
+  const title = action ? ({ delete: 'Удалить запись?', reset: 'Сбросить пароль?', revoke: 'Завершить сеансы?', block: action.user.isActive === false ? 'Открыть доступ?' : 'Заблокировать сотрудника?', invite: 'Новое приглашение?' })[action.type] : '';
+  const message = action ? action.type === 'delete' ? 'Сотрудник будет удалён, его планы удалятся. Аудиты сохранятся с историческим именем автора. Отменить это действие нельзя.'
+    : action.type === 'reset' ? 'Текущий пароль перестанет работать, сеансы будут завершены. Появится ссылка установки пароля на 15 минут. Привязка MFA сохраняется.'
+    : action.type === 'invite' ? 'Предыдущая ссылка перестанет работать. Новая ссылка будет показана после подтверждения.'
+    : action.type === 'revoke' ? 'Сотрудник выйдет из приложения на всех устройствах. Данные проверок сохранятся.'
+    : action.user.isActive === false ? 'Сотрудник сможет снова входить в приложение.' : 'Вход сотрудника будет заблокирован, все его сеансы завершатся.' : '';
+  return <div className="ui-page space-y-5">
+    <header className="ui-heading"><div><h1>Сотрудники</h1><p>Доступ, роли и приглашения · {users.length} записей</p></div><Button onClick={() => setEditor({ user: null })}><Icon name="plus" />Добавить сотрудника</Button></header>
+    {notice && <Notice onClose={() => setNotice('')}>{notice}</Notice>}
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="ui-tabs"><button aria-pressed={tab === 'employees'} onClick={() => { setTab('employees'); setPage(1); }}>Сотрудники · {employees}</button><button aria-pressed={tab === 'invites'} onClick={() => { setTab('invites'); setPage(1); }}>Приглашения · {users.length - employees}</button></div>
+      <div className="flex gap-2"><div className="ui-tabs hidden lg:flex"><button aria-pressed={view === 'table'} onClick={() => setView('table')}>Таблица</button><button aria-pressed={view === 'cards'} onClick={() => setView('cards')}>Карточки</button></div><Button variant="secondary" onClick={() => void refresh()}>Обновить</Button></div>
     </div>
-  );
+    <section className="ui-panel">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[minmax(200px,1fr)_180px_180px_100px] gap-3 p-4">
+        <SearchInput value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Имя, логин, почта или телефон" />
+        <select className="ui-field" aria-label="Роль сотрудника" value={role} onChange={e => { setRole(e.target.value); setPage(1); }}><option value="">Все роли</option>{Object.entries(roles).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+        <select className="ui-field" aria-label="Статус сотрудника" value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="">Все статусы</option><option value="active">Активные</option><option value="blocked">Заблокированные</option></select>
+        <select className="ui-field" aria-label="Строк на странице" value={size} onChange={e => { setSize(e.target.value as typeof size); setPage(1); }}>{sizes.map(value => <option key={value}>{value}</option>)}</select>
+      </div>
+      {loadError ? <div className="p-4"><Notice error>Не удалось загрузить сотрудников. <button className="underline" onClick={() => void refresh()}>Повторить</button></Notice></div> : isLoading ? <LoadingState label="Загружаем сотрудников…" /> : !rows.length ? <EmptyState title="Сотрудники не найдены" description="Измените поиск или фильтры." /> : <>
+        {view === 'table' && <div className="hidden lg:block overflow-x-auto"><table className="ui-table"><thead><tr><th>Сотрудник</th><th>Контакты</th><th>Роль / точки</th><th>Доступ</th><th><span className="sr-only">Действия</span></th></tr></thead><tbody>{rows.map(user => {
+          const points = new Set([...(user.locations || []), ...(user.managedLocations || [])].map(l => l.id)).size;
+          return <tr key={user.id}><td><button className="text-left font-semibold hover:text-orange-600" onClick={() => setEditor({ user })}>{user.name || user.login}</button><p className="ui-muted mt-1 text-xs">@{user.login}</p></td><td className="max-w-56 break-words"><p>{user.email || '—'}</p><p className="ui-muted mt-1 text-xs">{user.phone || 'Телефон не указан'}</p></td><td><Badge tone={user.role === 'ADMIN' ? 'brand' : 'neutral'}>{roles[user.role]}</Badge>{user.role === 'TU' && <p className="ui-muted mt-1 text-xs">{points} точек</p>}</td><td><Badge tone={user.isActive === false ? 'danger' : 'success'}>{user.isActive === false ? 'Заблокирован' : 'Активен'}</Badge>{!user.hasPassword && <p className="ui-muted mt-1 text-xs">{user.inviteExpiresAt ? 'Ссылка до ' + new Date(user.inviteExpiresAt).toLocaleDateString('ru') : 'Ссылка не выдана'}</p>}</td><td>{actions(user)}</td></tr>;
+        })}</tbody></table></div>}
+        <div className={view === 'table' ? 'lg:hidden divide-y divide-[var(--border)]' : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 p-4'}>{rows.map(user => <article key={user.id} className={view === 'table' ? 'p-4' : 'ui-panel p-4'}><div className="flex justify-between items-start gap-2"><div className="min-w-0"><button className="text-left font-semibold break-words" onClick={() => setEditor({ user })}>{user.name || user.login}</button><p className="ui-muted text-xs mt-1">@{user.login}</p></div>{actions(user)}</div><div className="flex flex-wrap gap-2 mt-3"><Badge tone={user.role === 'ADMIN' ? 'brand' : 'neutral'}>{roles[user.role]}</Badge><Badge tone={user.isActive === false ? 'danger' : 'success'}>{user.isActive === false ? 'Заблокирован' : 'Активен'}</Badge></div><p className="ui-muted text-xs mt-3 break-words">{[user.email, user.phone].filter(Boolean).join(' · ') || 'Контакты не указаны'}</p></article>)}</div>
+      </>}
+      {!isLoading && !loadError && <Pagination page={currentPage} total={filtered.length} pageSize={Number(size)} onPage={setPage} />}
+    </section>
+    <a className="ui-muted text-sm underline underline-offset-4" href="/setup-mfa">Настройки моего аутентификатора</a>
+    {editor && <UserEditor initialData={editor.user} onClose={() => setEditor(null)} onSave={saveUser} onSaved={saved} />}
+    {action && <ConfirmDialog title={title} message={message} onClose={() => setAction(null)} onConfirm={() => void confirmAction()} busy={busy} error={actionError} />}
+    {link && <Dialog title={link.title} onClose={() => setLink(null)}><div className="space-y-4"><Notice>Передайте ссылку сотруднику лично. После закрытия этого окна получить её снова нельзя.</Notice><Field label="Ссылка установки пароля"><input readOnly className="ui-field" value={link.url} onFocus={e => e.target.select()} /></Field>{link.expires && <p className="ui-muted text-xs">Действует до {new Date(link.expires).toLocaleString('ru')}</p>}<Button onClick={async () => { try { await navigator.clipboard.writeText(link.url); setNotice('Ссылка скопирована.'); } catch { setNotice('Не удалось скопировать. Выделите ссылку и скопируйте вручную.'); } }}>Скопировать ссылку</Button></div></Dialog>}
+  </div>;
 }

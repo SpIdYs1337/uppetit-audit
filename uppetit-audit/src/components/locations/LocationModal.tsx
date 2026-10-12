@@ -1,94 +1,56 @@
-import { useState, useEffect } from 'react';
-import { User } from '@prisma/client'; 
-import { EnrichedLocation } from '@/hooks/useLocations';
+'use client';
 
-interface LocationModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  initialData: EnrichedLocation | null;
-  onSave: (data: any, isEdit: boolean) => Promise<void>;
-  tus: User[];
+import { useState } from 'react';
+import type { PublicUser } from '@/hooks/useUsers';
+import { assignedManagers, type EnrichedLocation, type LocationChanges } from '@/hooks/useLocations';
+import { Button, Dialog, Field, Notice, SearchInput, Switch } from '@/components/ui';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
+
+export function LocationModal({ isOpen, onClose, initialData, onSave, tus }: {
+  isOpen: boolean; onClose: () => void; initialData: EnrichedLocation | null;
+  onSave: (data: LocationChanges, isEdit: boolean) => Promise<void>; tus: PublicUser[];
+}) {
+  return isOpen ? <LocationForm initialData={initialData} onClose={onClose} onSave={onSave} tus={tus} /> : null;
 }
-
-export function LocationModal({ isOpen, onClose, initialData, onSave, tus }: LocationModalProps) {
-  const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
-  const [selectedTuIds, setSelectedTuIds] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+function LocationForm({ initialData, onClose, onSave, tus }: Omit<Parameters<typeof LocationModal>[0], 'isOpen'>) {
+  const initial = { name: initialData?.name || '', address: initialData?.address || '',
+    isActive: initialData?.isActive !== false, activeFrom: initialData?.activeFrom ? new Date(initialData.activeFrom).toISOString().slice(0, 10) : '',
+    activeTo: initialData?.activeTo ? new Date(initialData.activeTo).toISOString().slice(0, 10) : '', tuIds: initialData ? assignedManagers(initialData).map(t => t.id).sort() : [] as string[] };
+  const [form, setForm] = useState(initial);
+  const [search, setSearch] = useState('');
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (isOpen) {
-      setName(initialData?.name || '');
-      setAddress(initialData?.address || '');
-      if (initialData) {
-        const existingTus = initialData.tus?.map((t: User) => t.id) || [];
-        if (existingTus.length === 0 && initialData.tuId) existingTus.push(initialData.tuId);
-        setSelectedTuIds(existingTus);
-      } else setSelectedTuIds([]);
-      setError('');
-    }
-  }, [isOpen, initialData]);
-
-  if (!isOpen) return null;
-
-  const toggleTu = (tuId: string) => setSelectedTuIds(prev => prev.includes(tuId) ? prev.filter(id => id !== tuId) : [...prev, tuId]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true); setError('');
+  const dirty = JSON.stringify(form) !== JSON.stringify(initial);
+  useUnsavedChanges(dirty);
+  const managers = [...new Map([...tus, ...(initialData ? assignedManagers(initialData).map(t => ({ ...t, role: 'TU' as const })) : [])].map(t => [t.id, t])).values()];
+  function close() { if (!busy && (!dirty || window.confirm('Закрыть форму и потерять несохранённые изменения?'))) onClose(); }
+  async function submit(event: React.FormEvent) {
+    event.preventDefault(); setError('');
+    if (form.activeFrom && form.activeTo && form.activeFrom > form.activeTo) { setError('Дата окончания должна быть не раньше даты начала.'); return; }
+    if (!form.name.trim()) { setError('Укажите название точки.'); return; }
+    setBusy(true);
     try {
-      await onSave({ name, address: address || null, tuIds: selectedTuIds }, !!initialData);
-      onClose();
-    } catch { setError('Ошибка при сохранении'); } finally { setIsLoading(false); }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 transition-all">
-      <div className="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-transparent dark:border-zinc-800 transition-colors duration-300">
-        <div className="p-6 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center bg-gray-50 dark:bg-zinc-900/50 transition-colors">
-          <h2 className="text-xl font-black text-gray-900 dark:text-zinc-100">{initialData ? 'Настройка точки' : 'Новая точка'}</h2>
-          <button onClick={onClose} className="w-8 h-8 bg-white dark:bg-zinc-800 rounded-full flex items-center justify-center font-bold text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-100 shadow-sm border border-gray-200 dark:border-zinc-700 transition-colors">✕</button>
-        </div>
-        
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          <div>
-            <label className="block text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-2">Название</label>
-            <input type="text" required value={name} onChange={(e) => setName(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-gray-100 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-950/50 focus:bg-white dark:focus:bg-zinc-950 outline-none focus:border-[#F25C05] dark:focus:border-[#F25C05] font-bold text-gray-900 dark:text-zinc-100 transition-colors" placeholder="Например: Б1" />
-          </div>
-          <div>
-            <label className="block text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-2">Точный адрес (необязательно)</label>
-            <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-gray-100 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-950/50 focus:bg-white dark:focus:bg-zinc-950 outline-none focus:border-[#F25C05] dark:focus:border-[#F25C05] font-bold text-gray-900 dark:text-zinc-100 transition-colors" placeholder="ул. Ленина, д. 15" />
-          </div>
-          <div>
-            <label className="block text-[10px] font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-2">Прикрепленные ТУ</label>
-            <div className="max-h-40 overflow-y-auto bg-gray-50 dark:bg-zinc-950/50 border border-gray-100 dark:border-zinc-800 rounded-xl p-2 custom-scrollbar transition-colors">
-              {tus.length === 0 ? (
-                <div className="p-2 text-center text-xs font-bold text-gray-400 dark:text-zinc-600">Сотрудники с ролью TU не найдены</div>
-              ) : (
-                tus.map(tu => {
-                  const isSelected = selectedTuIds.includes(tu.id);
-                  return (
-                    <label key={tu.id} className="flex items-center gap-3 p-2 hover:bg-white dark:hover:bg-zinc-800 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-gray-100 dark:hover:border-zinc-700 group">
-                      <div className={`w-5 h-5 rounded flex items-center justify-center transition-colors shrink-0 ${isSelected ? 'bg-[#F25C05] border-[#F25C05]' : 'border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 border group-hover:border-[#F25C05] dark:group-hover:border-[#F25C05]'}`}>
-                        {isSelected && <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
-                      </div>
-                      <span className={`text-sm select-none truncate ${isSelected ? 'font-black text-gray-900 dark:text-zinc-100' : 'font-bold text-gray-600 dark:text-zinc-400'}`}>{tu.name || tu.login}</span>
-                      <input type="checkbox" className="hidden" checked={isSelected} onChange={() => toggleTu(tu.id)} />
-                    </label>
-                  );
-                })
-              )}
-            </div>
-          </div>
-          {error && <p className="text-red-500 text-sm font-bold bg-red-50 dark:bg-red-900/20 p-3 rounded-xl border border-red-100 dark:border-red-900/30">{error}</p>}
-          <div className="pt-2">
-            <button type="submit" disabled={isLoading} className="w-full py-3.5 bg-[#F25C05] dark:bg-[#E65604] text-white font-black text-lg rounded-xl shadow-lg shadow-orange-500/20 dark:shadow-orange-900/30 hover:bg-orange-600 active:scale-[0.98] disabled:opacity-50 transition-all">
-              {isLoading ? 'Сохранение...' : 'Сохранить точку'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
+      const data: LocationChanges = { name: form.name.trim(), address: form.address.trim() || null,
+        ...(!initialData || form.isActive !== initial.isActive ? { isActive: form.isActive } : {}),
+        ...(!initialData || form.activeFrom !== initial.activeFrom ? { activeFrom: form.activeFrom || null } : {}),
+        ...(!initialData || form.activeTo !== initial.activeTo ? { activeTo: form.activeTo || null } : {}),
+        ...(!initialData || JSON.stringify(form.tuIds) !== JSON.stringify(initial.tuIds) ? { tuIds: form.tuIds } : {}),
+      };
+      await onSave(data, !!initialData); onClose();
+    }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Не удалось сохранить точку.'); }
+    finally { setBusy(false); }
+  }
+  return <Dialog title={initialData ? 'Редактировать точку' : 'Новая точка'} onClose={close} drawer busy={busy}>
+    <form onSubmit={submit} className="space-y-5">
+      <Field label="Название / код точки"><input className="ui-field" autoFocus required maxLength={200} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} disabled={busy} placeholder="Например: Б1" /></Field>
+      <Field label="Адрес"><input className="ui-field" maxLength={1000} value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} disabled={busy} /></Field>
+      <div className="ui-panel flex items-center justify-between p-4 gap-3"><div><p className="text-sm font-semibold">Активность точки</p><p className="ui-muted text-xs mt-1">Проверки доступны в пределах периода</p></div><Switch checked={form.isActive} label="Точка активна" disabled={busy} onChange={() => setForm({ ...form, isActive: !form.isActive })} /></div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="Доступна с"><input className="ui-field" type="date" value={form.activeFrom} onChange={e => setForm({ ...form, activeFrom: e.target.value })} disabled={busy} /></Field><Field label="Доступна до"><input className="ui-field" type="date" min={form.activeFrom || undefined} value={form.activeTo} onChange={e => setForm({ ...form, activeTo: e.target.value })} disabled={busy} /></Field></div>
+      <p className="ui-muted text-xs">Пустые даты означают отсутствие ограничения. Период относится ко всей точке.</p>
+      <section className="space-y-3"><h3 className="text-sm font-semibold">Территориальные управляющие · {form.tuIds.length}</h3><SearchInput placeholder="Найти управляющего" value={search} onChange={e => setSearch(e.target.value)} /><div className="ui-panel max-h-60 overflow-y-auto p-2">{managers.filter(t => (t.name || t.login).toLowerCase().includes(search.trim().toLowerCase())).map(t => <label key={t.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-[var(--surface-muted)] cursor-pointer"><input className="ui-checkbox" type="checkbox" disabled={busy} checked={form.tuIds.includes(t.id)} onChange={() => setForm({ ...form, tuIds: (form.tuIds.includes(t.id) ? form.tuIds.filter(id => id !== t.id) : [...form.tuIds, t.id]).sort() })} /><span className="text-sm">{t.name || t.login}</span></label>)}{!managers.length && <p className="ui-muted p-3 text-sm">Управляющие пока не добавлены.</p>}</div></section>
+      {error && <Notice error>{error}</Notice>}
+      <div className="flex flex-wrap justify-end gap-2 border-t pt-5" style={{ borderColor: 'var(--border)' }}><Button variant="secondary" disabled={busy} onClick={close}>Отмена</Button><Button type="submit" loading={busy}>Сохранить точку</Button></div>
+    </form>
+  </Dialog>;
 }
