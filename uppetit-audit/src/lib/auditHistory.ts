@@ -9,6 +9,7 @@ export const auditFiltersSchema = z.object({
   to: z.string().max(40).default(''),
   search: z.string().trim().max(200).default(''),
   auditId: z.string().max(200).optional(),
+  locationId: z.string().trim().min(1).max(200).optional(),
   locations: names,
   auditors: names,
   tus: names,
@@ -21,6 +22,7 @@ export function filtersFromParams(params: URLSearchParams): AuditFilters {
     from: params.get('from') ?? '', to: params.get('to') ?? '',
     search: params.get('search') ?? '', scope: params.get('scope') ?? 'accessible',
     auditId: params.get('auditId') || undefined,
+    locationId: params.get('locationId') || undefined,
     locations: params.getAll('locations'), auditors: params.getAll('auditors'), tus: params.getAll('tus'),
   });
 }
@@ -32,6 +34,7 @@ export function historyScope(actor: Actor, scope: AuditFilters['scope']): Prisma
 export function historyWhere(actor: Actor, filters: AuditFilters): Prisma.AuditWhereInput {
   const AND: Prisma.AuditWhereInput[] = [historyScope(actor, filters.scope)];
   if (filters.auditId) AND.push({ id: filters.auditId });
+  if (filters.locationId) AND.push({ locationId: filters.locationId });
   const date = parseReportRange(filters.from, filters.to);
   if (date.gte || date.lte) AND.push({ date });
   if (filters.locations.length) AND.push({ OR: [

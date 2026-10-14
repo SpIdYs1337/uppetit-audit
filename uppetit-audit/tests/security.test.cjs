@@ -218,19 +218,41 @@ test('a TOTP or recovery code is consumed only once, including concurrent attemp
   assert.deepEqual((await Promise.all([mfa.consumeSecondFactor(user, backup), mfa.consumeSecondFactor(user, backup)])).sort(), [false, true]);
   assert.equal(await mfa.consumeSecondFactor(user, 'invalid'), false);
 });
-test('sessions enforce idle and absolute limits, account blocking and revocation', () => {
-  for (const role of ['ADMIN', 'TU', 'AUDITOR']) {
+test('sessions use role deadlines, expire at the boundary, and remain renewable after the login day', () => {
+  const day = 24 * 60 * 60_000;
+  for (const [role, days] of [['ADMIN', 1], ['AUDITOR', 1], ['TU', 2]]) {
     const user = { role, authVersion: 0, isActive: true, passwordHash: 'hash' };
-    const rules = policy.sessionPolicy(role);
-    const record = { createdAt: new Date(0), lastActivityAt: new Date(0), expiresAt: new Date(rules.absoluteMs), authVersion: 0 };
-    assert.equal(policy.sessionIsValid(record, user, rules.idleMs - 1), true);
-    assert.equal(policy.sessionIsValid(record, user, rules.idleMs), false);
-    const active = { ...record, lastActivityAt: new Date(rules.absoluteMs - 1) };
-    assert.equal(policy.sessionIsValid(active, user, rules.absoluteMs - 1), true);
-    assert.equal(policy.sessionIsValid(active, user, rules.absoluteMs), false);
+    const duration = days * day;
+    assert.equal(policy.sessionPolicy(role).idleMs, duration);
+    const record = { createdAt: new Date(0), lastActivityAt: new Date(0), expiresAt: new Date(duration), authVersion: 0 };
+    assert.equal(policy.sessionIsValid(record, user, duration - 1), true);
+    assert.equal(policy.sessionIsValid(record, user, duration), false);
+    const renewed = { ...record, lastActivityAt: new Date(30 * day), expiresAt: new Date(30 * day + duration) };
+    assert.equal(policy.sessionIsValid(renewed, user, 30 * day + duration - 1), true);
+    assert.equal(policy.sessionIsValid(renewed, user, 30 * day + duration), false);
+    const legacy = { ...record, expiresAt: new Date(7 * day) };
+    assert.equal(policy.sessionExpiresAt(legacy, role), duration);
+    assert.equal(policy.sessionIsValid(legacy, user, duration), false);
     for (const changed of [{ isActive: false }, { passwordHash: null }, { authVersion: 1 }]) assert.equal(policy.sessionIsValid(record, { ...user, ...changed }, 1), false);
   }
+  assert.equal(policy.SESSION_MAX_SECONDS, 2 * day / 1000);
 });
+
+test('activity refuses anonymous or lost sessions and extends only through a parameterized account-checked write', async () => {
+  let changes = 1, writes = 0, sql, values;
+  const prisma = { $executeRaw: async (strings, ...params) => { writes++; sql = strings.join('?'); values = params; return changes; } };
+  let current = session;
+  const route = loader({ prisma, '@/lib/auth': { auth: async () => current } })('src/app/api/session/activity/route.ts');
+  assert.equal((await route.POST()).status, 204);
+  assert.equal(writes, 1); assert.ok(values.includes('session')); assert.ok(values.includes(actor.id));
+  assert.ok(values.includes(24 * 60 * 60_000));
+  assert.match(sql, /s."authVersion" = u."authVersion"/);
+  assert.match(sql, /u."isActive" = TRUE/); assert.match(sql, /u."passwordHash" IS NOT NULL/);
+  assert.match(sql, /s."expiresAt" > /); assert.match(sql, /s."lastActivityAt" > /);
+  changes = 0; assert.equal((await route.POST()).status, 401);
+  current = null; assert.equal((await route.POST()).status, 401); assert.equal(writes, 2);
+});
+
 test('JWT reads current database permissions and rejects old, deleted or revoked sessions', async () => {
   let config;
   const user = { ...actor, name: 'Current name', authVersion: 0, isActive: true, passwordHash: 'hash', totpEnabled: false };
@@ -244,6 +266,41 @@ test('JWT reads current database permissions and rejects old, deleted or revoked
   user.role = 'ADMIN'; token = await config.callbacks.jwt({ token }); assert.equal(token.mfaRequired, true);
   user.authVersion++; assert.equal(await config.callbacks.jwt({ token }), null);
   user.authVersion--; exists = false; assert.equal(await config.callbacks.jwt({ token }), null);
+});
+
+test('Auth.js refreshes the signed cookie after server renewal, while session reads do not renew activity', async () => {
+  if (!globalThis.crypto) globalThis.crypto = webcrypto;
+  const { Auth } = await import('@auth/core');
+  const jwt = await import('next-auth/jwt');
+  const secret = 'isolated-session-cookie-test-secret-32-chars';
+  const previousSecret = process.env.AUTH_SECRET;
+  process.env.AUTH_SECRET = secret;
+  try {
+  const day = 86400000, now = Date.now();
+  const user = { ...actor, role: 'ADMIN', name: 'Admin', authVersion: 0, isActive: true, passwordHash: 'hash', totpEnabled: true };
+  const record = { user, userId: actor.id, authVersion: 0, createdAt: new Date(now - 5 * day), lastActivityAt: new Date(now), expiresAt: new Date(now + day), mfaVerified: true };
+  let config;
+  const prisma = { authSession: { findUnique: async () => record } };
+  loader({ prisma, 'next-auth': value => { config = value; return {}; }, 'next-auth/providers/credentials': value => value })('src/lib/auth.ts');
+  const oldDeadline = now + 1000;
+  const cookie = await jwt.encode({ secret, salt: 'authjs.session-token', maxAge: policy.SESSION_MAX_SECONDS,
+    token: { id: actor.id, sessionId: 'session', absoluteExpiresAt: oldDeadline } });
+  const response = await Auth(new Request('http://localhost/api/auth/session', { headers: { cookie: 'authjs.session-token=' + cookie } }),
+    { ...config, secret, providers: [], basePath: '/api/auth', trustHost: true, useSecureCookies: false });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).expires, record.expiresAt.toISOString());
+  const header = response.headers.getSetCookie().find(value => value.startsWith('authjs.session-token='));
+  assert.ok(header);
+  const signed = header.split(';')[0].slice('authjs.session-token='.length);
+  const renewed = await jwt.decode({ secret, salt: 'authjs.session-token', token: signed });
+  assert.equal(renewed.absoluteExpiresAt, record.expiresAt.getTime());
+  assert.ok(renewed.absoluteExpiresAt > oldDeadline);
+  assert.equal(record.lastActivityAt.getTime(), now);
+  assert.equal(record.expiresAt.getTime(), now + day);
+  } finally {
+    if (previousSecret === undefined) delete process.env.AUTH_SECRET;
+    else process.env.AUTH_SECRET = previousSecret;
+  }
 });
 test('unknown credentials cannot auto-create a development administrator', async () => {
   let config;
@@ -264,7 +321,7 @@ test('successful login creates a random server session with explicit UTC dates a
     const result = await config.providers[0].authorize({ login: 'actor', password: 'password' }, new Request('http://localhost'));
     assert.match(created.id, /^[a-f0-9-]{36}$/); assert.equal(result.sessionId, created.id);
     assert.equal(created.authVersion, 3); assert.equal(created.lastActivityAt.getTime(), created.createdAt.getTime());
-    assert.equal(created.expiresAt.getTime() - created.createdAt.getTime(), policy.sessionPolicy(role).absoluteMs);
+    assert.equal(created.expiresAt.getTime() - created.createdAt.getTime(), policy.sessionPolicy(role).idleMs);
   }
 });
 test('MFA enrollment sessions cannot access business APIs', async () => {

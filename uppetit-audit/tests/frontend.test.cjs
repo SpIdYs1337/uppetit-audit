@@ -27,6 +27,60 @@ test('history reaches records beyond 200 and returns the real total with stable 
   assert.equal(query.include.user.select.passwordHash, undefined);
 });
 
+// Apply the returned Prisma predicates to fixtures: fail on unsupported operators
+// rather than silently ignoring a permission constraint.
+function matches(row, where) {
+  return Object.entries(where).every(([key, value]) => {
+    if (key === 'AND') return value.every(part => matches(row, part));
+    if (key === 'OR') return value.some(part => matches(row, part));
+    if (key === 'some') return row.some(item => matches(item, value));
+    if (key === 'in') return value.includes(row);
+    if (value && typeof value === 'object') return row[key] != null && matches(row[key], value);
+    return row[key] === value;
+  });
+}
+
+test('TU sees every author on legacy, multiple and reassigned locations, but cannot select foreign audits', async () => {
+  const tu = { id: 'tu', role: 'TU' };
+  const fixtures = Array.from({ length: 317 }, (_, index) => ({ ...audit(index), userId: 'other-auditor', auditorName: 'Другой проверяющий',
+    user: { id: 'other-auditor', login: 'other' }, locationId: 'legacy', locationName: 'Моя точка',
+    location: { id: 'legacy', name: 'Моя точка', tuId: 'tu', tus: [] }, tuName: 'Прежний ТУ' }));
+  fixtures.push({ ...audit(999), userId: 'other-auditor', locationId: 'shared', location: { id: 'shared', tuId: null, tus: [{ id: 'another-tu' }, { id: 'tu' }] } });
+  fixtures.push({ ...audit(1000), userId: 'other-auditor', locationId: 'foreign', location: { id: 'foreign', tuId: 'foreign-tu', tus: [] } });
+  const database = { $transaction: async callback => callback({ audit: {
+    count: async ({ where }) => fixtures.filter(row => matches(row, where)).length,
+    findMany: async ({ where, skip, take }) => fixtures.filter(row => matches(row, where)).slice(skip, skip + take),
+  } }) };
+  const route = historyRoute(database, tu);
+  const body = await (await route.GET(request('page=32&pageSize=10&scope=accessible&locationId=legacy'))).json();
+  assert.equal(body.total, 317); assert.equal(body.totalPages, 32); assert.equal(body.audits.length, 7);
+  assert.equal(body.audits[0].userId, 'other-auditor');
+  const shared = await (await route.GET(request('page=1&locationId=shared'))).json(); assert.equal(shared.total, 1);
+  const denied = await (await route.GET(request('page=1&locationId=foreign&auditId=audit-1000'))).json(); assert.equal(denied.total, 0);
+  const reviewer = historyRoute(database, actor);
+  assert.equal((await (await reviewer.GET(request('page=1&locationId=legacy'))).json()).total, 0);
+  fixtures.filter(row => row.locationId === 'legacy').forEach(row => { row.location.tuId = 'new-tu'; });
+  const changed = historyRoute(database, { id: 'new-tu', role: 'TU' });
+  const reassigned = await (await changed.GET(request('page=1&locationId=legacy'))).json();
+  assert.equal(reassigned.total, 317, 'current TU sees historic audits regardless of the saved TU name');
+  assert.equal((await (await route.GET(request('page=1&locationId=legacy'))).json()).total, 0);
+});
+
+test('TU location history and Excel use the same exact location ID and keep other points out', async () => {
+  const tu = { id: 'tu', role: 'TU' };
+  const fixtures = Array.from({ length: 317 }, (_, index) => ({ ...audit(index), userId: 'other-auditor',
+    locationId: 'legacy', locationName: 'Одинаковое имя', location: { id: 'legacy', name: 'Одинаковое имя', tuId: 'tu', tus: [] } }));
+  fixtures.push({ ...audit(1000), userId: 'other-auditor', locationId: 'foreign', locationName: 'Одинаковое имя', location: { id: 'foreign', name: 'Одинаковое имя', tuId: 'foreign-tu', tus: [] } });
+  const db = { audit: { findMany: async ({ where }) => fixtures.filter(row => matches(row, where)) } };
+  const route = loader({ prisma: db, '@/lib/requireAuth': guard(tu) })('src/app/api/audits/export/route.ts');
+  const response = await route.POST(post({ filters: { locationId: 'legacy', scope: 'accessible' } }));
+  assert.equal(response.status, 200);
+  const workbook = new ExcelJS.Workbook(); await workbook.xlsx.load(Buffer.from(await response.arrayBuffer()));
+  assert.equal(workbook.worksheets[0].rowCount, 318);
+  assert.equal((await route.POST(post({ auditIds: ['audit-0', 'audit-1000'] }))).status, 403);
+  assert.equal((await route.POST(post({ filters: { locationId: 'foreign', scope: 'accessible' } }))).status, 400);
+});
+
 test('pagination clamps the last page after deletion instead of showing a blank page', async () => {
   let query;
   const route = historyRoute({ $transaction: async callback => callback({ audit: { count: async () => 11, findMany: async value => { query = value; return [audit(10)]; } } }) });

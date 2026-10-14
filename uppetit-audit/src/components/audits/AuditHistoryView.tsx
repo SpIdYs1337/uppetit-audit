@@ -9,6 +9,7 @@ import { PhotoViewer } from '@/components/audits/PhotoViewer';
 import { ScoreBadge } from '@/components/audits/ScoreBadge';
 import { localDateInput } from '@/lib/reportDates';
 import { usePreference } from '@/hooks/usePreference';
+import { useSession } from 'next-auth/react';
 
 const initial: HistoryQuery = { page: 1, pageSize: 25, sort: 'desc', search: '', dateFrom: '', dateTo: '', locations: [], auditors: [], tus: [] };
 const panel = 'rounded-3xl border border-gray-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-6';
@@ -18,6 +19,8 @@ const sizes = ['10', '25', '50', '100'] as const;
 const sorts = ['asc', 'desc'] as const;
 
 export function AuditHistoryView({ admin = false, initialAuditId }: { admin?: boolean; initialAuditId?: string }) {
+  const { data: session } = useSession();
+  const territory = !admin && session?.user.role === 'TU';
   const [query, setQuery] = useState<HistoryQuery>({ ...initial, auditId: initialAuditId });
   const [pageSize, setPageSize] = usePreference('history-size', '25', sizes);
   const [sort, setSort] = usePreference('history-sort', 'desc', sorts);
@@ -27,7 +30,7 @@ export function AuditHistoryView({ admin = false, initialAuditId }: { admin?: bo
   const [isExporting, setExporting] = useState(false);
   const [isDeleting, setDeleting] = useState(false);
   const [actionError, setActionError] = useState('');
-  const history = usePagedAudits({ ...query, pageSize: Number(pageSize), sort }, admin ? 'accessible' : 'mine');
+  const history = usePagedAudits({ ...query, pageSize: Number(pageSize), sort }, admin || territory ? 'accessible' : 'mine');
   const busy = history.isLoading || isDeleting;
   const filtered = Boolean(query.auditId || query.search || query.dateFrom || query.dateTo || query.locations.length || query.auditors.length || query.tus.length);
   const closePhoto = useCallback(() => setPhoto(null), []);
@@ -45,7 +48,7 @@ export function AuditHistoryView({ admin = false, initialAuditId }: { admin?: bo
       const response = await fetch('/api/audits/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filters: history.filters, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }) });
       if (!response.ok) { const data = await response.json(); throw new Error(data.error || 'Не удалось сформировать Excel'); }
       const url = URL.createObjectURL(await response.blob());
-      const link = document.createElement('a'); link.href = url; link.download = `${admin ? 'Аудиты' : 'Мои_аудиты'}.xlsx`; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+      const link = document.createElement('a'); link.href = url; link.download = `${admin ? 'Аудиты' : territory ? 'Аудиты_моих_точек' : 'Мои_аудиты'}.xlsx`; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
     } catch (error) { setActionError(error instanceof Error ? error.message : 'Не удалось сформировать Excel'); }
     finally { setExporting(false); }
   };
@@ -70,7 +73,7 @@ export function AuditHistoryView({ admin = false, initialAuditId }: { admin?: bo
   return <div className="relative mx-auto w-full max-w-7xl space-y-5 p-4 pb-20 sm:p-6 md:p-8">
     {photo && <PhotoViewer url={photo} onClose={closePhoto} />}
     <header className="flex flex-wrap items-start justify-between gap-4">
-      <div>{!admin && <Link href="/audit" className="mb-3 inline-block text-sm font-bold text-[#F25C05]">← На главную</Link>}<h1 className="text-2xl font-black tracking-tight md:text-3xl">{admin ? 'История проверок' : 'Мои проверки'}</h1>
+      <div>{!admin && <Link href="/audit" className="mb-3 inline-block text-sm font-bold text-[#F25C05]">← На главную</Link>}<h1 className="text-2xl font-black tracking-tight md:text-3xl">{admin ? 'История проверок' : territory ? 'Проверки моих точек' : 'Мои проверки'}</h1>
         <p className="mt-2 text-sm text-gray-500 dark:text-zinc-400" aria-live="polite">{history.isLoading ? 'Загружаем историю…' : history.error ? 'История временно недоступна' : <>{filtered ? 'Найдено' : 'Всего'} аудитов: <strong className="text-gray-900 dark:text-zinc-100">{history.total.toLocaleString('ru-RU')}</strong>{history.total > 0 && <> · показаны {(history.page - 1) * Number(pageSize) + 1}–{Math.min(history.page * Number(pageSize), history.total)}</>}</>}</p>
       </div>
       <div className="flex flex-wrap gap-2"><button type="button" className={button} disabled={busy} onClick={() => history.refresh()}>Обновить</button><button type="button" onClick={exportExcel} disabled={busy || isExporting || Boolean(history.error) || !history.total || searchInput.trim() !== query.search} className={`${button} text-green-700 dark:text-green-400`}>{isExporting ? 'Формируем Excel…' : 'Выгрузить все найденные'}</button></div>

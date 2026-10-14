@@ -32,8 +32,9 @@ export async function GET() {
           where: auditAccessWhere(session!.user),
           orderBy: { date: 'desc' },
           take: 1, 
-          select: { score: true }
-        }
+          select: { id: true, date: true, score: true, maxScore: true }
+        },
+        _count: { select: { audits: { where: auditAccessWhere(session!.user) } } }
       }
     });
     return NextResponse.json(locations);

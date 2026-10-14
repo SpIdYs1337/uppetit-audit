@@ -17,7 +17,8 @@ export interface ParsedAnswer {
 export type EnrichedLocation = Location & {
   tu?: { id: string; name: string | null; login: string } | null;
   tus?: { id: string; name: string | null; login: string }[];
-  audits?: { score: number }[];
+  audits?: { id: string; date: Date | string; score: number; maxScore: number | null }[];
+  _count?: { audits: number };
 };
 
 // ИЗМЕНЕНО: Базовый тип аудита теперь использует обновленную EnrichedLocation

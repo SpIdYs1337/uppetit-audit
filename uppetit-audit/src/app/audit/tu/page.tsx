@@ -4,13 +4,14 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useTuLocations } from '@/hooks/useTuLocations';
 import { TuLocationCard } from '@/components/tu/TuLocationCard';
+import { Button, Notice } from '@/components/ui';
 
 export default function TuLocationsPage() {
-  const { locations, audits, isLoading } = useTuLocations();
+  const { locations, error, isLoading, refresh } = useTuLocations();
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredLocations = locations?.filter(loc =>
-    loc.name.toLowerCase().includes(searchQuery.toLowerCase())
+    [loc.name, loc.address || ''].some(value => value.toLowerCase().includes(searchQuery.trim().toLowerCase()))
   ) || [];
 
   if (isLoading) {
@@ -61,7 +62,7 @@ export default function TuLocationsPage() {
       </header>
 
       <main className="flex-1 p-4 sm:p-6 space-y-4 pb-10 max-w-3xl mx-auto w-full relative z-10">
-        {!locations || locations.length === 0 ? (
+        {error ? <Notice error>{error}<Button variant="ghost" onClick={() => void refresh()}>Повторить</Button></Notice> : !locations || locations.length === 0 ? (
           <div className="text-center py-16 bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm rounded-[2rem] border border-gray-200/50 dark:border-zinc-800/50 border-dashed transition-colors shadow-sm">
             <div className="text-5xl mb-4 opacity-80">📍</div>
             <p className="text-gray-500 dark:text-zinc-400 font-bold text-base transition-colors">У вас пока нет привязанных точек.</p>
@@ -76,7 +77,6 @@ export default function TuLocationsPage() {
             <TuLocationCard 
               key={loc.id} 
               loc={loc} 
-              audits={audits} 
             />
           ))
         )}

@@ -6,25 +6,26 @@ import { serializeReportRange } from '@/lib/reportDates';
 import type { AuditFilters } from '@/lib/auditHistory';
 import type { EnrichedAudit } from '@/hooks/useAdminAudits';
 
-export type HistoryQuery = { page: number; pageSize: number; sort: 'asc' | 'desc'; search: string; dateFrom: string; dateTo: string; locations: string[]; auditors: string[]; tus: string[]; auditId?: string };
+export type HistoryQuery = { page: number; pageSize: number; sort: 'asc' | 'desc'; search: string; dateFrom: string; dateTo: string; locations: string[]; auditors: string[]; tus: string[]; auditId?: string; locationId?: string };
 export type HistoryPage = { audits: EnrichedAudit[]; total: number; page: number; pageSize: number; totalPages: number };
 type FilterOptions = { locations: string[]; auditors: string[]; tus: string[] };
 
-export function usePagedAudits(query: HistoryQuery, scope: AuditFilters['scope'] = 'accessible') {
+export function usePagedAudits(query: HistoryQuery, scope: AuditFilters['scope'] = 'accessible', { loadOptions = true } = {}) {
   const { data: session, status } = useSession();
   let validationError = '', range = { from: '', to: '' };
   try { range = serializeReportRange(query.dateFrom, query.dateTo); }
   catch (error) { validationError = error instanceof Error ? error.message : 'Проверьте выбранный период'; }
-  const filters: AuditFilters = { ...range, search: query.search, locations: query.locations, auditors: query.auditors, tus: query.tus, scope, auditId: query.auditId };
+  const filters: AuditFilters = { ...range, search: query.search, locations: query.locations, auditors: query.auditors, tus: query.tus, scope, auditId: query.auditId, locationId: query.locationId };
   const params = new URLSearchParams({ page: String(query.page), pageSize: String(query.pageSize), sort: query.sort, scope });
   if (query.auditId) params.set('auditId', query.auditId);
+  if (query.locationId) params.set('locationId', query.locationId);
   for (const key of ['from', 'to', 'search'] as const) if (filters[key]) params.set(key, filters[key]);
   for (const key of ['locations', 'auditors', 'tus'] as const) filters[key].forEach(value => params.append(key, value));
   const identity = session ? `${session.user.id}:${session.user.role}` : null;
   const { data, error, isLoading, isValidating, mutate } = useSWR<HistoryPage>(
     identity && !validationError ? [`/api/audits?${params}`, identity] : null,
     ([url]: [string, string]) => fetcher(url));
-  const options = useSWR<FilterOptions>(identity ? [`/api/audits/filters?scope=${scope}`, identity] : null,
+  const options = useSWR<FilterOptions>(identity && loadOptions ? [`/api/audits/filters?scope=${scope}`, identity] : null,
     ([url]: [string, string]) => fetcher(url));
   const remove = async (id?: string) => {
     const response = await fetch(id ? `/api/audits?id=${encodeURIComponent(id)}` : '/api/audits?clearAll=true', { method: 'DELETE' });

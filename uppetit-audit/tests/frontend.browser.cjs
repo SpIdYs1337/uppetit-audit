@@ -22,13 +22,15 @@ async function main() {
     import { AuditHistoryView } from '@/components/audits/AuditHistoryView';
     import AdminDashboard from '@/app/admin/page'; import TuDashboard from '@/app/audit/dashboard/page';
     import AdminLayout from '@/app/admin/layout'; import AuditLayout from '@/app/audit/layout';
-    import Guide from '@/app/audit/guide/page';
+    import Guide from '@/app/audit/guide/page'; import TuLocations from '@/app/audit/tu/page';
+    const territory = location.pathname.includes('tu-');
+    const locations = location.pathname.includes('tu-locations');
     const guide = location.pathname.includes('guide');
     const dashboard = location.pathname.includes('dashboard');
     const auditor = location.pathname.includes('auditor');
     createRoot(document.getElementById('root')).render(<ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-      {!dashboard && !guide && <div className="mx-auto max-w-7xl px-4 pt-4 flex items-center justify-between"><span className="text-sm font-bold">UPPETIT · Локальная проверка интерфейса</span><ThemeToggle /></div>}
-      {guide ? <AuditLayout><Guide /></AuditLayout> : dashboard ? location.pathname.includes('tu-') ? <AuditLayout><TuDashboard /></AuditLayout> : <AdminLayout><AdminDashboard /></AdminLayout> : <AuditHistoryView admin={!auditor} />}
+      {!dashboard && !guide && !territory && <div className="mx-auto max-w-7xl px-4 pt-4 flex items-center justify-between"><span className="text-sm font-bold">UPPETIT · Локальная проверка интерфейса</span><ThemeToggle /></div>}
+      {locations ? <AuditLayout><TuLocations /></AuditLayout> : guide ? <AuditLayout><Guide /></AuditLayout> : dashboard ? location.pathname.includes('tu-') ? <AuditLayout><TuDashboard /></AuditLayout> : <AdminLayout><AdminDashboard /></AdminLayout> : territory ? <AuditLayout><AuditHistoryView /></AuditLayout> : <AuditHistoryView admin={!auditor} />}
     </ThemeProvider>);`;
   const result = await esbuild.build({ stdin: { contents: app, resolveDir: root, loader: 'tsx' }, bundle: true, write: false,
     absWorkingDir: root, tsconfig: path.join(root, 'tsconfig.json'), jsx: 'automatic', nodePaths: [path.join(root, 'node_modules')],
@@ -52,6 +54,9 @@ async function main() {
     checklist: { id: 'checklist', title: 'Качество обслуживания', version: 1 },
     answers: [{ id: `answer-${i}`, question: 'Чистота оборудования', zone: 'Кухня', isOk: false, penalty: 20, photos: [photo], comment: 'Нужно исправить' }],
   }));
+  const tuAudits = audits.map((audit, index) => ({ ...audit, userId: 'another-reviewer', auditorName: 'Другой аудитор',
+    locationId: index < 600 ? 'managed' : 'old', locationName: index < 600 ? 'Точка ТУ' : 'Старая точка',
+    location: { id: index < 600 ? 'managed' : 'old', name: index < 600 ? 'Точка ТУ' : 'Старая точка', tus: [] } }));
   const requests = [];
   let failing = false;
   const server = http.createServer(async (req, res) => {
@@ -64,6 +69,12 @@ async function main() {
       let body = ''; for await (const chunk of req) body += chunk;
       requests.push({ path: url.pathname, params: Object.fromEntries(url.searchParams), method: req.method, body: body ? JSON.parse(body) : null });
       if (failing) return json({ error: 'Тестовая ошибка сети' }, 500);
+      const tu = (req.headers.referer || '').includes('role=TU');
+      if (url.pathname === '/api/locations') return json([
+        { id: 'managed', name: 'Точка ТУ', address: 'ул. Новая, 1', tuId: null, tus: [{ id: 'tester' }], audits: [tuAudits[0]], _count: { audits: 600 } },
+        { id: 'old', name: 'Старая точка', address: 'ул. Старая, 2', tuId: 'tester', tus: [], audits: [tuAudits[600]], _count: { audits: 317 } },
+      ]);
+      if (url.pathname.startsWith('/api/pdf/')) { res.setHeader('Content-Type', 'application/pdf'); return res.end('%PDF fixture'); }
       if (url.pathname === '/api/audits/filters') return json({ locations: ['Точка 1', 'Архивная точка'], auditors: ['Иван Проверяющий'], tus: ['Анна Управляющая'] });
       if (url.pathname === '/api/audits/export') { res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); return res.end('fixture'); }
       if (url.pathname.endsWith('/dashboard/export')) { res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); return res.end('fixture-dashboard-export'); }
@@ -73,7 +84,9 @@ async function main() {
         return json({ newScore: audit.score, answers: audit.answers });
       }
       if (url.pathname === '/api/audits') {
-        let rows = audits.filter(a => !url.searchParams.get('search') || a.locationName.includes(url.searchParams.get('search')));
+        let rows = (tu ? tuAudits : audits).filter(a => !url.searchParams.get('search') || a.locationName.includes(url.searchParams.get('search')));
+        if (url.searchParams.get('scope') === 'mine') rows = rows.filter(a => a.userId === 'tester');
+        if (url.searchParams.has('locationId')) rows = rows.filter(a => a.locationId === url.searchParams.get('locationId'));
         const locations = url.searchParams.getAll('locations'); if (locations.length) rows = rows.filter(a => locations.includes(a.locationName));
         if (url.searchParams.has('auditId')) rows = rows.filter(audit => audit.id === url.searchParams.get('auditId'));
         if (url.searchParams.get('sort') === 'asc') rows = rows.toReversed();
@@ -232,6 +245,41 @@ async function main() {
     await page.getByRole('button', { name: /^Открыть аудит/ }).first().click();
     await page.getByRole('dialog', { name: 'Подробности проверки', exact: true }).getByText('Сотрудник смены', { exact: true }).waitFor();
     await page.keyboard.press('Escape');
+    await page.goto(url + '/tu-history?role=TU');
+    await page.getByRole('heading', { name: 'Проверки моих точек', exact: true }).waitFor();
+    await page.getByText('917', { exact: true }).first().waitFor();
+    assert.equal(requests.findLast(r => r.path === '/api/audits').params.scope, 'accessible');
+    await page.getByText('Аудитор: Другой аудитор', { exact: true }).first().waitFor();
+    assert.equal(await page.getByRole('button', { name: /Удалить аудит|Удалить всю/ }).count(), 0);
+    await page.getByRole('button', { name: 'Выгрузить все найденные' }).click();
+    await page.waitForTimeout(100);
+    assert.equal(requests.findLast(r => r.path === '/api/audits/export').body.filters.scope, 'accessible');
+    const startTu = requests.length;
+    await page.goto(url + '/tu-locations?role=TU');
+    await page.getByRole('heading', { name: 'Мои точки', exact: true }).waitFor();
+    await page.getByRole('button', { name: /Старая точка/ }).waitFor();
+    assert.equal(requests.slice(startTu).filter(r => r.path === '/api/audits').length, 0, 'Collapsed points should not load every audit');
+    for (const point of ['Старая точка', 'Точка ТУ']) {
+      await page.getByRole('button', { name: new RegExp('^' + point) }).click();
+      const card = page.locator('section').filter({ has: page.getByRole('button', { name: new RegExp('^' + point) }) });
+      await card.getByRole('heading', { name: /История проверок/ }).waitFor();
+      await card.getByRole('button', { name: 'Последняя страница', exact: true }).click();
+      await card.getByText('Аудитор: Другой аудитор', { exact: true }).first().waitFor();
+      const request = requests.findLast(r => r.path === '/api/audits');
+      assert.equal(request.params.locationId, point === 'Старая точка' ? 'old' : 'managed');
+      assert.equal(request.params.page, point === 'Старая точка' ? '32' : '60');
+      const details = card.getByRole('button', { name: /Ответы и фотографии/ }).first();
+      await details.click(); await card.getByText('Чистота оборудования', { exact: true }).first().waitFor();
+      assert.equal(await card.getByRole('button', { name: /Зачесть исправление/ }).count(), 0);
+      const download = page.waitForEvent('download');
+      await card.getByRole('button', { name: /PDF/ }).first().click(); await download;
+      assert.ok(requests.some(r => r.path.startsWith('/api/pdf/audit-')));
+      for (const width of [320, 390, 768, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'TU point history must fit ' + width);
+      }
+      await page.getByRole('button', { name: new RegExp('^' + point) }).click();
+    }
     await page.goto(url + '/audit-guide?role=AUDITOR');
     await page.getByRole('heading', { name: 'Как пользоваться приложением' }).waitFor();
     assert.equal(await page.locator('section[id^="guide-"]').count(), 9);
@@ -246,7 +294,7 @@ async function main() {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: path.join(preview, engine + '-guide-mobile.png'), fullPage: true });
     assert.deepEqual(errors, []);
-    console.log('OK: ' + engine + ' — actual layouts, mobile tabs and guide, themes, history of 917 audits, dashboard metrics, sections/coverage details, violations, nested photo/Escape, full paging, filtered Excel request, request race, API error, dropdowns at 320–1440px, TU dashboard.');
+    console.log('OK: ' + engine + ' — actual layouts, TU history/point paging with other authors/PDF, mobile tabs and guide, themes, history of 917 audits, dashboard metrics, sections/coverage details, violations, nested photo/Escape, full paging, filtered Excel request, request race, API error, dropdowns at 320–1440px, TU dashboard.');
     await context.close();
   } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
 }

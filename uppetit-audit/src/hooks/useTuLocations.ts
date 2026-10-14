@@ -1,30 +1,16 @@
 import useSWR from 'swr';
 import { useSession } from 'next-auth/react';
 import { fetcher } from '@/lib/fetcher';
-// ИСПРАВЛЕНО: Импортируем типы из нашего централизованного хака типов
-import { EnrichedLocation, EnrichedAudit } from '@/hooks/useAdminAudits'; 
+import type { EnrichedLocation } from '@/hooks/useAdminAudits';
 
 export function useTuLocations() {
   const { data: session, status } = useSession();
-  const userId = session?.user?.id;
-
-  const { data: allLocations, isLoading: locLoading } = useSWR<EnrichedLocation[]>('/api/locations', fetcher);
-  const { data: allAudits, isLoading: audLoading } = useSWR<EnrichedAudit[]>('/api/audits', fetcher);
-
-  // ИСПРАВЛЕНО: Параметр 'tu' строго типизирован, чтобы компилятор не падал на неявном 'any'
-  const myLocations = allLocations?.filter(loc => {
-    const hasLegacyTu = loc.tuId === userId;
-    const hasNewTu = Array.isArray(loc.tus) && loc.tus.some((tu: any) => tu.id === userId);
-    return hasLegacyTu || hasNewTu;
-  }) || [];
-  
-  const myLocationIds = myLocations.map(l => l.id);
-
-  const myAudits = allAudits?.filter(aud => aud.locationId && myLocationIds.includes(aud.locationId)) || [];
-
-  return {
-    locations: myLocations,
-    audits: myAudits,
-    isLoading: status === 'loading' || locLoading || audLoading,
-  };
+  const identity = session ? `${session.user.id}:${session.user.role}` : null;
+  const { data, error, isLoading, mutate } = useSWR<EnrichedLocation[]>(
+    identity ? ['/api/locations', identity] : null,
+    ([url]: [string, string]) => fetcher(url));
+  const locations = (data || []).filter(location => location.tuId === session?.user.id
+    || location.tus?.some(tu => tu.id === session?.user.id));
+  return { locations, error: error instanceof Error ? error.message : error ? 'Не удалось загрузить точки' : '',
+    isLoading: status === 'loading' || isLoading, refresh: mutate };
 }

@@ -5,7 +5,7 @@ import prisma from './prisma';
 import { verifyPassword } from './security';
 import { clientAddress, consumeRateLimit } from './rateLimit';
 import { consumeSecondFactor } from './mfa';
-import { sessionIsValid, sessionPolicy, SESSION_MAX_SECONDS, MAX_PASSWORD_LENGTH } from './sessionPolicy';
+import { sessionIsValid, sessionPolicy, sessionExpiresAt, SESSION_MAX_SECONDS, MAX_PASSWORD_LENGTH } from './sessionPolicy';
 import { readLoginChallenge } from './loginChallenge';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -47,7 +47,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       await prisma.authSession.create({ data: {
         id, userId: user.id, authVersion: user.authVersion,
         createdAt: now, lastActivityAt: now,
-        expiresAt: new Date(now.getTime() + sessionPolicy(user.role).absoluteMs),
+        expiresAt: new Date(now.getTime() + sessionPolicy(user.role).idleMs),
         mfaVerified: user.totpEnabled,
       } });
       return { id: user.id, name: user.name || user.login, role: user.role,
@@ -64,7 +64,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       token.name = record.user.name || record.user.login;
       token.mfaVerified = record.mfaVerified;
       token.mfaRequired = record.user.role === 'ADMIN' && (!record.user.totpEnabled || !record.mfaVerified);
-      token.absoluteExpiresAt = record.expiresAt.getTime();
+      // Retain the claim name for installed clients; it now holds a rolling deadline.
+      token.absoluteExpiresAt = sessionExpiresAt(record, record.user.role);
       token.authVersion = record.user.authVersion;
       return token;
     },

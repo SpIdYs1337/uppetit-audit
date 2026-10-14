@@ -30,7 +30,8 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
       inFlight = true; lastSent = Date.now();
       try {
         const response = await fetch('/api/session/activity', { method: 'POST', cache: 'no-store' });
-        if (response.status === 401) await getSession();
+        // Refresh the signed cookie deadline after extending the server record.
+        if (response.status === 204 || response.status === 401) await getSession();
       } catch { /* Offline activity does not extend server sessions. */ }
       finally { inFlight = false; }
     };
