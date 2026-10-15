@@ -18,9 +18,15 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
     if ('serviceWorker' in navigator) void navigator.serviceWorker.getRegistration().then(reg => reg?.update()).catch(() => {});
   }, []);
   useEffect(() => {
+    // The installed PWA starts at /. Restore its working screen only after
+    // Auth.js has checked the persistent cookie against the server session.
+    if (status === 'authenticated' && session?.user && pathname === '/') {
+      window.location.replace(session.user.mfaRequired ? '/setup-mfa' : session.user.role === 'ADMIN' ? '/admin' : '/audit');
+      return;
+    }
     if (status === 'unauthenticated' && pathname !== '/' && pathname !== '/setup-password') window.location.replace('/');
     if (session?.user.mfaRequired && pathname !== '/setup-mfa' && pathname !== '/' && pathname !== '/setup-password') window.location.replace('/setup-mfa');
-  }, [status, pathname, session?.user.mfaRequired]);
+  }, [status, pathname, session?.user]);
   useEffect(() => {
     if (!userId) return;
     let lastSent = 0;
@@ -41,6 +47,7 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
     return () => { clearInterval(timer); events.forEach(name => window.removeEventListener(name, activity)); };
   }, [userId]);
   const isPrivate = pathname !== '/' && pathname !== '/setup-password';
-  if (!ready || (isPrivate && (status !== 'authenticated' || (session?.user.mfaRequired && pathname !== '/setup-mfa')))) return null;
+  if (!ready || (pathname === '/' && status !== 'unauthenticated')
+    || (isPrivate && (status !== 'authenticated' || (session?.user.mfaRequired && pathname !== '/setup-mfa')))) return null;
   return <SWRConfig key={userId || 'anonymous'} value={{ provider: () => cache }}>{children}</SWRConfig>;
 }

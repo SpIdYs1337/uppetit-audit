@@ -291,6 +291,11 @@ test('Auth.js refreshes the signed cookie after server renewal, while session re
   assert.equal((await response.json()).expires, record.expiresAt.toISOString());
   const header = response.headers.getSetCookie().find(value => value.startsWith('authjs.session-token='));
   assert.ok(header);
+  assert.match(header, /; HttpOnly/i);
+  assert.match(header, /; SameSite=Lax/i);
+  const cookieExpiry = /; Expires=([^;]+)/i.exec(header);
+  assert.ok(cookieExpiry, 'Session cookie must survive closing the browser');
+  assert.ok(Date.parse(cookieExpiry[1]) > now + policy.SESSION_MAX_SECONDS * 1000 - 10_000);
   const signed = header.split(';')[0].slice('authjs.session-token='.length);
   const renewed = await jwt.decode({ secret, salt: 'authjs.session-token', token: signed });
   assert.equal(renewed.absoluteExpiresAt, record.expiresAt.getTime());
